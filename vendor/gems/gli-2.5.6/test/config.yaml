@@ -1,0 +1,10 @@
+--- 
+commands: 
+  :command: 
+    :g: bar
+    :s: true
+  :other_command: 
+    :g: foobar
+    :f: barfoo
+:f: foo
+:bleorgh: true

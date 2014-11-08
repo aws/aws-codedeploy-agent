@@ -1,0 +1,77 @@
+#!/bin/bash
+
+# Init file for codedeploy-agent
+#
+# chkconfig: 2345 98 02
+# description: codedeploy-agent processes the deployments created by AWS CodeDeploy and installs \
+# the deployment artifacts on to this instance.
+
+### BEGIN INIT INFO
+# Provides:          codedeploy-agent
+# Required-Start:    $all
+# Required-Stop:     $remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: AWS CodeDeploy Host Agent
+# Description:       codedeploy-agent processes the deployments created by AWS CodeDeploy and installs
+#                    the deployment artifacts on to this instance.
+### END INIT INFO
+
+RETVAL=0
+
+prog="codedeploy-agent"
+AGENT_ROOT="/opt/codedeploy-agent/"
+INSTALLER="/opt/codedeploy-agent/bin/install"
+BIN="/opt/codedeploy-agent/bin/codedeploy-agent"
+
+start() {
+        echo -n $"Starting $prog:"
+        cd $AGENT_ROOT
+        nohup $BIN start >/dev/null </dev/null 2>&1  # Try to start the server
+        exit $?
+}
+
+stop() {
+        echo -n $"Stopping $prog:"
+        cd $AGENT_ROOT
+        nohup $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
+        exit $?
+}
+
+status() {
+        cd $AGENT_ROOT
+        $BIN status # Status of the server
+        exit $?
+}
+
+update() {
+        echo -n $"Updating $prog:"
+        cd $AGENT_ROOT
+        $INSTALLER auto #Update the agent
+}
+
+case "$1" in
+        start)
+                update
+                start
+                ;;
+        start-no-update)
+                start
+                ;;
+        stop)
+                stop
+                ;;
+        restart)
+                stop
+                start
+                ;;
+        force-reload)
+                stop
+                start
+                ;;
+        status)
+                status
+                ;;
+        *)
+                echo $"Usage: $0 {start|stop|status|restart}"
+esac
