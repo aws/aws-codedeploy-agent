@@ -167,6 +167,7 @@ module InstanceAgent
 
         if InstanceAgent::Config.config[:log_aws_wire]
           s3 = Aws::S3::Client.new(
+            :http_proxy => "PROXY_IP_ADDRESS",
             :region => region,
             :ssl_ca_directory => ENV['AWS_SSL_CA_DIRECTORY'],
             # wire logs might be huge; customers should be careful about turning them on
@@ -178,6 +179,7 @@ module InstanceAgent
             :http_wire_trace => true)
         else
           s3 = Aws::S3::Client.new(
+            :http_proxy => "PROXY_IP_ADDRESS",
             :region => region,
             :ssl_ca_directory => ENV['AWS_SSL_CA_DIRECTORY'])
         end

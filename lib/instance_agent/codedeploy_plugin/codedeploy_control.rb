@@ -8,7 +8,8 @@ module InstanceAgent
 
       def initialize(options = {})
         @options = options.update({
-          :http_read_timeout => InstanceAgent::Config.config[:http_read_timeout]
+          :http_read_timeout => InstanceAgent::Config.config[:http_read_timeout],
+          :http_proxy => "PROXY_IP_ADDRESS"
         })
 
         if InstanceAgent::Config.config[:log_aws_wire]

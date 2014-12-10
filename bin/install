@@ -121,7 +121,7 @@ EOF
     # stream package file to disk
     begin
       File.open(package_file, 'w+b') do |file|
-        uri.open(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120) do |s3|
+        uri.open(:proxy => "PROXY_IP_ADDRESS", :ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120) do |s3|
           file.write(s3.read)
         end
       end
@@ -137,7 +137,7 @@ EOF
     uri = get_s3_uri(region, bucket, key)
 
     begin
-      version_string = uri.read(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120)
+      version_string = uri.read(:proxy => "PROXY_IP_ADDRESS", :ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120)
       JSON.parse(version_string)
     rescue OpenURI::HTTPError => e
       @log.error("Could not find version file to download at '#{uri.to_s}'")
