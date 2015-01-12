@@ -1,0 +1,13 @@
+#!/usr/bin/env ruby
+
+DESTINATION = '/etc/init.d/codedeploy-agent'
+
+if !File.exists?(DESTINATION)
+  puts 'Nothing to do.'
+  exit(0)
+end
+
+system("sudo rm #{DESTINATION}")
+system('update-rc.d codedeploy-agent remove')
+
+puts 'Uninstall complete.'

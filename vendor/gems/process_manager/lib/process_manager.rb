@@ -4,7 +4,7 @@ require 'etc'
 
 unless defined?(ProcessManager)
   $: << File.expand_path(File.dirname(__FILE__) + '/lib')
-  require 'core_ext'
+  require_relative 'core_ext'
   require 'process_manager/config'
   require 'process_manager/log'
   require 'process_manager/master'

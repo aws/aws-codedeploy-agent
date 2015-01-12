@@ -17,76 +17,35 @@
 #                    the deployment artifacts on to this instance.
 ### END INIT INFO
 
-COMMAND=$1
-RETVAL=0
 [ -f /etc/profile ] && [ "`stat --format '%U %G' /etc/profile`" == "root root" ] && source /etc/profile
 
-prog="codedeploy-agent"
-# Modify the following USER variable to run the codedeploy process as a non-root user
-# Note: You also need to chown /opt/codedeploy /var/log/aws 
-USER=""
-AGENT_ROOT="/opt/codedeploy-agent/"
-INSTALLER="/opt/codedeploy-agent/bin/install"
-BIN="/opt/codedeploy-agent/bin/codedeploy-agent"
+BIN="codedeploy-agent"
 
 start() {
-        echo -n $"Starting $prog:"
-        cd $AGENT_ROOT
-        if [ $USER ]; then
-          nohup sudo -i -u $USER $BIN start >/dev/null </dev/null 2>&1 # Try to start the server
-        else
-          nohup $BIN start >/dev/null </dev/null 2>&1  # Try to start the server
-        fi
+        echo -n $"Starting $BIN:"
+        nohup $BIN start >/dev/null </dev/null 2>&1
         exit $?
 }
 
 stop() {
-        echo -n $"Stopping $prog:"
-        cd $AGENT_ROOT
-        if [ $USER ]; then
-          nohup sudo -i -u $USER $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
-        else
-          nohup $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
-        fi
+        echo -n $"Stopping $BIN:"
+        nohup $BIN stop >/dev/null </dev/null 2>&1
         exit $?
 }
 
 restart() {
-        echo -n $"Restarting $prog:"
-        cd $AGENT_ROOT
-        if [ $USER ]; then
-          nohup sudo -i -u $USER $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
-        else
-          nohup $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
-        fi
+        echo -n $"Restarting $BIN:"
+        nohup $BIN restart >/dev/null </dev/null 2>&1
         exit $?
 }
 
 status() {
-        cd $AGENT_ROOT
-        if [ $USER ]; then
-          sudo -i -u $USER $BIN status # Status of the server
-        else
-          $BIN status # Status of the server
-        fi
+        $BIN status
         exit $?
 }
 
-update() {
-        echo -n $"Updating $prog:"
-        cd $AGENT_ROOT
-        $INSTALLER auto #Update the agent
-}
-
-case "$COMMAND" in
+case "$1" in
         start)
-                start
-                ;;
-        start-no-update)
-                start
-                ;;
-        start-with-update)
-                update
                 start
                 ;;
         stop)

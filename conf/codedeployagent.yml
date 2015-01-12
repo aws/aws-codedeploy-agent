@@ -1,9 +1,9 @@
 ---
 :log_aws_wire: false
 :log_dir: '/var/log/aws/codedeploy-agent/'
-:pid_dir: '/opt/codedeploy-agent/state/.pid/'
+:pid_dir: '/var/run/'
 :program_name: codedeploy-agent
-:root_dir: '/opt/codedeploy-agent/deployment-root'
+:root_dir: '/tmp/codedeploy-agent'
 :verbose: false
 :wait_between_runs: 1
 :proxy_uri:
