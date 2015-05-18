@@ -255,34 +255,56 @@ class CommandPollerTest < InstanceAgentTestCase
         @poller.perform
       end
 
-      should 'return when Succeeded command status is given by PollHostCommandAcknowledgement' do
+      should 'call PutHostCommandComplete when Succeeded status is given by PollHostCommandAcknowledgement' do
         @deploy_control_client.expects(:put_host_command_acknowledgement).
           with(:diagnostics => nil,
                :host_command_identifier => @command.host_command_identifier).
           returns(stub(:command_status => "Succeeded"))
 
+        @deploy_control_client.expects(:put_host_command_complete).
+          with(
+              :command_status => 'Succeeded',
+              :diagnostics => {
+                :format => "JSON",
+                :payload => {
+                  'error_code' => InstanceAgent::Plugins::CodeDeployPlugin::ScriptError::SUCCEEDED_CODE,
+                  'script_name' => "",
+                  'message' => 'Succeeded',
+                  'log' => ""}.to_json
+              },
+              :host_command_identifier => @command.host_command_identifier)
+
         @get_deployment_specification_state.become('never')
         @deploy_control_client.expects(:get_deployment_specification).never.
           when(@get_deployment_specification_state.is('never'))
         @put_host_command_complete_state.become('never')
-        @deploy_control_client.expects(:put_host_command_complete).never.
-          when(@put_host_command_complete_state.is('never'))
 
         @poller.perform
       end
 
-      should 'return when Failed command status is given by PollHostCommandAcknowledgement' do
+      should 'call PutHostCommandComplete when Failed status is given by PollHostCommandAcknowledgement' do
         @deploy_control_client.expects(:put_host_command_acknowledgement).
           with(:diagnostics => nil,
                :host_command_identifier => @command.host_command_identifier).
           returns(stub(:command_status => "Failed"))
 
+        @deploy_control_client.expects(:put_host_command_complete).
+          with(
+              :command_status => 'Failed',
+              :diagnostics => {
+                :format => "JSON",
+                :payload => {
+                  'error_code' => InstanceAgent::Plugins::CodeDeployPlugin::ScriptError::UNKNOWN_ERROR_CODE,
+                  'script_name' => "",
+                  'message' => 'Failed',
+                  'log' => ""}.to_json
+              },
+              :host_command_identifier => @command.host_command_identifier)
+
         @get_deployment_specification_state.become('never')
         @deploy_control_client.expects(:get_deployment_specification).never.
           when(@get_deployment_specification_state.is('never'))
         @put_host_command_complete_state.become('never')
-        @deploy_control_client.expects(:put_host_command_complete).never.
-          when(@put_host_command_complete_state.is('never'))
 
         @poller.perform
       end
