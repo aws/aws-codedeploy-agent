@@ -16,7 +16,7 @@ Gem::Specification.new do |s|
   s.rdoc_options = ["--title", "Git Like Interface", "--main", "README.rdoc"]
   s.require_paths = ["lib"]
   s.rubyforge_project = "gli"
-  s.rubygems_version = "1.8.23"
+  s.rubygems_version = "1.8.23.2"
   s.summary = "Build command-suite CLI apps that are awesome."
 
   if s.respond_to? :specification_version then

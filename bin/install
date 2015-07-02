@@ -1,4 +1,10 @@
-#!/usr/bin/ruby2.0
+#!/usr/bin/ruby
+
+##################################################################
+# This part of the code might be running on Ruby versions other
+# than 2.0. Testing on multiple Ruby versions is required for
+# changes to this part of the code.
+##################################################################
 
 class Proxy
   instance_methods.each do |m|
@@ -13,7 +19,7 @@ class Proxy
 
   def method_missing(name, *args, &block)
     @targets.map do |target|
-      target.public_send(name, *args, &block)
+      target.__send__(name, *args, &block)
     end
   end
 end
@@ -36,19 +42,17 @@ end
 @log.level = Logger::INFO
 
 begin
-  # use the gems bundled with the agent if present
-  Gem.use_paths(nil, Gem.path << "/opt/codedeploy-agent/vendor")
-
   require 'fileutils'
   require 'openssl'
   require 'open-uri'
   require 'uri'
-  require 'json'
+  require 'getoptlong'
 
   def usage
     print <<EOF
 
-install <package-type>
+install [--sanity-check] <package-type>
+   --sanity-check [optional]
    package-type: 'rpm', 'deb', or 'auto'
 
 Installs fetches the latest package version of the specified type and
@@ -64,9 +68,105 @@ are detected the automatic detection will abort
 When using the automatic setup, if the system has apt-get but not gdebi,
 the gdebi will be installed using apt-get first.
 
+If --sanity-check is specified, the install script will wait for 3 minutes post installation
+to check for a running agent.
+
+This install script needs Ruby version 2.0.x installed as a prerequisite.
+If you do not have Ruby version 2.0.x installed, please install it first.
+
 EOF
   end
 
+  # check ruby version, only version 2.0.x works
+  def check_ruby_version_and_symlink
+    @log.info("Starting Ruby version check.")
+    actual_ruby_version = RUBY_VERSION.split('.').map{|s|s.to_i}
+    left_bound = '2.0.0'.split('.').map{|s|s.to_i}
+    right_bound = '2.1.0'.split('.').map{|s|s.to_i}
+    if !(File.exist?('/usr/bin/ruby2.0'))
+      if (File.symlink?('/usr/bin/ruby2.0'))
+        @log.error("The symlink /usr/bin/ruby2.0 already exists, but it's linked to a non-existent directory or executable file.")
+        exit(1)
+
+        # The spaceship operator is a rarely used Ruby feature - particularly how it interacts with arrays.
+        # Not all languages that have it handle that case the same way.
+      elsif ((actual_ruby_version <=> left_bound) < 0 || (actual_ruby_version <=> right_bound) >= 0)
+        @log.error("Current running Ruby version for "+ENV['USER']+" is "+RUBY_VERSION+", but Ruby version 2.0.x needs to be installed.")
+        @log.error('If you have Ruby version 2.0.x installed for other users, please create a symlink to /usr/bin/ruby2.0.')
+        @log.error("Otherwise please install Ruby 2.0.x for "+ENV['USER']+" user.")
+        exit(1)
+      else
+        ruby_interpreter_path = File.join(RbConfig::CONFIG["bindir"], RbConfig::CONFIG["RUBY_INSTALL_NAME"] + RbConfig::CONFIG["EXEEXT"])
+        File.symlink(ruby_interpreter_path, '/usr/bin/ruby2.0')
+      end
+    end
+  end
+
+  def parse_args()
+    if (ARGV.length > 4)
+      usage
+      @log.error('Too many arguments.')
+      exit(1)
+    elsif (ARGV.length < 1)
+      usage
+      @log.error('Expected package type as argument.')
+      exit(1)
+    end
+
+    @sanity_check = false
+    @reexeced = false
+    
+    @args = Array.new(ARGV)
+    opts = GetoptLong.new(['--sanity-check', GetoptLong::NO_ARGUMENT], ['--help', GetoptLong::NO_ARGUMENT], ['--re-execed', GetoptLong::NO_ARGUMENT])
+    opts.each do |opt, args|
+      case opt
+      when '--sanity-check'
+        @sanity_check = true
+      when '--help'
+        usage
+      when '--re-execed'
+        @reexeced = true
+      end
+    end
+    if (ARGV.length < 1)
+      usage
+      @log.error('Expected package type as argument.')
+      exit(1)
+    end
+    @type = ARGV.shift.downcase;
+  end
+
+  def force_ruby20()
+    # change interpreter when symlink /usr/bin/ruby2.0 exists, but running with lower ruby version
+    actual_ruby_version = RUBY_VERSION.split('.').map{|s|s.to_i}
+    left_bound = '2.0.0'.split('.').map{|s|s.to_i}
+    right_bound = '2.1.0'.split('.').map{|s|s.to_i}
+    if (actual_ruby_version <=> left_bound) < 0
+      if(!@reexeced)
+        @log.info("The current Ruby version is not 2.0.x! Restarting the installer with /usr/bin/ruby2.0")
+        exec('/usr/bin/ruby2.0', __FILE__, '--re-execed' , *@args)
+      else
+        @log.error('The Ruby version in /usr/bin/ruby2.0 is '+RUBY_VERSION+', but this must be Ruby version 2.0.x. Installation cannot continue.')
+        @log.error('If you have Ruby version 2.0.x installed, please correct the symlink. Otherwise, please install Ruby 2.0')
+        exit(1)
+      end
+    elsif (actual_ruby_version <=> right_bound) >= 0
+      @log.warn('The Ruby version in /usr/bin/ruby2.0 is '+RUBY_VERSION+', but this must be Ruby version 2.0.x. Attempting to install anyway.')
+      @log.warn('If you have Ruby version 2.0.x installed, please correct the symlink. Otherwise, please install Ruby 2.0')
+    end
+  end
+
+  if (Process.uid != 0)
+    @log.error('Must run as root to install packages')
+    exit(1)
+  end
+  
+  parse_args()
+
+  ########## Force running as Ruby 2.0 or fail here       ##########
+  check_ruby_version_and_symlink()
+  force_ruby20()
+  
   def run_command(*args)
     exit_ok = system(*args)
     $stdout.flush
@@ -77,18 +177,19 @@ EOF
 
   def get_ec2_metadata_region
     begin
-    uri = URI.parse('http://169.254.169.254/latest/meta-data/placement/availability-zone')
-    az = uri.read(:read_timeout => 120)
-    az.strip
-    rescue OpenURI::HTTPError => e
+      uri = URI.parse('http://169.254.169.254/latest/meta-data/placement/availability-zone')
+      az = uri.read(:read_timeout => 120)
+      az.strip
+    rescue
       @log.warn("Could not get region from EC2 metadata service at '#{uri.to_s}'")
+      return nil
     end
 
     if (az !~ /[a-z]{2}-[a-z]+-\d+[a-z]/)
       @log.warn("Invalid availability zone name: '#{az}'.")
-      nil
+      return nil
     else
-      az.chop
+      return az.chop
     end
   end
 
@@ -137,6 +238,8 @@ EOF
     uri = get_s3_uri(region, bucket, key)
 
     begin
+      require 'json'
+
       version_string = uri.read(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120)
       JSON.parse(version_string)
     rescue OpenURI::HTTPError => e
@@ -166,33 +269,18 @@ EOF
   end
 
   def do_sanity_check(cmd)
-    @log.info("Waiting for a while before I check for a running agent")
-    sleep(3 * 60)
-    res = run_command(cmd, 'codedeploy-agent', 'status')
-    if (res.nil? || res == false)
-      @log.info("No codedeploy agent seems to be running. Starting the agent.")
-      run_command(cmd, 'codedeploy-agent', 'start-no-update')
+    if @sanity_check
+      @log.info("Waiting for 3 minutes before I check for a running agent")
+      sleep(3 * 60)
+      res = run_command(cmd, 'codedeploy-agent', 'status')
+      if (res.nil? || res == false)
+        @log.info("No codedeploy agent seems to be running. Starting the agent.")
+        run_command(cmd, 'codedeploy-agent', 'start-no-update')
+      end
     end
   end
 
-  if (Process.uid != 0)
-    @log.error('Must run as root to install packages')
-    exit(1)
-  end
-
   @log.info("Starting update check.")
-
-  if (ARGV.length > 1)
-    usage
-    @log.error('Too many arguments.')
-    exit(1)
-  elsif (ARGV.length < 1)
-    usage
-    @log.error('Expected package type as argument.')
-    exit(1)
-  end
-
-  @type = ARGV[0].downcase;
 
   if (@type == 'auto')
     @log.info('Attempting to automatically detect supported package manager type for system...')
@@ -243,7 +331,7 @@ EOF
   when 'deb'
     #use -n for non-interactive mode
     #use -o to not overwrite config files unless they have not been changed
-    install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::="--force-confdef"', '-o', 'Dpg::Options::="--force-conffold"']
+    install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpg::Options::=--force-confold']
     install_from_s3(region, bucket, version_file_key, @type, install_cmd)
     do_sanity_check('/usr/sbin/service')
   when 'zypper'

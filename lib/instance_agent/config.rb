@@ -30,7 +30,8 @@ module InstanceAgent
         :instance_service_port => nil,
         :wait_between_runs => 30,
         :wait_after_error => 30,
-        :codedeploy_test_profile => 'prod'
+        :codedeploy_test_profile => 'prod',
+        :on_premises_config_file => '/etc/codedeploy-agent/conf/codedeploy.onpremises.yml'
       })
     end
 

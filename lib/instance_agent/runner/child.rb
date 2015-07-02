@@ -4,16 +4,31 @@ require 'process_manager/child'
 module InstanceAgent
   module Runner
     class Child < ProcessManager::Daemon::Child
-      AGENTS = {
-        0 => InstanceAgent::CodeDeployPlugin::CommandPoller
-      }
 
       attr_accessor :runner
 
+      def load_plugins(plugins)
+        ProcessManager::Log.debug("Registering Plugins: #{plugins.inspect}.")
+        plugins.each do |plugin|
+          plugin_dir = File.expand_path("../plugins/#{plugin}/register_plugin", File.dirname(__FILE__))
+          ProcessManager::Log.debug("Loading plugin #{plugin} from #{plugin_dir}")
+          begin
+            require plugin_dir
+          rescue LoadError => e
+            ProcessManager::Log.error("Plugin #{plugin} could not be loaded: #{e.message}.")
+            raise
+          end
+        end
+        registered_plugins = InstanceAgent::Agent::Base.plugins
+        ProcessManager::Log.debug("Registered Plugins: #{registered_plugins.inspect}.")
+        Hash[registered_plugins.map.with_index { |value, index| [index, value] }]
+      end
+
       def prepare_run
+        @plugins ||= load_plugins(ProcessManager::Config.config[:plugins] || ["codedeploy"])
         validate_index
         with_error_handling do
-          @runner = AGENTS[index].runner
+          @runner = @plugins[index].runner
           ProcessManager.set_program_name(description)
         end
       end
@@ -33,7 +48,7 @@ module InstanceAgent
       end
 
       def validate_index
-        raise ArgumentError, "Invalid index #{index.inspect}: only 0-2 possible" unless AGENTS.keys.include?(index)
+        raise ArgumentError, "Invalid index #{index.inspect}" unless @plugins.keys.include?(index)
       end
 
       def with_error_handling

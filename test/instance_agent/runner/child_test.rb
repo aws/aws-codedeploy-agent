@@ -5,7 +5,7 @@ class RunnerChildTest < InstanceAgentTestCase
     setup do
       @dir = '/tmp'
       @agent = mock()
-      InstanceAgent::CodeDeployPlugin::CommandPoller.stubs(:new).returns(@agent)
+      InstanceAgent::Plugins::CodeDeployPlugin::CommandPoller.stubs(:new).returns(@agent)
       @agent.stubs(:description).returns("CommandPoller")
       InstanceAgent::Runner::Child.any_instance.stubs(:trap_signals)
       @child = InstanceAgent::Runner::Child.new(0, 777)

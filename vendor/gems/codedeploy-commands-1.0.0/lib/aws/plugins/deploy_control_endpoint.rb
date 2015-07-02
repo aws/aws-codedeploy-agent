@@ -11,6 +11,10 @@ module Aws
               url = "https://codedeploy-commands.us-east-1.amazonaws.com"
             when "us-west-2"
               url = "https://codedeploy-commands.us-west-2.amazonaws.com"
+            when "eu-west-1"
+              url = "https://codedeploy-commands.eu-west-1.amazonaws.com"
+            when "ap-southeast-2"
+              url = "https://codedeploy-commands.ap-southeast-2.amazonaws.com"
             else
               raise "Not able to find an endpoint. Unknown region."
           end

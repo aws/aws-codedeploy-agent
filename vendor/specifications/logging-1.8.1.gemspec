@@ -15,7 +15,7 @@ Gem::Specification.new do |s|
   s.rdoc_options = ["--main", "README.rdoc"]
   s.require_paths = ["lib"]
   s.rubyforge_project = "logging"
-  s.rubygems_version = "1.8.23"
+  s.rubygems_version = "1.8.23.2"
   s.summary = "A flexible and extendable logging library for Ruby"
 
   if s.respond_to? :specification_version then

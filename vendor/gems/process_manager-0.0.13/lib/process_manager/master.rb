@@ -125,6 +125,7 @@ module ProcessManager
       end
 
       def start
+        @kill_signal_received=0;
         handle_pid_file
         validate_ssl_config
         trap_signals
@@ -136,6 +137,13 @@ module ProcessManager
         loop do
           # master does nothing apart from replacing dead children
           # and forwarding signals
+          # To do that, it observes a kill_sig_received flag in every loop iteration
+          if @kill_signal_received != 0
+            ProcessManager::Log.info "#{description}: Received #{@kill_signal_received} - stopping children and shutting down"
+            kill_children(@kill_signal_received)
+            @kill_signal_received=0
+            cleanup_and_exit
+          end
           sleep 1
         end
       end
@@ -155,7 +163,7 @@ module ProcessManager
 
       def handle_pid_file       
         @file_lock ||= File.open(pid_lock_file, File::RDWR|File::CREAT, 0644)
-        lock_aquired = @file_lock.flock(File::LOCK_EX|File::LOCK_NB)
+        lock_aquired = @file_lock.flock(File::LOCK_EX | File::LOCK_NB)
         
         if lock_aquired == false
           ProcessManager::Log.info("Could not aquire lock on #{pid_lock_file} - aborting start!")
@@ -186,6 +194,7 @@ module ProcessManager
       def spawn_child(index)
         master_pid = $$ # need to store in order to pass down to child
         child_pid = fork do
+          @file_lock.close
           child_class.new(index, master_pid).start
         end
         children[index] = child_pid
@@ -197,9 +206,7 @@ module ProcessManager
         # The master shuts down immediately and forwards the signal to each child
         [:INT, :QUIT, :TERM].each do |sig|
           trap(sig) do
-            ProcessManager::Log.info "#{description}: Received #{sig} - stopping children and shutting down"
-            kill_children(sig)
-            cleanup_and_exit
+            @kill_signal_received=sig
           end
         end
 
@@ -262,7 +269,11 @@ module ProcessManager
             if children.has_key?(i)
               ProcessManager::Log.debug "#{description}: child #{i+1}/#{ProcessManager::Config.config[:children]} is still there"
             else
-              spawn_child(i)
+              Thread.new(i) do
+                # Sleep for 5 seconds before spawning a new child. That way we can avoid fork storm due to child process bootstrap issues.
+                sleep(5)
+                spawn_child(i)
+              end
             end
           end
         else

@@ -13,7 +13,7 @@ Gem::Specification.new do |s|
   s.files = ["README.md"]
   s.homepage = "http://github.com/scalarium/process_manager"
   s.require_paths = ["lib"]
-  s.rubygems_version = "1.8.23"
+  s.rubygems_version = "1.8.23.2"
   s.summary = "A framework to manage processes"
 
   if s.respond_to? :specification_version then

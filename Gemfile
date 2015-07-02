@@ -4,16 +4,15 @@
 #disable_system_gems
 
 source 'http://rubygems.org'
-
 # our dependencies
-gem 'jamespath'
-gem 'json'
+gem 'json_pure'
 gem 'gli'
 gem 'aws-sdk-core'
 gem 'codedeploy-commands'
 gem 'rubyzip'
-gem 'httpclient'
 gem 'rake'
+gem 'archive-tar-minitar'
+gem 'logging'
 
 group :development do
 # this doesn't need to be a global or even a standard dependency

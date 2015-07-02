@@ -10,7 +10,7 @@ class CertificateHelper
     ca_chain_file = generate_ca_chain()
 
     ENV['AWS_REGION'] = 'us-east-1'
-    InstanceAgent::CodeDeployPlugin::DeploymentSpecification.init_cert_store(ca_chain_file)
+    InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.init_cert_store(ca_chain_file)
   end
 
   def generate_root()

@@ -30,6 +30,10 @@ module InstanceAgent
       execute_tar_command("/bin/tar -zxpsf #{bundle_file} -C #{dst}")
     end
 
+    def self.supports_process_groups?()
+      true
+    end
+    
     private
     def self.execute_tar_command(cmd)
       log(:debug, "Executing #{cmd}")

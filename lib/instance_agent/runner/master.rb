@@ -1,7 +1,5 @@
 # encoding: UTF-8
 require 'process_manager/master'
-require 'instance_agent/codedeploy_plugin/request_helper'
-require 'instance_agent/codedeploy_plugin/codedeploy_control'
 require 'instance_metadata'
 
 module InstanceAgent
@@ -20,18 +18,6 @@ module InstanceAgent
 
       def self.pid_description
         ProcessManager::Config.config[:program_name]
-      end
-
-      def validate_ssl_config
-        if !InstanceMetadata.instance_id.blank?
-          region = InstanceMetadata.region
-          request_helper = InstanceAgent::CodeDeployPlugin::RequestHelper.new(:deploy_control_client => InstanceAgent::CodeDeployPlugin::CodeDeployControl.new(:region => region))
-
-          if (errors = request_helper.verify_clients_configuration)
-            errors.each{|error| ProcessManager::Log.error("Stopping CodeDeploy agent. " + error)}
-          end
-          self.class.abort unless errors.empty?
-        end
       end
 
       def self.log_file
@@ -72,7 +58,7 @@ module InstanceAgent
       end
 
       def kill_children(sig)
-        children.each do |index, child_pid|
+	    children.each do |index, child_pid|
           begin
             Process.kill(sig, child_pid)
           rescue Errno::ESRCH
@@ -96,6 +82,7 @@ module InstanceAgent
             end
           end
         end
+
       end
       
     end

@@ -38,8 +38,8 @@ class InstanceMetadata
     Net::HTTP.start(IP_ADDRESS, PORT) do |http|
       response = http.get(path)
       if response.code.to_i != 200
-        InstanceAgent::Log.send(:debug, "HTTP error from metadata service, code #{reponse.code}")
-        raise "HTTP error from metadata service, code #{reponse.code}"
+        InstanceAgent::Log.send(:debug, "HTTP error from metadata service, code #{response.code}")
+        raise "HTTP error from metadata service, code #{response.code}"
       end
       return response.body
     end

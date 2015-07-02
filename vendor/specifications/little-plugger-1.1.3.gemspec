@@ -15,7 +15,7 @@ Gem::Specification.new do |s|
   s.rdoc_options = ["--main", "README.rdoc"]
   s.require_paths = ["lib"]
   s.rubyforge_project = "little-plugger"
-  s.rubygems_version = "1.8.23"
+  s.rubygems_version = "1.8.23.2"
   s.summary = "LittlePlugger is a module that provides Gem based plugin management."
 
   if s.respond_to? :specification_version then

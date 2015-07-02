@@ -15,5 +15,4 @@ Gem::Specification.new do |spec|
   spec.add_dependency('rake', '~> 0.9')
   spec.add_dependency('logging', '~>1.8')
   spec.add_dependency('aws-sdk-core', '~>2.0')
-  spec.add_dependency('httpclient', '~>2.3')
 end

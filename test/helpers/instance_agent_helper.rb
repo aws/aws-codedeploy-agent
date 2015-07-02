@@ -1,5 +1,6 @@
 # require the code
 require 'instance_agent'
+require 'instance_agent/plugins/codedeploy/register_plugin'
 
 class InstanceAgentTestCase < Test::Unit::TestCase
   include ActiveSupport::Testing::Assertions
