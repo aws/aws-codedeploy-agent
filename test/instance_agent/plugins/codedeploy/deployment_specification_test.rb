@@ -3,15 +3,15 @@ require 'ostruct'
 require 'certificate_helper'
 
 class DeploymentSpecificationTest < InstanceAgentTestCase
+
+  def generate_signed_message_for(map)
+    message = @cert_helper.sign_message(map.to_json)
+    spec = OpenStruct.new({ :payload => message })
+    spec.format = "PKCS7/JSON"
+    return spec
+  end
+
   context 'The Deployment Specification' do
-    def generate_signed_message_for(map)
-      message = @cert_helper.sign_message(map.to_json)
-      spec = OpenStruct.new({ :payload => message })
-      spec.format = "PKCS7/JSON"
-
-      return spec
-    end
-
     setup do
       @cert_helper = CertificateHelper.new
       @deployment_id = SecureRandom.uuid.to_s
@@ -37,8 +37,8 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
       
       @packed_message = generate_signed_message_for(@deployment_spec)
       InstanceAgent::Config.init
-    end
-
+    end 
+   
     context "with JSON format" do
       should "populate the deployment id" do
         parsed_deployment_spec = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(@packed_message)

@@ -13,6 +13,7 @@ gem 'rubyzip'
 gem 'rake'
 gem 'archive-tar-minitar'
 gem 'logging'
+gem 'process_manager'
 
 group :development do
 # this doesn't need to be a global or even a standard dependency

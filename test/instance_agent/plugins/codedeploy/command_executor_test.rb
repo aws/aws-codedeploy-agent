@@ -1,11 +1,18 @@
 require 'test_helper'
+require 'certificate_helper'
 require 'stringio'
-require 'com/amazon/codedeploy/command/v20141006/host_command_instance'
 require 'aws-sdk-core/s3'
 
 class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
 
   include InstanceAgent::Plugins::CodeDeployPlugin
+      def generate_signed_message_for(map)
+        message = @cert_helper.sign_message(map.to_json)
+        spec = OpenStruct.new({ :payload => message })
+        spec.format = "PKCS7/JSON"
+
+        return spec
+      end
 
   context 'The CodeDeploy Plugin Command Executor' do
     setup do
@@ -33,13 +40,6 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
     end
 
     context "when executing a command" do
-      def generate_signed_message_for(map)
-        message = @cert_helper.sign_message(map.to_json)
-        spec = OpenStruct.new({ :payload => message })
-        spec.format = "PKCS7/JSON"
-
-        return spec
-      end
 
       setup do
         @cert_helper = CertificateHelper.new
@@ -62,7 +62,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             "S3Revision" => @s3Revision
           }
         })
-        @command = Com::Amazon::Codedeploy::Command::V20141006::HostCommandInstance.new(
+        @command = Aws::CodeDeployCommand::Types::HostCommandInstance.new(
         :host_command_identifier => "command-1",
         :deployment_execution_id => "test-execution")
         @root_dir = '/tmp/codedeploy/'

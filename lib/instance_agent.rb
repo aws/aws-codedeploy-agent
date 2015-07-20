@@ -1,7 +1,6 @@
 # encoding: UTF-8
 
 Gem.use_paths(nil, Gem.path << "/opt/codedeploy-agent/vendor")
-
 require 'core_ext'
 
 require 'rubygems'

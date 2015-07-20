@@ -6,17 +6,18 @@ module InstanceAgent
   module Plugins
     module CodeDeployPlugin
       module ApplicationSpecification
+
         class ApplicationSpecificationTest < InstanceAgentTestCase
+          def make_app_spec
+            ApplicationSpecification.new(YAML.load(@app_spec_string), {:revision_id => @test_revision_id})
+          end
+
           context 'The Application Specification' do
             setup do
               @test_revision_id = 'bar'
             end
 
             private
-
-            def make_app_spec
-              ApplicationSpecification.new(YAML.load(@app_spec_string), {:revision_id => @test_revision_id})
-            end
 
             context "With missing version" do
               setup do

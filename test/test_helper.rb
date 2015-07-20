@@ -1,4 +1,7 @@
 # encoding: UTF-8
+$:.unshift "lib"
+Gem.use_paths(nil, Gem.path << "vendor")
+
 require 'thread'
 require 'rubygems'
 require "bundler"
@@ -14,3 +17,4 @@ require 'base64'
 # require local test helpers. If you need a helper write,
 # keep this pattern or you'll be punished hard
 require 'instance_agent_helper'
+

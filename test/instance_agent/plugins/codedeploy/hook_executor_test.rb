@@ -1,7 +1,6 @@
 require 'test_helper'
 require 'stringio'
 require 'fileutils'
-require 'com/amazon/codedeploy/command/v20141006/host_command_instance'
 
 class HookExecutorTest < InstanceAgentTestCase
 
