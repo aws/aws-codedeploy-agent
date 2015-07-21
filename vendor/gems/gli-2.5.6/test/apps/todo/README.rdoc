@@ -1,6 +1,0 @@
-= todo
-
-Describe your project here
-
-:include:todo.rdoc
-

@@ -4,23 +4,10 @@
 #disable_system_gems
 
 source 'http://rubygems.org'
-# our dependencies
-gem 'json_pure'
-gem 'gli'
-gem 'aws-sdk-core'
-gem 'codedeploy-commands'
-gem 'rubyzip'
-gem 'rake'
-gem 'archive-tar-minitar'
-gem 'logging'
-gem 'process_manager'
 
-group :development do
-# this doesn't need to be a global or even a standard dependency
-# use it if you need it, but don't commit it.
-#  gem 'ruby-debug', :require => nil
-#  gem 'ruby-debug-base', :require => nil
-end
+gemspec
+gem "process_manager", "0.0.13", :path => "#{File.expand_path(__FILE__)}/../vendor/gems/process_manager-0.0.13"
+gem "codedeploy-commands", "1.0.0", :path => "#{File.expand_path(__FILE__)}/../vendor/gems/codedeploy-commands-1.0.0"
 
 group :test do
   gem 'test-unit'

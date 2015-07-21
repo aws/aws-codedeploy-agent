@@ -3,8 +3,6 @@ require 'rake/testtask'
 require 'rspec/core/rake_task'
 require 'rubygems'
 
-# Check Ruby syntax in bin/ and lib/
-
 # Run all units tests in test/
 desc "Run unit tests in test/"
 Rake::TestTask.new(:test) do |t|
