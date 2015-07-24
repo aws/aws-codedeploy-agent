@@ -1,5 +1,6 @@
 require 'openssl'
 require 'instance_metadata'
+require 'open-uri'
 
 module InstanceAgent
   module Plugins
@@ -132,18 +133,7 @@ module InstanceAgent
           when 'beta', 'gamma'
             cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-signer-integ.amazonaws.com"
           when 'prod'
-            case @@region
-            when 'us-east-1'
-              cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-signer-us-east-1.amazonaws.com"
-            when 'us-west-2'
-              cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-signer-us-west-2.amazonaws.com"
-            when 'eu-west-1'
-              cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-signer-eu-west-1.amazonaws.com"
-            when 'ap-southeast-2'
-              cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-signer-ap-southeast-2.amazonaws.com"
-            else
-              raise "Unknown region '#{@region}'"
-            end
+            cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-signer-"+@@region+".amazonaws.com"
           else
             raise "Unknown profile '#{Config.config()[:codedeploy_test_profile]}'"
           end

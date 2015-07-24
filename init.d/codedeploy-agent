@@ -17,7 +17,9 @@
 #                    the deployment artifacts on to this instance.
 ### END INIT INFO
 
+
 RETVAL=0
+[ -f /etc/profile ] && [ "`stat --format '%U %G' /etc/profile`" == "root root" ] && source /etc/profile
 
 prog="codedeploy-agent"
 AGENT_ROOT="/opt/codedeploy-agent/"
@@ -52,10 +54,13 @@ update() {
 
 case "$1" in
         start)
-                update
                 start
                 ;;
         start-no-update)
+                start
+                ;;
+        start-with-update)
+                update
                 start
                 ;;
         stop)

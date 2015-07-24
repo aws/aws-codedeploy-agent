@@ -8,6 +8,15 @@ module InstanceAgent
 
         VERSION = "2013-04-23"
         def initialize
+          test_profile = InstanceAgent::Config.config[:codedeploy_test_profile]
+          unless ["beta", "gamma"].include?(test_profile.downcase)
+            # Remove any user overrides set in the environment.
+            # The agent should always pull credentials from the EC2 instance
+            # profile or the credentials in the OnPremises config file.
+            ENV['AWS_ACCESS_KEY_ID'] = nil
+            ENV['AWS_SECRET_ACCESS_KEY'] = nil
+            ENV['AWS_CREDENTIAL_FILE'] = nil
+          end
           CodeDeployPlugin::OnPremisesConfig.configure
           region = ENV['AWS_REGION'] || InstanceMetadata.region
           @host_identifier = ENV['AWS_HOST_IDENTIFIER'] || InstanceMetadata.host_identifier

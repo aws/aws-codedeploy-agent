@@ -176,11 +176,13 @@ module InstanceAgent
             File.join(InstanceAgent::Config.config[:log_dir], "#{InstanceAgent::Config.config[:program_name]}.aws_wire.log"),
             16,
             64 * 1024 * 1024),
-            :http_wire_trace => true)
+            :http_wire_trace => true,
+            :signature_version => 'v4')
           else
             s3 = Aws::S3::Client.new(
             :region => region,
-            :ssl_ca_directory => ENV['AWS_SSL_CA_DIRECTORY'])
+            :ssl_ca_directory => ENV['AWS_SSL_CA_DIRECTORY'],
+            :signature_version => 'v4')
           end
 
           File.open(artifact_bundle(deployment_spec), 'wb') do |file|
@@ -316,16 +318,22 @@ module InstanceAgent
 
         private
         def cleanup_old_archives(deployment_group)
-          deployment_archives = Dir[File.join(ProcessManager::Config.config[:root_dir], deployment_group, '*')]
-          extra = deployment_archives.size - ARCHIVES_TO_RETAIN
+          deployment_archives = Dir.entries(File.join(ProcessManager::Config.config[:root_dir], deployment_group))
+          # remove . and ..
+          deployment_archives.delete(".")
+          deployment_archives.delete("..")
+
+          full_path_deployment_archives = deployment_archives.map{ |f| File.join(ProcessManager::Config.config[:root_dir], deployment_group, f)}
+          
+          extra = full_path_deployment_archives.size - ARCHIVES_TO_RETAIN
           return unless extra > 0
 
           # Never remove the last successful deployment
           last_success = last_successful_deployment_dir(deployment_group)
-          deployment_archives.delete(last_success)
+          full_path_deployment_archives.delete(last_success)
 
           # Sort oldest -> newest, take first `extra` elements
-          oldest_extra = deployment_archives.sort_by{ |f| File.mtime(f) }.take(extra)
+          oldest_extra = full_path_deployment_archives.sort_by{ |f| File.mtime(f) }.take(extra)
 
           # Absolute path takes care of relative root directories
           directories = oldest_extra.map{ |f| File.absolute_path(f) }

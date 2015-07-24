@@ -12,6 +12,7 @@ Rake::TestTask.new(:test) do |t|
   t.verbose = true
 end
 task :default => :test
+task :release => :test
 
 # Run units tests in test/instance_agent/
 Rake::TestTask.new(:test_instance_agent) do |t|

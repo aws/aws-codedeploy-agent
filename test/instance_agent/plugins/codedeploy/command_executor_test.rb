@@ -184,6 +184,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           @mock_file = mock
           Net::HTTP.stubs(:start).yields(@http)
           File.stubs(:open).returns @mock_file
+          Dir.stubs(:entries).returns []
           @mock_file.stubs(:close)
           @http.stubs(:request_get)
           @s3 = mock

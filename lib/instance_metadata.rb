@@ -6,7 +6,7 @@ class InstanceMetadata
 
   IP_ADDRESS = '169.254.169.254'
   PORT = 80
-
+  
   def self.host_identifier
     doc = JSON.parse(http_get('/latest/dynamic/instance-identity/document').strip)
     "arn:aws:ec2:#{doc['region']}:#{doc['accountId']}:instance/#{doc['instanceId']}"

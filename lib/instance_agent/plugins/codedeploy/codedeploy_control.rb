@@ -78,20 +78,7 @@ module InstanceAgent
         # Do minimal cert pinning
         def verify_subject
           InstanceAgent::Log.debug("#{self.class.to_s}: Actual certificate subject is '#{@cert.subject.to_s}'")
-
-          case @region
-          when 'us-east-1'
-            @cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-commands.us-east-1.amazonaws.com"
-          when 'us-west-2'
-            @cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-commands.us-west-2.amazonaws.com"
-          when 'eu-west-1'
-            @cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-commands.eu-west-1.amazonaws.com"
-          when 'ap-southeast-2'
-            @cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-commands.ap-southeast-2.amazonaws.com"
-          else
-            InstanceAgent::Log.debug("#{self.class.to_s}: Unsupported region '#{@region}'")
-            false
-          end
+          @cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-commands."+@region+".amazonaws.com"
         end
 
       end
