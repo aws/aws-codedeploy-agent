@@ -14,11 +14,19 @@ end
 task :default => :test
 task :release => :test
 
-# Run units tests in test/instance_agent/
-Rake::TestTask.new(:test_instance_agent) do |t|
-  t.libs << ['test', 'lib', 'test/helpers']
-  t.pattern = "test/instance_agent/**/*_test.rb"
-  t.verbose = true
+begin
+  require 'cucumber'
+  require 'cucumber/rake/task'
+  desc = 'aws codedeploy agent integration tests'
+  Cucumber::Rake::Task.new('test-integration-aws-codedeploy-agent', desc) do |t|
+    t.cucumber_opts = "features -t ~@Ignore"
+  end
+  task 'test-integration' => 'test-integration-aws-codedeploy-agent'
+rescue LoadError
+  desc 'aws codedeploy agent integration tests'
+  task 'test:integration' do
+    puts 'skipping aws-codedeploy-agent integration tests, cucumber not loaded'
+  end
 end
 
 # Clean up

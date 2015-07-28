@@ -1,4 +1,3 @@
-
 # we do not want any user gems,
 # only the ones bundled by us
 #disable_system_gems
@@ -11,11 +10,13 @@ gem "codedeploy-commands", "1.0.0", :path => "#{File.expand_path(__FILE__)}/../v
 
 group :test do
   gem 'test-unit'
+  gem 'activesupport', :require => 'active_support'  
+  gem 'coveralls', require: false
+  gem 'cucumber'
+  gem 'fakefs', :require => 'fakefs/safe'
+  gem 'mocha'
+  gem 'rspec'
   gem 'shoulda'
   gem 'shoulda-matchers'
   gem 'shoulda-context'
-  gem 'mocha'
-  gem 'fakefs', :require => 'fakefs/safe'
-  gem 'activesupport', :require => 'active_support'
-  gem 'coveralls', require: false
 end
