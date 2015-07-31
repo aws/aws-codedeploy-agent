@@ -1,0 +1,10 @@
+language: ruby
+rvm:
+  - 2.0.0
+after_success: coveralls
+notifications:
+  email:
+    recipients:
+      - codedeploy-notifications@amazon.com
+    on_failure: always
+    on_success: never

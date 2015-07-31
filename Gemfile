@@ -17,4 +17,5 @@ group :test do
   gem 'mocha'
   gem 'fakefs', :require => 'fakefs/safe'
   gem 'activesupport', :require => 'active_support'
+  gem 'coveralls', require: false
 end
