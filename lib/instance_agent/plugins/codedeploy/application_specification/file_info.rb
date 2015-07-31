@@ -10,7 +10,7 @@ module InstanceAgent
             if(source.nil?)
               raise AppSpecValidationException, 'File needs to have a source'
             elsif (destination.nil?)
-              raise AppSpecValidationException, 'File needs to have a destination'
+              raise AppSpecValidationException, "File #{source} needs to have a destination"
             end
             @source = source
             @destination = destination

@@ -272,7 +272,7 @@ module InstanceAgent
                 end
 
                 should  "raise and AppSpecValidationException" do
-                  assert_raised_with_message('File needs to have a destination',AppSpecValidationException) do
+                  assert_raised_with_message('File test_source needs to have a destination',AppSpecValidationException) do
                     make_app_spec()
                   end
                 end
