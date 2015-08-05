@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 
 ##################################################################
 # This part of the code might be running on Ruby versions other
