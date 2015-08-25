@@ -22,6 +22,11 @@ module InstanceAgent
               64 * 1024 * 1024),
               :http_wire_trace => true})
           end
+
+          if InstanceAgent::Config.config[:proxy_uri]
+            @options = options.update({
+              :http_proxy => URI(InstanceAgent::Config.config[:proxy_uri]) })
+          end
         end
 
         def validate_ssl_config
@@ -65,6 +70,15 @@ module InstanceAgent
           client.use_ssl = true
           client.verify_mode = OpenSSL::SSL::VERIFY_PEER
           client.ca_file = ENV['SSL_CERT_FILE']
+
+          if InstanceAgent::Config.config[:proxy_uri]
+            proxy_uri = URI(InstanceAgent::Config.config[:proxy_uri])
+            client.proxy_from_env = false # make sure proxy settings can be overridden
+            client.proxy_address = proxy_uri.host
+            client.proxy_port = proxy_uri.port
+            client.proxy_user = proxy_uri.user if proxy_uri.user
+            client.proxy_pass = proxy_uri.password if proxy_uri.password 
+          end
 
           client.verify_callback = lambda do |preverify_ok, cert_store|
             return false unless preverify_ok

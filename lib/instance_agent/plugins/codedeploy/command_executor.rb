@@ -165,6 +165,11 @@ module InstanceAgent
         def download_from_s3(deployment_spec, bucket, key, version, etag)
           log(:debug, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
           region = ENV['AWS_REGION'] || InstanceMetadata.region
+          
+          proxy_uri = nil
+          if InstanceAgent::Config.config[:proxy_uri]
+            proxy_uri = URI(InstanceAgent::Config.config[:proxy_uri])
+          end
 
           if InstanceAgent::Config.config[:log_aws_wire]
             s3 = Aws::S3::Client.new(
@@ -177,12 +182,14 @@ module InstanceAgent
             16,
             64 * 1024 * 1024),
             :http_wire_trace => true,
-            :signature_version => 'v4')
+            :signature_version => 'v4',
+            :http_proxy => proxy_uri)
           else
             s3 = Aws::S3::Client.new(
             :region => region,
             :ssl_ca_directory => ENV['AWS_SSL_CA_DIRECTORY'],
-            :signature_version => 'v4')
+            :signature_version => 'v4',
+            :http_proxy => proxy_uri)
           end
 
           File.open(artifact_bundle(deployment_spec), 'wb') do |file|

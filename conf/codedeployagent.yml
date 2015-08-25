@@ -6,3 +6,4 @@
 :root_dir: '/opt/codedeploy-agent/deployment-root'
 :verbose: false
 :wait_between_runs: 1
+#:proxy_uri:
