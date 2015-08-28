@@ -40,6 +40,13 @@ stop() {
         exit $?
 }
 
+restart() {
+        echo -n $"Stopping $prog:"
+        cd $AGENT_ROOT
+        $BIN stop >/dev/null </dev/null 2>&1 && start
+        exit $?
+}
+
 status() {
         cd $AGENT_ROOT
         $BIN status # Status of the server
@@ -67,8 +74,7 @@ case "$1" in
                 stop
                 ;;
         restart)
-                stop
-                start
+                restart
                 ;;
         force-reload)
                 stop
