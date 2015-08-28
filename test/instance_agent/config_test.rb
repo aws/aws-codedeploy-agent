@@ -27,7 +27,8 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         :wait_between_runs => 30,
         :wait_after_error => 30,
         :codedeploy_test_profile => 'prod',
-        :on_premises_config_file => '/etc/codedeploy-agent/conf/codedeploy.onpremises.yml'
+        :on_premises_config_file => '/etc/codedeploy-agent/conf/codedeploy.onpremises.yml',
+        :proxy_uri => nil
       }, InstanceAgent::Config.config)
     end
 
