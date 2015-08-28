@@ -35,3 +35,6 @@ Update the features/AwsCredentials.yml file with AWS access key and secret key. 
 ```
 rake test-integration
 ```
+## Installation of Codedeploy Agent
+
+In the bin directory run bin/install <agent> for exmaple for Red Hat based installs run bin/install rpm to install the the RPM for the codeploy agent.
