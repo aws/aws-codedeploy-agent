@@ -41,7 +41,7 @@ stop() {
 }
 
 restart() {
-        echo -n $"Stopping $prog:"
+        echo -n $"Restarting $prog:"
         cd $AGENT_ROOT
         nohup $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
         exit $?
