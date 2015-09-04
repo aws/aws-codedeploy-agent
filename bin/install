@@ -47,6 +47,7 @@ begin
   require 'open-uri'
   require 'uri'
   require 'getoptlong'
+  require 'tempfile'
 
   def usage
     print <<EOF
@@ -221,10 +222,8 @@ EOF
 
     # stream package file to disk
     begin
-      File.open(package_file, 'w+b') do |file|
-        uri.open(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120) do |s3|
-          file.write(s3.read)
-        end
+      uri.open(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120) do |s3|
+        package_file.write(s3.read)
       end
     rescue OpenURI::HTTPError => e
       @log.error("Could not find package to download at '#{uri.to_s}'")
@@ -252,20 +251,24 @@ EOF
     version_data = get_version_file_from_s3(region, bucket, version_file_key)
 
     package_key = version_data[type]
-    package_base_name = package_key.split('/')[-1] # base name for the key in S3
-    package_file = "/tmp/#{package_base_name}"
+    package_base_name = File.basename(package_key)
+    package_extension = File.extname(package_base_name)
+    package_name = File.basename(package_base_name, package_extension)
+    package_file = Tempfile.new(["#{package_name}.tmp-", package_extension]) # unique file with 0600 permissions
 
     get_package_from_s3(region, bucket, package_key, package_file)
-    install_cmd << package_file
+    package_file.close
+
+    install_cmd << package_file.path
     @log.info("Executing `#{install_cmd.join(" ")}`...")
 
     if (!run_command(*install_cmd))
-      @log.error("Error installing #{package_file}.")
-      FileUtils.rm(package_file)
+      @log.error("Error installing #{package_file.path}.")
+      package_file.unlink
       exit(1)
     end
 
-    FileUtils.rm(package_file)
+    package_file.unlink
   end
 
   def do_sanity_check(cmd)
