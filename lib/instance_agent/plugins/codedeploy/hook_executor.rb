@@ -52,6 +52,7 @@ module InstanceAgent
         def to_json
           log = @log.log || []
           log = log.join("")
+          log.force_encoding("utf-8")
           {'error_code' => @error_code, 'script_name' => @script_name, 'message' => message, 'log' => log}.to_json
         end
       end
