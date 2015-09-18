@@ -134,7 +134,9 @@ module InstanceAgent
 
         private
         def gather_diagnostics_from_script_error(script_error)
-          script_error.to_json
+          return script_error.to_json
+          rescue Exception => e
+            return {'error_code' => "Unknown", 'script_name' => script_error.script_name, 'message' => "Attempting minimal diagnostics", 'log' => "Exception #{e.class} occured"}.to_json
         end
 
         private
