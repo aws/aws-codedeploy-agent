@@ -73,6 +73,7 @@ module InstanceAgent
           @deployment_id = arguments[:deployment_id]
           @application_name = arguments[:application_name]
           @deployment_group_name = arguments[:deployment_group_name]
+          @current_deployment_root_dir = arguments[:deployment_root_dir]
           select_correct_deployment_root_dir(arguments[:deployment_root_dir], arguments[:last_successful_deployment_dir])
           return if @deployment_root_dir.nil?
           @deployment_archive_dir = File.join(@deployment_root_dir, 'deployment-archive')
@@ -84,7 +85,6 @@ module InstanceAgent
                       'DEPLOYMENT_ID'   => @deployment_id.to_s,
                       'APPLICATION_NAME' => @application_name,
                       'DEPLOYMENT_GROUP_NAME' => @deployment_group_name}
-
         end
 
         def execute
@@ -154,7 +154,7 @@ module InstanceAgent
 
         private
         def create_script_log_file_if_needed
-          script_log_file_location = File.join(@deployment_root_dir, 'logs/scripts.log')
+          script_log_file_location = File.join(@current_deployment_root_dir, 'logs/scripts.log')
           if(!File.exists?(script_log_file_location))
             unless File.directory?(File.dirname(script_log_file_location))
               FileUtils.mkdir_p(File.dirname(script_log_file_location))
@@ -218,6 +218,7 @@ module InstanceAgent
           @hook_logging_mutex.synchronize do
             @script_log.append_to_log(message)
             script_log_file.write(Time.now.to_s[0..-7] + ' ' + message)
+            InstanceAgent::DeploymentLog.instance.log("[#{@deployment_id}]#{message.strip}") if InstanceAgent::Config.config[:enable_deployments_log]
             script_log_file.flush
           end
         end

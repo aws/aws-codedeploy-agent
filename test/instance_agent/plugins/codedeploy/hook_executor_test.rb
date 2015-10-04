@@ -26,6 +26,10 @@ class HookExecutorTest < InstanceAgentTestCase
       @app_spec_path = "app_spec"
       @app_spec =  { "version" => 0.0, "os" => "linux" }
       YAML.stubs(:load).returns(@app_spec)
+      @root_dir = '/tmp/codedeploy'
+      logger = mock
+      logger.stubs(:log)
+      InstanceAgent::DeploymentLog.stubs(:instance).returns(logger)
     end
 
     context "when creating a hook command" do
