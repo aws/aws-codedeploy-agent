@@ -205,7 +205,9 @@ module InstanceAgent
 
         def execute
           #If the file doesn't exist the command is ignored
-          if File.exist?(@file_path)
+          if File.symlink?(@file_path)
+            FileUtils.rm(@file_path)
+          elsif File.exist?(@file_path)
             if File.directory?(@file_path)
               # TODO (AWSGLUE-713): handle the exception if the directory is non-empty;
               # this might mean the customer has put files in this directory and we should
