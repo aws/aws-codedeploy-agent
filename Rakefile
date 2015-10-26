@@ -11,8 +11,8 @@ Rake::TestTask.new(:test) do |t|
   t.test_files = test_files
   t.verbose = true
 end
-task :default => :test
-task :release => :test
+task :default => [:version_tracking, :test]
+task :release => [:version_tracking, :test]
 
 begin
   require 'cucumber'
@@ -27,6 +27,19 @@ rescue LoadError
   task 'test:integration' do
     puts 'skipping aws-codedeploy-agent integration tests, cucumber not loaded'
   end
+end
+
+# Version tracking
+require 'fileutils'
+task :version_tracking do
+  FileUtils.rm('.version') if File.exist?('.version')
+  File.open('.version', 'w+') {|file| file.write("agent_version: COMMIT_#{getLatestCommit}")}
+  FileUtils.chmod(0444, '.version')
+end
+
+def getLatestCommit
+  commit_id = `git rev-parse HEAD`
+  @commit_id = commit_id.chop!
 end
 
 # Clean up
