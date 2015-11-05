@@ -3,6 +3,7 @@ gem_root = File.dirname(File.dirname(File.dirname(__FILE__)))
 require 'aws-sdk-core'
 require "#{gem_root}/lib/aws/plugins/certificate_authority"
 require "#{gem_root}/lib/aws/plugins/deploy_control_endpoint"
+require "#{gem_root}/lib/aws/plugins/deploy_agent_version"
 
 version = '1.0.0'
 
@@ -15,4 +16,5 @@ bundled_apis.each do |svc_class_name, api_versions|
   svc_class.const_set(:VERSION, version)
   Aws::CodeDeployCommand::Client.add_plugin(Aws::Plugins::CertificateAuthority)
   Aws::CodeDeployCommand::Client.add_plugin(Aws::Plugins::DeployControlEndpoint)
+  Aws::CodeDeployCommand::Client.add_plugin(Aws::Plugins::DeployAgentVersion)
 end
