@@ -17,8 +17,8 @@ module Aws
         
         private
         def log(severity, message)
-        	raise ArgumentError, "Unknown severity #{severity.inspect}" unless InstanceAgent::Log::SEVERITIES.include?(severity.to_s)
-        	InstanceAgent::Log.send(severity.to_sym, "#{message}")
+          raise ArgumentError, "Unknown severity #{severity.inspect}" unless InstanceAgent::Log::SEVERITIES.include?(severity.to_s)
+          InstanceAgent::Log.send(severity.to_sym, "#{message}")
         end
       end
 
