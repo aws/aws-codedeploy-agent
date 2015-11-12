@@ -10,7 +10,7 @@ require 'uri'
 module InstanceAgent
   module Plugins
     module CodeDeployPlugin
-      ARCHIVES_TO_RETAIN = 5
+      ARCHIVES_TO_RETAIN = ProcessManager::Config.config[:archives_to_retain]
       class CommandExecutor
         class << self
           attr_reader :command_methods

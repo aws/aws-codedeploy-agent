@@ -41,6 +41,7 @@ module ProcessManager
         :program_name => 'process_manager',
         :max_runs_per_worker => 0, # unlimited
         :children => 4,
+        :archives_to_retain => 5,
         :log_dir => '/tmp',
         :pid_dir => '/tmp',
         :verbose => false,
@@ -68,6 +69,8 @@ module ProcessManager
       config[:max_runs_per_worker] = config[:max_runs_per_worker].to_i
       errors << "Invalid number of children #{config[:children].inspect}" unless config[:children].to_s.match(/\d+/) && config[:children].to_i > 0
       config[:children] = config[:children].to_i
+      errors << "Invalid archives_to_retain #{config[:archives_to_retain].inspect}" unless config[:archives_to_retain].to_s.match(/\d+/) && config[:archives_to_retain].to_i >= 0
+      config[:archives_to_retain] = config[:archives_to_retain].to_i
 
       normalize_log_and_pid_dir
       validate_log_and_pid_dir(errors)
