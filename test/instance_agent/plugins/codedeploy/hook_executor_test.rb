@@ -11,6 +11,7 @@ class HookExecutorTest < InstanceAgentTestCase
                         :application_name => @application_name,
                         :deployment_id => @deployment_id,
                         :deployment_group_name => @deployment_group_name,
+                        :deployment_group_id => @deployment_group_id,
                         :deployment_root_dir => @deployment_root_dir,
                         :last_successful_deployment_dir => @last_successful_deployment_dir,
                         :app_spec_path => @app_spec_path})
@@ -21,6 +22,7 @@ class HookExecutorTest < InstanceAgentTestCase
       @deployment_id='12345'
       @application_name='TestApplication'
       @deployment_group_name='TestDeploymentGroup'
+      @deployment_group_id='foo'
       @deployment_root_dir = "deployment/root/dir"
       @last_successful_deployment_dir = "last/deployment/root/dir"
       @app_spec_path = "app_spec"
@@ -44,6 +46,7 @@ class HookExecutorTest < InstanceAgentTestCase
                                               :application_name => @application_name,
                                               :deployment_id => @deployment_id,
                                               :deployment_group_name => @deployment_group_name,
+                                              :deployment_group_id => @deployment_group_id,
                                               :deployment_root_dir => @deployment_root_dir,
                                               :app_spec_path => @app_spec_path})
         end
@@ -59,7 +62,8 @@ class HookExecutorTest < InstanceAgentTestCase
           assert_raise do
             @hook_executor = HookExecutor.new ({:lifecycle_event => @lifecycle_event,
                                                 :application_name => @application_name,
-                                                :deployment_group_name => @deployment_gtroup_name,
+                                                :deployment_group_name => @deployment_group_name,
+                                                :deployment_group_id => @deployment_group_id,
                                                 :deployment_id => @deployment_id,
                                                 :deployment_root_dir => @deployment_root_dir})
           end
@@ -97,7 +101,8 @@ class HookExecutorTest < InstanceAgentTestCase
         @child_env={'LIFECYCLE_EVENT' => @lifecycle_event.to_s,
                     'DEPLOYMENT_ID'   => @deployment_id.to_s,
                     'APPLICATION_NAME' => @application_name.to_s,
-                    'DEPLOYMENT_GROUP_NAME' => @deployment_group_name.to_s}
+                    'DEPLOYMENT_GROUP_NAME' => @deployment_group_name.to_s,
+                    'DEPLOYMENT_GROUP_ID' => @deployment_group_id.to_s}
       end
 
       context "no scripts to run for a given hook" do

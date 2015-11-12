@@ -115,6 +115,7 @@ module InstanceAgent
                 :application_name => deployment_spec.application_name,
                 :deployment_id => deployment_spec.deployment_id,
                 :deployment_group_name => deployment_spec.deployment_group_name,
+                :deployment_group_id => deployment_spec.deployment_group_id,
                 :deployment_root_dir => deployment_root_dir(deployment_spec),
                 :last_successful_deployment_dir => last_successful_deployment_dir(deployment_spec.deployment_group_id),
                 :app_spec_path => app_spec_path)

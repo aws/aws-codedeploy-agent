@@ -365,6 +365,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             :application_name => @application_name,
             :deployment_id => @deployment_id,
             :deployment_group_name => @deployment_group_name,
+            :deployment_group_id => @deployment_group_id,
             :deployment_root_dir => @deployment_root_dir, 
             :last_successful_deployment_dir => nil,
             :app_spec_path => 'appspec.yml'}
@@ -503,6 +504,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             :application_name => @application_name,
             :deployment_id => @deployment_id,
             :deployment_group_name => @deployment_group_name,
+            :deployment_group_id => @deployment_group_id,
             :last_successful_deployment_dir => nil,
             :app_spec_path => 'appspec.yml'}
           @hook_executor_constructor_hash_1 = hook_executor_constructor_hash.merge({:lifecycle_event => "lifecycle_event_1"})

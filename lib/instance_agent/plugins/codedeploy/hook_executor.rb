@@ -73,6 +73,7 @@ module InstanceAgent
           @deployment_id = arguments[:deployment_id]
           @application_name = arguments[:application_name]
           @deployment_group_name = arguments[:deployment_group_name]
+          @deployment_group_id = arguments[:deployment_group_id]
           @current_deployment_root_dir = arguments[:deployment_root_dir]
           select_correct_deployment_root_dir(arguments[:deployment_root_dir], arguments[:last_successful_deployment_dir])
           return if @deployment_root_dir.nil?
@@ -84,7 +85,8 @@ module InstanceAgent
           @child_envs={'LIFECYCLE_EVENT' => @lifecycle_event.to_s,
                       'DEPLOYMENT_ID'   => @deployment_id.to_s,
                       'APPLICATION_NAME' => @application_name,
-                      'DEPLOYMENT_GROUP_NAME' => @deployment_group_name}
+                      'DEPLOYMENT_GROUP_NAME' => @deployment_group_name,
+                      'DEPLOYMENT_GROUP_ID' => @deployment_group_id}
         end
 
         def execute
