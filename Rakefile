@@ -33,13 +33,17 @@ end
 require 'fileutils'
 task :version_tracking do
   FileUtils.rm('.version') if File.exist?('.version')
-  File.open('.version', 'w+') {|file| file.write("agent_version: COMMIT_#{getLatestCommit}")}
+  File.open('.version', 'w+') {|file| file.write("agent_version: #{getAgentTrackingInfo}")}
   FileUtils.chmod(0444, '.version')
 end
 
-def getLatestCommit
-  commit_id = `git rev-parse HEAD`
-  @commit_id = commit_id.chop!
+def getAgentTrackingInfo
+  begin
+    commit_id = `git rev-parse HEAD`.chop!
+    tracking = "COMMIT_#{commit_id}"
+  rescue 
+    tracking = "UNKNOWN_VERSION"
+  end
 end
 
 # Clean up
