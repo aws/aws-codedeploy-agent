@@ -131,7 +131,7 @@ class HookExecutorTest < InstanceAgentTestCase
           end
 
           should "raise and exception" do
-            assert_raised_with_message('Script does not exist at specified location: test', ScriptError)do
+            assert_raised_with_message("Script does not exist at specified location: #{File.expand_path(@deployment_root_dir)}/deployment-archive/test", ScriptError)do
               @hook_executor.execute
             end
           end

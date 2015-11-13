@@ -97,7 +97,7 @@ module InstanceAgent
               log_script("LifecycleEvent - " + @lifecycle_event + "\n", script_log_file)
               hooks.each do |script|
                 if(!File.exist?(script_absolute_path(script)))
-                  raise ScriptError.new(ScriptError::SCRIPT_MISSING_CODE, script.location, @script_log), 'Script does not exist at specified location: ' + script.location
+                  raise ScriptError.new(ScriptError::SCRIPT_MISSING_CODE, script.location, @script_log), 'Script does not exist at specified location: ' + File.expand_path(script_absolute_path(script))
                 elsif(!InstanceAgent::Platform.util.script_executable?(script_absolute_path(script)))
                   log :warn, 'Script at specified location: ' + script.location + ' is not executable.  Trying to make it executable.'
                   begin
