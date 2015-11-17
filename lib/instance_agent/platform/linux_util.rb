@@ -33,6 +33,10 @@ module InstanceAgent
     def self.supports_process_groups?()
       true
     end
+
+    def self.codedeploy_version_file
+      File.join(ProcessManager::Config.config[:root_dir], '..')
+    end
     
     private
     def self.execute_tar_command(cmd)
