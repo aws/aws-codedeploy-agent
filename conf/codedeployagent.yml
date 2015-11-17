@@ -5,6 +5,5 @@
 :program_name: codedeploy-agent
 :root_dir: '/opt/codedeploy-agent/deployment-root'
 :verbose: false
-:version_dir: '/opt/codedeploy-agent/'
 :wait_between_runs: 1
 :proxy_uri:
