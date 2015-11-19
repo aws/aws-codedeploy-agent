@@ -26,6 +26,7 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         :instance_service_port => nil,
         :wait_between_runs => 30,
         :wait_after_error => 30,
+        :archives_to_retain => 5,
         :codedeploy_test_profile => 'prod',
         :on_premises_config_file => '/etc/codedeploy-agent/conf/codedeploy.onpremises.yml',
         :proxy_uri => nil,
