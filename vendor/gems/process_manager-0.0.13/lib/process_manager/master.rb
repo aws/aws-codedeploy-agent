@@ -163,10 +163,10 @@ module ProcessManager
 
       def handle_pid_file       
         @file_lock ||= File.open(pid_lock_file, File::RDWR|File::CREAT, 0644)
-        lock_aquired = @file_lock.flock(File::LOCK_EX | File::LOCK_NB)
+        lock_acquired = @file_lock.flock(File::LOCK_EX | File::LOCK_NB)
         
-        if lock_aquired == false
-          ProcessManager::Log.info("Could not aquire lock on #{pid_lock_file} - aborting start!")
+        if lock_acquired == false
+          ProcessManager::Log.info("Could not acquire lock on #{pid_lock_file} - aborting start!")
           self.class.abort
         
         elsif File.exists?(pid_file)
