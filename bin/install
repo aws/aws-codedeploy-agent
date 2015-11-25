@@ -307,9 +307,9 @@ EOF
     elsif(has_apt_get)
       @type = 'deb'
 
-      @log.warn('apt-get found but no gdebi. Installing gdebi with `apt-get install gdebi -y`...')
+      @log.warn('apt-get found but no gdebi. Installing gdebi with `apt-get install gdebi-core -y`...')
       #use -y to answer yes to confirmation prompts
-      if(!run_command('/usr/bin/apt-get', 'install', 'gdebi', '-y'))
+      if(!run_command('/usr/bin/apt-get', 'install', 'gdebi-core', '-y'))
         @log.error('Could not install gdebi.')
         exit(1)
       end
@@ -327,16 +327,37 @@ EOF
   when 'help'
     usage
   when 'rpm'
-    #use -y to answer yes to confirmation prompts
-    install_cmd = ['/usr/bin/yum', '-y', 'localinstall']
-    install_from_s3(region, bucket, version_file_key, @type, install_cmd)
-    do_sanity_check('/sbin/service')
+    running_version = `rpm -q codedeploy-agent`
+    running_version.strip!
+    target_version = get_version_file_from_s3(region, bucket, version_file_key)['rpm']
+    if target_version.include? running_version
+      @log.info('Running version matches target version, skipping install')
+    else
+      #use -y to answer yes to confirmation prompts
+      install_cmd = ['/usr/bin/yum', '-y', 'localinstall']
+      install_from_s3(region, bucket, version_file_key, @type, install_cmd)
+      do_sanity_check('/sbin/service')
+    end
   when 'deb'
-    #use -n for non-interactive mode
-    #use -o to not overwrite config files unless they have not been changed
-    install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpg::Options::=--force-confold']
-    install_from_s3(region, bucket, version_file_key, @type, install_cmd)
-    do_sanity_check('/usr/sbin/service')
+    running_agent = `dpkg -s codedeploy-agent`
+    running_agent_info = running_agent.split
+    version_index = running_agent_info.index('Version:')
+    if !version_index.nil?
+      running_version = running_agent_info[version_index + 1]
+    else
+      running_version = "No running version"
+    end
+    @log.info("Running version " + running_version)
+    target_version = get_version_file_from_s3(region, bucket, version_file_key)['deb']
+    if target_version.include? running_version
+      @log.info('Running version matches target version, skipping install')
+    else
+      #use -n for non-interactive mode
+      #use -o to not overwrite config files unless they have not been changed
+      install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpg::Options::=--force-confold']
+      install_from_s3(region, bucket, version_file_key, @type, install_cmd)
+      do_sanity_check('/usr/sbin/service')
+    end
   when 'zypper'
     #use -n for non-interactive mode
     install_cmd = ['/usr/bin/zypper', 'install', '-n']
