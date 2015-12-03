@@ -29,6 +29,8 @@ end
 
 Before("@codedeploy-agent") do
   AwsCredentials.instance.configure
+  keypair_name = AwsCredentials.instance.keypair_name.nil?? EC2_KEY_PAIR : AwsCredentials.instance.keypair_name
+  print("Using keypair : #{keypair_name}\n")
   @codedeploy_client = Aws::CodeDeploy::Client.new
   @ec2_client = Aws::EC2::Client.new
   @iam_client = Aws::IAM::Client.new
@@ -107,13 +109,14 @@ def start_ec2_instance
 end
 
 def create_key_pair
+  keypair_name = AwsCredentials.instance.keypair_name.nil?? EC2_KEY_PAIR : AwsCredentials.instance.keypair_name
   begin
-    @ec2_client.create_key_pair({:key_name => EC2_KEY_PAIR})
+    @ec2_client.create_key_pair({:key_name => keypair_name})
   rescue Aws::EC2::Errors::InvalidKeyPairDuplicate
     #Use the existing key
   end
   eventually(:upto => 60) do
-    expect(@ec2_client.describe_key_pairs({:key_names => [EC2_KEY_PAIR]}).key_pairs).not_to be_empty
+    expect(@ec2_client.describe_key_pairs({:key_names => [keypair_name]}).key_pairs).not_to be_empty
   end
 end
 
@@ -132,12 +135,13 @@ end
 
 def start_and_tag_instance
   eventually(:upto => 60) do
+  keypair_name = AwsCredentials.instance.keypair_name.nil?? EC2_KEY_PAIR : AwsCredentials.instance.keypair_name
     @instance_id = @ec2_client.run_instances({
       :image_id => AwsCredentials.instance.ec2_ami,
       :instance_type => "t2.micro",
       :min_count => 1,
       :max_count => 1,
-      :key_name => EC2_KEY_PAIR,
+      :key_name => keypair_name,
       :security_group_ids => [@security_group_id],
       :iam_instance_profile => {:arn => @instance_profile},
       :user_data => get_user_data
@@ -152,7 +156,7 @@ end
 
 def get_user_data
   user_data = "#!/bin/bash\n"\
-              "yum install -y git gcc ruby-devel\n"\
+              "yum install -y git gcc gcc-c++ ruby-devel\n"\
               "cd /home/ec2-user\n"\
               "gem install io-console\n"\
               "gem install bundler\n"\

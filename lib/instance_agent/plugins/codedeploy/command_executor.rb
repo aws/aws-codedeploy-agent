@@ -29,18 +29,15 @@ module InstanceAgent
           end
           begin
             max_revisions = ProcessManager::Config.config[:max_revisions]
-            if max_revisions.nil?
-              @archives_to_retain = ARCHIVES_TO_RETAIN
-            elsif Integer(max_revisions) < 0
-              log(:error, "Invalid configuration :max_revision=#{max_revisions}")
-              Process.kill('TERM', InstanceAgent::Runner::Master.status)
-            else
-              @archives_to_retain = Integer(max_revisions)
+            @archives_to_retain = max_revisions.nil?? ARCHIVES_TO_RETAIN : Integer(max_revisions)
+            if @archives_to_retain < 0
+              raise ArgumentError
             end
           rescue ArgumentError
             log(:error, "Invalid configuration :max_revision=#{max_revisions}")
-            Process.kill('TERM', InstanceAgent::Runner::Master.status)
+            Platform.util.quit()
           end
+          log(:info, "Archives to retain is: #{@archives_to_retain}}")
         end
 
         def self.command(name, &blk)

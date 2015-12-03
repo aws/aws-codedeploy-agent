@@ -3,6 +3,7 @@ require 'singleton'
 class AwsCredentials
   include Singleton
   attr_reader :ec2_ami
+  attr_reader :keypair_name
 
   def configure
     file_path = File.join(File.expand_path(File.dirname(__FILE__)), './AwsCredentials.yml')
@@ -28,6 +29,7 @@ class AwsCredentials
         ENV['AWS_SECRET_ACCESS_KEY'] = file_config[:aws_secret_access_key]
       end
       @ec2_ami ||= file_config[:ec2_ami_id]
+      @keypair_name ||= file_config[:keypair_name]
     end
   end
 end
