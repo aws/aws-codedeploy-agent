@@ -1,4 +1,6 @@
+*.swp
 Gemfile.lock
 deployment/
 coverage/
+build/
 .version

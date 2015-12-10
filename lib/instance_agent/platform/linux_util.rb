@@ -16,6 +16,11 @@ module InstanceAgent
       script_command
     end
 
+    def self.quit()
+      # Send kill signal to parent and exit
+      Process.kill('TERM', Process.ppid)
+    end
+
     def self.script_executable?(path)
       File.executable?(path)
     end

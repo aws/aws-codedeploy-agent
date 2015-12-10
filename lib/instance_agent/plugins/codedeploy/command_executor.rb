@@ -11,6 +11,7 @@ module InstanceAgent
   module Plugins
     module CodeDeployPlugin
       ARCHIVES_TO_RETAIN = 5
+      
       class CommandExecutor
         class << self
           attr_reader :command_methods
@@ -26,6 +27,17 @@ module InstanceAgent
           if(!@hook_mapping.nil?)
             map
           end
+          begin
+            max_revisions = ProcessManager::Config.config[:max_revisions]
+            @archives_to_retain = max_revisions.nil?? ARCHIVES_TO_RETAIN : Integer(max_revisions)
+            if @archives_to_retain < 0
+              raise ArgumentError
+            end
+          rescue ArgumentError
+            log(:error, "Invalid configuration :max_revision=#{max_revisions}")
+            Platform.util.quit()
+          end
+          log(:info, "Archives to retain is: #{@archives_to_retain}}")
         end
 
         def self.command(name, &blk)
@@ -333,7 +345,7 @@ module InstanceAgent
 
           full_path_deployment_archives = deployment_archives.map{ |f| File.join(ProcessManager::Config.config[:root_dir], deployment_group, f)}
           
-          extra = full_path_deployment_archives.size - ARCHIVES_TO_RETAIN
+          extra = full_path_deployment_archives.size - @archives_to_retain
           return unless extra > 0
 
           # Never remove the last successful deployment
