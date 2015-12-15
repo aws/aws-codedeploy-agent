@@ -10,8 +10,10 @@ module InstanceAgent
 
     def self.prepare_script_command(script, absolute_path)
       script_command = absolute_path
-      if(!script.runas.nil?)
+      if(!script.runas.nil? && script.sudo.nil?)
         script_command = 'su ' + script.runas + ' -c ' + absolute_path
+      elsif(!script.runas.nil? && !script.sudo.nil?)
+        script_command = 'sudo su ' + script.runas + ' -c ' + absolute_path
       end
       script_command
     end
