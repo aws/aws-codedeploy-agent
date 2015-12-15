@@ -13,6 +13,9 @@ module InstanceAgent
       if(!script.runas.nil? && script.sudo.nil?)
 				log(:info, "runas specified, running as #{script.runas}")
         script_command = 'su ' + script.runas + ' -c ' + absolute_path
+			elsif(script.runas.nil? && script.sudo.nil?)
+				log(:info, "sudo specified, running as current user with sudo")
+        script_command = 'sudo ' + script.runas + ' -c ' + absolute_path
       elsif(!script.runas.nil? && !script.sudo.nil?)
 				log(:info, "runas with sudo specified, running as #{script.runas}")
         script_command = 'sudo su ' + script.runas + ' -c ' + absolute_path

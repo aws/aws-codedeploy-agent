@@ -24,6 +24,12 @@ class LinuxUtilTest < InstanceAgentTestCase
 				InstanceAgent::LinuxUtil.prepare_script_command(mock, "my_script.sh")
 		end
 
+		should 'return command with sudo' do
+			mock = @script_mock.new true, nil
+			assert_equal 'sudo my_script.sh',
+				InstanceAgent::LinuxUtil.prepare_script_command(mock, "my_script.sh")
+		end
+
 	end
 end
 
