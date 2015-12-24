@@ -17,6 +17,7 @@ module InstanceAgent
       elsif(!script.runas.nil? && !script.sudo.nil?)
         script_command = 'sudo su ' + script.runas + ' -c ' + absolute_path
       end
+      log(:debug, "Executing: #{script_command}")
       script_command
     end
 
