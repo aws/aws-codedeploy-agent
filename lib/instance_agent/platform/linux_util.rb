@@ -24,9 +24,9 @@ module InstanceAgent
         return 'sudo ' + absolute_cmd_path
       end
 
-      # Execute the command as the code deploy agent user if 
-      # neither sudo or runas is specified
-      return absolute_cmd_path
+      # If neither sudo or runas is specified, execute the
+      # command as the code deploy agent user 
+      absolute_cmd_path
     end
 
     def self.quit()
