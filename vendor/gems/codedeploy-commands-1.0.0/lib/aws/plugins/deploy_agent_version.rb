@@ -5,11 +5,17 @@ module Aws
         def initialize(handler = nil)
           @handler = handler
           file_path = File.expand_path(File.join(InstanceAgent::Platform.util.codedeploy_version_file, '.version'))
+          fallback_file_path = File.expand_path(File.join(InstanceAgent::Platform.util.fallback_version_file, '.version'))
           if File.exist?(file_path)
             @agent_version ||= File.read(file_path).split(': ').last.strip
+            log(:info, "Version file found in #{file_path}.")
+          elsif File.exist?(fallback_file_path)
+            @agent_version ||= File.read(fallback_file_path).split(': ').last.strip
+            log(:info, "Version file found in #{fallback_file_path}.")
           else 
             @agent_version ||= "UNKNOWN_VERSION"
-            log(:warn, "Version tracking file either does not exist or cannot be read in #{file_path}.")
+            path_string = file_path.eql?(fallback_file_path)? "#{file_path}" : "#{file_path} or #{fallback_file_path}"
+            log(:warn, "Version tracking file either does not exist or cannot be read in #{path_string}.")
           end
         end
 
