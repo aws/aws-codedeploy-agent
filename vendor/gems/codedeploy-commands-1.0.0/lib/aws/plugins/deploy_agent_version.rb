@@ -19,6 +19,10 @@ module Aws
           end
         end
 
+        def get_version
+          @agent_version
+        end
+
         def call(context)
           context.http_request.headers['x-amz-codedeploy-agent-version'] = @agent_version
           @handler.call(context)
