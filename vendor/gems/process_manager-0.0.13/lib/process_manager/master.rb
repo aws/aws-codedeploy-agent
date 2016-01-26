@@ -2,6 +2,7 @@
 require 'simple_pid'
 require 'fileutils'
 require 'blank'
+require 'rbconfig'
 
 module ProcessManager
   module Daemon
@@ -161,6 +162,10 @@ module ProcessManager
         end
       end
 
+      def process_matcher(pid)
+        RbConfig::CONFIG['host_os'].downcase.include?("linux") and File.read("/proc/#{pid}/cmdline").include?("codedeploy")
+      end
+
       def handle_pid_file       
         @file_lock ||= File.open(pid_lock_file, File::RDWR|File::CREAT, 0644)
         lock_acquired = @file_lock.flock(File::LOCK_EX | File::LOCK_NB)
@@ -168,10 +173,9 @@ module ProcessManager
         if lock_acquired == false
           ProcessManager::Log.info("Could not acquire lock on #{pid_lock_file} - aborting start!")
           self.class.abort
-        
         elsif File.exists?(pid_file)
           pid = self.class.find_pid
-          if ProcessManager.process_running?(pid)
+          if ProcessManager.process_running?(pid) and process_matcher(pid)
             puts "Pidfile #{pid_file} exists and process #{pid} is running - aborting start!"
             ProcessManager::Log.info("Pidfile #{pid_file} exists and process #{pid} is running - aborting start!")
             @file_lock.close
