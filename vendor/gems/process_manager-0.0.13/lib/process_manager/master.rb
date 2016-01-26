@@ -163,7 +163,7 @@ module ProcessManager
       end
 
       def process_matcher(pid)
-        RbConfig::CONFIG['host_os'].downcase.include?("linux") and File.read("/proc/#{pid}/cmdline").include?("codedeploy")
+        File.read("/proc/#{pid}/cmdline").include?("codedeploy")
       end
 
       def handle_pid_file       
