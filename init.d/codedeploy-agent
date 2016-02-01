@@ -17,14 +17,11 @@
 #                    the deployment artifacts on to this instance.
 ### END INIT INFO
 
-# Source function library.
-. /etc/rc.d/init.d/functions
 
 RETVAL=0
 [ -f /etc/profile ] && [ "`stat --format '%U %G' /etc/profile`" == "root root" ] && source /etc/profile
 
 prog="codedeploy-agent"
-USER=""
 AGENT_ROOT="/opt/codedeploy-agent/"
 INSTALLER="/opt/codedeploy-agent/bin/install"
 BIN="/opt/codedeploy-agent/bin/codedeploy-agent"
@@ -32,54 +29,34 @@ BIN="/opt/codedeploy-agent/bin/codedeploy-agent"
 start() {
         echo -n $"Starting $prog:"
         cd $AGENT_ROOT
-        if [ $USER ]; then
-          daemon --user=$USER $BIN start >/dev/null </dev/null 2>&1 # Try to start the server
-        else
-          nohup $BIN start >/dev/null </dev/null 2>&1  # Try to start the server
-        fi
+        nohup $BIN start >/dev/null </dev/null 2>&1  # Try to start the server
         exit $?
 }
 
 stop() {
         echo -n $"Stopping $prog:"
         cd $AGENT_ROOT
-        if [ $USER ]; then
-          daemon --user=$USER $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
-        else
-          nohup $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
-        fi
+        nohup $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
         exit $?
 }
 
 restart() {
         echo -n $"Restarting $prog:"
         cd $AGENT_ROOT
-        if [ $USER ]; then
-          daemon --user=$USER $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
-        else
-          nohup $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
-        fi
+        nohup $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
         exit $?
 }
 
 status() {
         cd $AGENT_ROOT
-        if [ $USER ]; then
-          daemon --user=$USER $BIN status # Status of the server
-        else
-          $BIN status # Status of the server
-        fi
+        $BIN status # Status of the server
         exit $?
 }
 
 update() {
         echo -n $"Updating $prog:"
         cd $AGENT_ROOT
-        if [ $USER ]; then
-          daemon --user=$USER sudo $INSTALLER auto #Update the agent
-        else
-          $INSTALLER auto #Update the agent
-        fi
+        $INSTALLER auto #Update the agent
 }
 
 case "$1" in
