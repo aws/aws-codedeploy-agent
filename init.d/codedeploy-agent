@@ -18,7 +18,11 @@
 ### END INIT INFO
 
 # Source function library.
-. /etc/rc.d/init.d/functions
+if [ -f /etc/rc.d/init.d/functions ]; then
+  . /etc/rc.d/init.d/functions
+  ## Refers to version of OS supported (example: RHEL 6)
+  OS_SUPPORT="6"
+fi
 
 RETVAL=0
 [ -f /etc/profile ] && [ "`stat --format '%U %G' /etc/profile`" == "root root" ] && source /etc/profile
@@ -32,7 +36,7 @@ BIN="/opt/codedeploy-agent/bin/codedeploy-agent"
 start() {
         echo -n $"Starting $prog:"
         cd $AGENT_ROOT
-        if [ $USER ]; then
+        if [[ $USER && $OS_SUPPORT == "6" ]]; then
           daemon --user=$USER $BIN start >/dev/null </dev/null 2>&1 # Try to start the server
         else
           nohup $BIN start >/dev/null </dev/null 2>&1  # Try to start the server
@@ -43,7 +47,7 @@ start() {
 stop() {
         echo -n $"Stopping $prog:"
         cd $AGENT_ROOT
-        if [ $USER ]; then
+        if [[ $USER && $OS_SUPPORT == "6" ]]; then
           daemon --user=$USER $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
         else
           nohup $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
@@ -54,7 +58,7 @@ stop() {
 restart() {
         echo -n $"Restarting $prog:"
         cd $AGENT_ROOT
-        if [ $USER ]; then
+        if [[ $USER && $OS_SUPPORT == "6" ]]; then
           daemon --user=$USER $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
         else
           nohup $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
@@ -64,7 +68,7 @@ restart() {
 
 status() {
         cd $AGENT_ROOT
-        if [ $USER ]; then
+        if [[ $USER && $OS_SUPPORT == "6" ]]; then
           daemon --user=$USER $BIN status # Status of the server
         else
           $BIN status # Status of the server
@@ -75,7 +79,7 @@ status() {
 update() {
         echo -n $"Updating $prog:"
         cd $AGENT_ROOT
-        if [ $USER ]; then
+        if [[ $USER && $OS_SUPPORT == "6" ]]; then
           daemon --user=$USER sudo $INSTALLER auto #Update the agent
         else
           $INSTALLER auto #Update the agent
