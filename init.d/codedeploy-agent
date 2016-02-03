@@ -17,7 +17,7 @@
 #                    the deployment artifacts on to this instance.
 ### END INIT INFO
 
-
+COMMAND=$1
 RETVAL=0
 [ -f /etc/profile ] && [ "`stat --format '%U %G' /etc/profile`" == "root root" ] && source /etc/profile
 
@@ -59,7 +59,7 @@ update() {
         $INSTALLER auto #Update the agent
 }
 
-case "$1" in
+case "$COMMAND" in
         start)
                 start
                 ;;
