@@ -22,6 +22,7 @@ RETVAL=0
 [ -f /etc/profile ] && [ "`stat --format '%U %G' /etc/profile`" == "root root" ] && source /etc/profile
 
 prog="codedeploy-agent"
+USER=""
 AGENT_ROOT="/opt/codedeploy-agent/"
 INSTALLER="/opt/codedeploy-agent/bin/install"
 BIN="/opt/codedeploy-agent/bin/codedeploy-agent"
@@ -29,27 +30,43 @@ BIN="/opt/codedeploy-agent/bin/codedeploy-agent"
 start() {
         echo -n $"Starting $prog:"
         cd $AGENT_ROOT
-        nohup $BIN start >/dev/null </dev/null 2>&1  # Try to start the server
+        if [ $USER ]; then
+          nohup sudo -i -u $USER $BIN start >/dev/null </dev/null 2>&1 # Try to start the server
+        else
+          nohup $BIN start >/dev/null </dev/null 2>&1  # Try to start the server
+        fi
         exit $?
 }
 
 stop() {
         echo -n $"Stopping $prog:"
         cd $AGENT_ROOT
-        nohup $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
+        if [ $USER ]; then
+          nohup sudo -i -u $USER $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
+        else
+          nohup $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
+        fi
         exit $?
 }
 
 restart() {
         echo -n $"Restarting $prog:"
         cd $AGENT_ROOT
-        nohup $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
+        if [ $USER ]; then
+          nohup sudo -i -u $USER $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
+        else
+          nohup $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
+        fi
         exit $?
 }
 
 status() {
         cd $AGENT_ROOT
-        $BIN status # Status of the server
+        if [ $USER ]; then
+          sudo -i -u $USER $BIN status # Status of the server
+        else
+          $BIN status # Status of the server
+        fi
         exit $?
 }
 

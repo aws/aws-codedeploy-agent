@@ -8,14 +8,27 @@ module InstanceAgent
       ['linux']
     end
 
-    def self.prepare_script_command(script, absolute_path)
-      script_command = absolute_path
-      if(!script.runas.nil?)
-        script_command = 'su ' + script.runas + ' -c ' + absolute_path
+    def self.prepare_script_command(script, absolute_cmd_path)
+      runas = !!script.runas
+      sudo = !!script.sudo
+
+      if runas && sudo
+        return 'sudo su ' + script.runas + ' -c ' + absolute_cmd_path
       end
-      script_command
+
+      if runas && !sudo
+        return 'su ' + script.runas + ' -c ' + absolute_cmd_path
+      end
+
+      if !runas && sudo
+        return 'sudo ' + absolute_cmd_path
+      end
+
+      # If neither sudo or runas is specified, execute the
+      # command as the code deploy agent user 
+      absolute_cmd_path
     end
-    
+
     def self.quit()
       # Send kill signal to parent and exit
       Process.kill('TERM', Process.ppid)
@@ -42,10 +55,7 @@ module InstanceAgent
     def self.codedeploy_version_file
       File.join(ProcessManager::Config.config[:root_dir], '..')
     end
-
-    def self.fallback_version_file
-      "/opt/codedeploy-agent"
-    end
+    
     private
     def self.execute_tar_command(cmd)
       log(:debug, "Executing #{cmd}")
