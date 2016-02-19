@@ -17,18 +17,6 @@
 #                    the deployment artifacts on to this instance.
 ### END INIT INFO
 
-# determine OS
-if [ -f /etc/rc.d/init.d/functions ]; then
-  . /etc/rc.d/init.d/functions
-  OS="RHEL"
-  echo "This is RHEL"
-elif [ "`lsb_release -i | grep -i ubuntu | wc -l`" ]; then
-  OS="UBUNTU"
-  echo "This is UBUNTU"
-else
-  OS="OTHER"
-fi
-
 COMMAND=$1
 RETVAL=0
 [ -f /etc/profile ] && [ "`stat --format '%U %G' /etc/profile`" == "root root" ] && source /etc/profile
@@ -42,10 +30,8 @@ BIN="/opt/codedeploy-agent/bin/codedeploy-agent"
 start() {
         echo -n $"Starting $prog:"
         cd $AGENT_ROOT
-        if [[ $USER && $OS == "RHEL" ]]; then
-          daemon --user=$USER $BIN start >/dev/null </dev/null 2>&1 # Try to start the server
-        elif [[ $USER && $OS == "UBUNTU" ]]; then
-          echo "This is here"
+        if [ $USER ]; then
+          nohup sudo -u $USER $BIN start >/dev/null </dev/null 2>&1 # Try to start the server
         else
           nohup $BIN start >/dev/null </dev/null 2>&1  # Try to start the server
         fi
@@ -55,10 +41,8 @@ start() {
 stop() {
         echo -n $"Stopping $prog:"
         cd $AGENT_ROOT
-        if [[ $USER && $OS == "RHEL" ]]; then
-          daemon --user=$USER $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
-        elif [[ $USER && $OS == "UBUNTU" ]]; then
-          echo "This is here"
+        if [ $USER ]; then
+          nohup sudo -u $USER $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
         else
           nohup $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
         fi
@@ -68,10 +52,8 @@ stop() {
 restart() {
         echo -n $"Restarting $prog:"
         cd $AGENT_ROOT
-        if [[ $USER && $OS == "RHEL" ]]; then
-          daemon --user=$USER $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
-        elif [[ $USER && $OS == "UBUNTU" ]]; then
-          echo "This is here"
+        if [ $USER ]; then
+          nohup sudo -u $USER $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
         else
           nohup $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
         fi
@@ -80,10 +62,8 @@ restart() {
 
 status() {
         cd $AGENT_ROOT
-        if [[ $USER && $OS == "RHEL" ]]; then
-          daemon --user=$USER $BIN status # Status of the server
-        elif [[ $USER && $OS == "UBUNTU" ]]; then
-          echo "This is here"
+        if [ $USER ]; then
+          sudo -u $USER $BIN status # Status of the server
         else
           $BIN status # Status of the server
         fi
@@ -93,13 +73,7 @@ status() {
 update() {
         echo -n $"Updating $prog:"
         cd $AGENT_ROOT
-        if [[ $USER && $OS == "RHEL" ]]; then
-          daemon --user=$USER sudo $INSTALLER auto #Update the agent
-        elif [[ $USER && $OS == "UBUNTU" ]]; then
-          echo "This is here"
-        else
-          $INSTALLER auto #Update the agent
-        fi
+        $INSTALLER auto #Update the agent
 }
 
 case "$COMMAND" in
