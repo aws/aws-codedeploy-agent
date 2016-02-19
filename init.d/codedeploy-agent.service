@@ -6,6 +6,9 @@ Type=forking
 ExecStart=/opt/codedeploy-agent/bin/codedeploy-agent start
 ExecStop=/opt/codedeploy-agent/bin/codedeploy-agent stop
 RemainAfterExit=no
+# Comment out the following line to run the agent as the codedeploy user
+# Note: The user must first exist on the system
+#User=codedeploy
 
 [Install]
 WantedBy=multi-user.target
