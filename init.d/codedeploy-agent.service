@@ -1,0 +1,12 @@
+[Unit]
+Description=AWS CodeDeploy Host Agent
+
+[Service]
+Type=forking
+ExecStart=/opt/codedeploy-agent/bin/codedeploy-agent start
+ExecStop=/opt/codedeploy-agent/bin/codedeploy-agent stop
+User=codedeploy
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
