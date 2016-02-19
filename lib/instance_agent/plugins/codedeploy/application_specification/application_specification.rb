@@ -60,6 +60,7 @@ module InstanceAgent
                   current_hook_scripts << InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::ScriptInfo.new(script['location'].to_s.strip,
                   {
                     :runas => script.has_key?('runas') && !script['runas'].nil? ? script['runas'].to_s.strip : nil,
+                    :sudo => script['sudo'],
                     :timeout => script['timeout']
                   })
                 else

@@ -11,7 +11,6 @@ module InstanceAgent
   module Plugins
     module CodeDeployPlugin
       ARCHIVES_TO_RETAIN = 5
-      
       class CommandExecutor
         class << self
           attr_reader :command_methods
