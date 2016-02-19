@@ -55,6 +55,10 @@ module InstanceAgent
     def self.codedeploy_version_file
       File.join(ProcessManager::Config.config[:root_dir], '..')
     end
+
+    def self.fallback_version_file
+      "/opt/codedeploy-agent"
+    end
     
     private
     def self.execute_tar_command(cmd)
