@@ -28,7 +28,7 @@ module InstanceAgent
       # command as the code deploy agent user 
       absolute_cmd_path
     end
-    
+
     def self.quit()
       # Send kill signal to parent and exit
       Process.kill('TERM', Process.ppid)
