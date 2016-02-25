@@ -334,7 +334,7 @@ EOF
   when 'deb'
     #use -n for non-interactive mode
     #use -o to not overwrite config files unless they have not been changed
-    install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpg::Options::=--force-confold']
+    install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold']
     install_from_s3(region, bucket, version_file_key, @type, install_cmd)
     do_sanity_check('/usr/sbin/service')
   when 'zypper'
