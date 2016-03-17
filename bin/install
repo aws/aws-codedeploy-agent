@@ -52,8 +52,9 @@ begin
   def usage
     print <<EOF
 
-install [--sanity-check] <package-type>
+install [--sanity-check] [--proxy http://hostname:port] <package-type>
    --sanity-check [optional]
+   --proxy [optional]
    package-type: 'rpm', 'deb', or 'auto'
 
 Installs fetches the latest package version of the specified type and
@@ -71,6 +72,9 @@ the gdebi will be installed using apt-get first.
 
 If --sanity-check is specified, the install script will wait for 3 minutes post installation
 to check for a running agent.
+
+To use a HTTP proxy, specify --proxy followed by the proxy server
+defined by http://hostname:port
 
 This install script needs Ruby version 2.0.x installed as a prerequisite.
 If you do not have Ruby version 2.0.x installed, please install it first.
@@ -116,9 +120,10 @@ EOF
 
     @sanity_check = false
     @reexeced = false
-    
+    @http_proxy = nil
+
     @args = Array.new(ARGV)
-    opts = GetoptLong.new(['--sanity-check', GetoptLong::NO_ARGUMENT], ['--help', GetoptLong::NO_ARGUMENT], ['--re-execed', GetoptLong::NO_ARGUMENT])
+    opts = GetoptLong.new(['--sanity-check', GetoptLong::NO_ARGUMENT], ['--help', GetoptLong::NO_ARGUMENT], ['--re-execed', GetoptLong::NO_ARGUMENT], ['--proxy', GetoptLong::OPTIONAL_ARGUMENT])
     opts.each do |opt, args|
       case opt
       when '--sanity-check'
@@ -127,6 +132,10 @@ EOF
         usage
       when '--re-execed'
         @reexeced = true
+      when '--proxy'
+        if (args != '')
+          @http_proxy = args
+        end
       end
     end
     if (ARGV.length < 1)
@@ -161,13 +170,13 @@ EOF
     @log.error('Must run as root to install packages')
     exit(1)
   end
-  
+
   parse_args()
 
   ########## Force running as Ruby 2.0 or fail here       ##########
   check_ruby_version_and_symlink()
   force_ruby20()
-  
+
   def run_command(*args)
     exit_ok = system(*args)
     $stdout.flush
@@ -209,9 +218,9 @@ EOF
 
   def get_s3_uri(region, bucket, key)
     if (region == 'us-east-1')
-      URI.parse("https://s3.amazonaws.com/#{bucket}/#{key}")
+      URI.parse("https://#{bucket}.s3.amazonaws.com/#{key}")
     else
-      URI.parse("https://s3-#{region}.amazonaws.com/#{bucket}/#{key}")
+      URI.parse("https://#{bucket}.s3-#{region}.amazonaws.com/#{key}")
     end
   end
 
@@ -222,7 +231,7 @@ EOF
 
     # stream package file to disk
     begin
-      uri.open(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120) do |s3|
+      uri.open(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy) do |s3|
         package_file.write(s3.read)
       end
     rescue OpenURI::HTTPError => e
@@ -239,7 +248,7 @@ EOF
     begin
       require 'json'
 
-      version_string = uri.read(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120)
+      version_string = uri.read(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy)
       JSON.parse(version_string)
     rescue OpenURI::HTTPError => e
       @log.error("Could not find version file to download at '#{uri.to_s}'")
@@ -307,9 +316,9 @@ EOF
     elsif(has_apt_get)
       @type = 'deb'
 
-      @log.warn('apt-get found but no gdebi. Installing gdebi with `apt-get install gdebi -y`...')
+      @log.warn('apt-get found but no gdebi. Installing gdebi with `apt-get install gdebi-core -y`...')
       #use -y to answer yes to confirmation prompts
-      if(!run_command('/usr/bin/apt-get', 'install', 'gdebi', '-y'))
+      if(!run_command('/usr/bin/apt-get', 'install', 'gdebi-core', '-y'))
         @log.error('Could not install gdebi.')
         exit(1)
       end
@@ -327,16 +336,37 @@ EOF
   when 'help'
     usage
   when 'rpm'
-    #use -y to answer yes to confirmation prompts
-    install_cmd = ['/usr/bin/yum', '-y', 'localinstall']
-    install_from_s3(region, bucket, version_file_key, @type, install_cmd)
-    do_sanity_check('/sbin/service')
+    running_version = `rpm -q codedeploy-agent`
+    running_version.strip!
+    target_version = get_version_file_from_s3(region, bucket, version_file_key)['rpm']
+    if target_version.include? running_version
+      @log.info('Running version matches target version, skipping install')
+    else
+      #use -y to answer yes to confirmation prompts
+      install_cmd = ['/usr/bin/yum', '-y', 'localinstall']
+      install_from_s3(region, bucket, version_file_key, @type, install_cmd)
+      do_sanity_check('/sbin/service')
+    end
   when 'deb'
-    #use -n for non-interactive mode
-    #use -o to not overwrite config files unless they have not been changed
-    install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold']
-    install_from_s3(region, bucket, version_file_key, @type, install_cmd)
-    do_sanity_check('/usr/sbin/service')
+    running_agent = `dpkg -s codedeploy-agent`
+    running_agent_info = running_agent.split
+    version_index = running_agent_info.index('Version:')
+    if !version_index.nil?
+      running_version = running_agent_info[version_index + 1]
+    else
+      running_version = "No running version"
+    end
+    @log.info("Running version " + running_version)
+    target_version = get_version_file_from_s3(region, bucket, version_file_key)['deb']
+    if target_version.include? running_version
+      @log.info('Running version matches target version, skipping install')
+    else
+      #use -n for non-interactive mode
+      #use -o to not overwrite config files unless they have not been changed
+      install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dkpg::Options::=--force-confold']
+      install_from_s3(region, bucket, version_file_key, @type, install_cmd)
+      do_sanity_check('/usr/sbin/service')
+    end
   when 'zypper'
     #use -n for non-interactive mode
     install_cmd = ['/usr/bin/zypper', 'install', '-n']
