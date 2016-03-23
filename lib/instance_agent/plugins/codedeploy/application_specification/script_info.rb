@@ -5,7 +5,7 @@ module InstanceAgent
         #Helper Class for storing data parsed from hook script maps
         class ScriptInfo
 
-          attr_reader :location, :runas, :timeout
+          attr_reader :location, :runas, :sudo, :timeout
           def initialize(location, opts = {})
             location = location.to_s
             if(location.empty?)
@@ -13,6 +13,7 @@ module InstanceAgent
             end
             @location = location
             @runas = opts[:runas]
+            @sudo = opts[:sudo]
             @timeout = opts[:timeout] || 3600
             @timeout = @timeout.to_i
             if(@timeout <= 0)
