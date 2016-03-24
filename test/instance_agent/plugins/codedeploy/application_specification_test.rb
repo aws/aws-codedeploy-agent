@@ -113,6 +113,30 @@ module InstanceAgent
               end
             end
 
+            context "With sudo hook" do
+              setup do
+                #A single test script with all parameters
+                @app_spec_string = <<-END
+              version: 0.0
+              os: linux
+              hooks:
+                test_hook:
+                  - location: test_location_1
+                    sudo: true
+                    runas: foo
+                    timeout: 30
+                END
+              end
+              should "Return a collection containing test script 1" do
+                app_spec = make_app_spec
+                assert_not_equal nil, app_spec.hooks
+                assert_equal ['test_location_1'] , app_spec.hooks["test_hook"].map(&:location)
+                assert_equal [true], app_spec.hooks["test_hook"].map(&:sudo)
+                assert_equal ['foo'] , app_spec.hooks["test_hook"].map(&:runas)
+                assert_equal [30] , app_spec.hooks["test_hook"].map(&:timeout)
+              end
+            end
+
             context "With two complete hooks" do
               setup do
                 #A pair of test scripts with all parameters
