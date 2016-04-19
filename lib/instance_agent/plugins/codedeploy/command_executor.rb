@@ -29,7 +29,7 @@ module InstanceAgent
           begin
             max_revisions = ProcessManager::Config.config[:max_revisions]
             @archives_to_retain = max_revisions.nil?? ARCHIVES_TO_RETAIN : Integer(max_revisions)
-            if @archives_to_retain < 0
+            if @archives_to_retain < 1
               raise ArgumentError
             end
           rescue ArgumentError
@@ -68,7 +68,7 @@ module InstanceAgent
         end
 
         command "DownloadBundle" do |cmd, deployment_spec|
-          cleanup_old_archives(deployment_spec.deployment_group_id)
+          cleanup_old_archives(deployment_spec)
           log(:debug, "Executing DownloadBundle command for execution #{cmd.deployment_execution_id}")
 
           case deployment_spec.revision_source
@@ -336,15 +336,17 @@ module InstanceAgent
         end
 
         private
-        def cleanup_old_archives(deployment_group)
+        def cleanup_old_archives(deployment_spec)
+          deployment_group = deployment_spec.deployment_group_id
           deployment_archives = Dir.entries(File.join(ProcessManager::Config.config[:root_dir], deployment_group))
           # remove . and ..
           deployment_archives.delete(".")
           deployment_archives.delete("..")
 
           full_path_deployment_archives = deployment_archives.map{ |f| File.join(ProcessManager::Config.config[:root_dir], deployment_group, f)}
+          full_path_deployment_archives.delete(deployment_root_dir(deployment_spec))
           
-          extra = full_path_deployment_archives.size - @archives_to_retain
+          extra = full_path_deployment_archives.size - @archives_to_retain + 1
           return unless extra > 0
 
           # Never remove the last successful deployment

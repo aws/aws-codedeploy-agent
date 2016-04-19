@@ -7,3 +7,4 @@
 :verbose: false
 :wait_between_runs: 1
 :proxy_uri:
+:max_revisions: 5
