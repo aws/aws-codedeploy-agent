@@ -163,7 +163,7 @@ module ProcessManager
       end
 
       def process_matcher(pid)
-        File.read("/proc/#{pid}/cmdline").include?("codedeploy")
+        File.read("/proc/#{pid}/cmdline").include?("codedeploy-agent: master")
       end
 
       def handle_pid_file       
