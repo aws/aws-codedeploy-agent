@@ -98,6 +98,8 @@ module InstanceAgent
           end
 
           (Dir.entries(absolute_source_path) - [".", ".."]).each do |entry|
+            entry = entry.force_encoding("UTF-8");
+            absolute_source_path = absolute_source_path.force_encoding("UTF-8");
             absolute_entry_path = File.join(absolute_source_path, entry)
             entry_destination = File.join(destination, entry)
             if File.directory?(absolute_entry_path)
