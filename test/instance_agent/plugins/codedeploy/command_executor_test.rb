@@ -62,7 +62,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             "S3Revision" => @s3Revision
           }
         })
-        @command = Aws::CodeDeployCommand::Types::HostCommandInstance.new(
+        @command = OpenStruct.new(
         :host_command_identifier => "command-1",
         :deployment_execution_id => "test-execution")
         @root_dir = '/tmp/codedeploy/'
@@ -366,7 +366,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             :deployment_id => @deployment_id,
             :deployment_group_name => @deployment_group_name,
             :deployment_group_id => @deployment_group_id,
-            :deployment_root_dir => @deployment_root_dir, 
+            :deployment_root_dir => @deployment_root_dir,
             :last_successful_deployment_dir => nil,
             :app_spec_path => 'appspec.yml'}
           @mock_hook_executor = mock

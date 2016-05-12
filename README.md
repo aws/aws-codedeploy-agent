@@ -2,6 +2,20 @@
 
 [![Code Climate](https://codeclimate.com/github/aws/aws-codedeploy-agent.png)](https://codeclimate.com/github/aws/aws-codedeploy-agent) [![Build Status](https://travis-ci.org/aws/aws-codedeploy-agent.png?branch=master)](https://travis-ci.org/aws/aws-codedeploy-agent) [![Coverage Status](https://coveralls.io/repos/aws/aws-codedeploy-agent/badge.svg?branch=master&service=github)](https://coveralls.io/r/aws/aws-codedeploy-agent?branch=master)
 
+## Install and Run
+
+    $ gem install aws-codedeploy-agent
+    $ sudo codedeploy-agent
+
+## Install/Run as a SYSVINIT Service
+
+    $ sudo codedeploy-install
+    $ sudo service codedeploy-agent start
+
+## Uninstall/Remove as a SYSVINIT Service
+
+    $ sudo service codedeploy-agent stop
+    $ sudo codedeploy-uninstall
 
 ## Build Steps
 

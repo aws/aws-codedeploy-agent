@@ -1,0 +1,15 @@
+#!/usr/bin/env ruby
+
+SOURCE = File.join(File.dirname(__FILE__), '..', 'init.d', 'codedeploy-agent')
+DESTINATION = '/etc/init.d/codedeploy-agent'
+
+if File.exists?(DESTINATION)
+  puts 'Nothing to do.'
+  exit(0)
+end
+
+system("sudo mv #{SOURCE} #{DESTINATION}")
+system("sudo chmod +x #{DESTINATION}")
+system('update-rc.d codedeploy-agent defaults')
+
+puts 'Installation complete.'

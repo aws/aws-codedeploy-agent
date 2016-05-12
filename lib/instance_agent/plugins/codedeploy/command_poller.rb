@@ -112,7 +112,17 @@ module InstanceAgent
           :host_command_identifier => command.host_command_identifier)
           status = output.command_status
           log(:debug, "Command Status = #{status}")
-          true unless status == "Succeeded" || status == "Failed"
+
+          if status == 'Succeeded' || status == 'Failed'
+            log(:debug, "Calling PutHostCommandComplete: \"#{status}\" ")
+            @deploy_control_client.put_host_command_complete(
+              :command_status => status,
+              :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_acknowledge(status)},
+              :host_command_identifier => command.host_command_identifier)
+            return false
+          end
+
+          return true
         end
 
         def get_deployment_specification(command)
@@ -154,6 +164,20 @@ module InstanceAgent
         def gather_diagnostics()
           begin
             raise ScriptError.new(ScriptError::SUCCEEDED_CODE, "", ScriptLog.new), 'Succeeded'
+          rescue ScriptError => e
+            script_error = e
+          end
+          gather_diagnostics_from_script_error(script_error)
+        end
+
+        private
+        def gather_diagnostics_from_acknowledge(status)
+          begin
+            if status == 'Succeeded'
+              raise ScriptError.new(ScriptError::SUCCEEDED_CODE, "", ScriptLog.new), 'Succeeded'
+            else
+              raise ScriptError.new(ScriptError::UNKNOWN_ERROR_CODE, "", ScriptLog.new), 'Failed'
+            end
           rescue ScriptError => e
             script_error = e
           end

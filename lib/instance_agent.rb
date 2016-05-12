@@ -1,11 +1,6 @@
 # encoding: UTF-8
 
-Gem.use_paths(nil, Gem.path << "/opt/codedeploy-agent/vendor")
-
-require 'core_ext'
-
-require 'rubygems'
-
+require_relative 'core_ext'
 require 'process_manager'
 
 unless defined?(InstanceAgent)
@@ -20,7 +15,6 @@ unless defined?(InstanceAgent)
 end
 
 module InstanceAgent
-
   module Runner
   end
 
