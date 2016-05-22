@@ -1,8 +1,8 @@
 #!/usr/bin/env ruby
 
 ##################################################################
-# This part of the code might be running on Ruby versions other
-# than 2.0. Testing on multiple Ruby versions is required for
+# This part of the code might be running on Ruby versions older
+# than 2.3. Testing on multiple Ruby versions is required for
 # changes to this part of the code.
 ##################################################################
 
@@ -76,33 +76,28 @@ to check for a running agent.
 To use a HTTP proxy, specify --proxy followed by the proxy server
 defined by http://hostname:port
 
-This install script needs Ruby version 2.0.x installed as a prerequisite.
-If you do not have Ruby version 2.0.x installed, please install it first.
+This install script needs Ruby version 2.3 or higher installed as a prerequisite.
+If you do not have Ruby version 2.3 or higher installed, please install it first.
 
 EOF
   end
 
-  # check ruby version, only version 2.0.x works
+  # check ruby version, only version >= 2.3.0 works
   def check_ruby_version_and_symlink
     @log.info("Starting Ruby version check.")
-    actual_ruby_version = RUBY_VERSION.split('.').map{|s|s.to_i}
-    left_bound = '2.0.0'.split('.').map{|s|s.to_i}
-    right_bound = '2.1.0'.split('.').map{|s|s.to_i}
-    if !(File.exist?('/usr/bin/ruby2.0'))
-      if (File.symlink?('/usr/bin/ruby2.0'))
-        @log.error("The symlink /usr/bin/ruby2.0 already exists, but it's linked to a non-existent directory or executable file.")
-        exit(1)
 
-        # The spaceship operator is a rarely used Ruby feature - particularly how it interacts with arrays.
-        # Not all languages that have it handle that case the same way.
-      elsif ((actual_ruby_version <=> left_bound) < 0 || (actual_ruby_version <=> right_bound) >= 0)
-        @log.error("Current running Ruby version for "+ENV['USER']+" is "+RUBY_VERSION+", but Ruby version 2.0.x needs to be installed.")
-        @log.error('If you have Ruby version 2.0.x installed for other users, please create a symlink to /usr/bin/ruby2.0.')
-        @log.error("Otherwise please install Ruby 2.0.x for "+ENV['USER']+" user.")
+    if !(File.exist?('/usr/bin/ruby2.3'))
+      if (File.symlink?('/usr/bin/ruby2.3'))
+        @log.error("The symlink /usr/bin/ruby2.3 already exists, but it's linked to a non-existent directory or executable file.")
+        exit(1)
+      elsif RUBY_VERSION < '2.3'
+        @log.error("Current running Ruby version for "+ENV['USER']+" is "+RUBY_VERSION+", but Ruby 2.3 or higher needs to be installed.")
+        @log.error('If you have Ruby version 2.3 or higher installed for other users, please create a symlink to /usr/bin/ruby2.3.')
+        @log.error("Otherwise please install Ruby 2.3 or higher for "+ENV['USER']+" user.")
         exit(1)
       else
         ruby_interpreter_path = File.join(RbConfig::CONFIG["bindir"], RbConfig::CONFIG["RUBY_INSTALL_NAME"] + RbConfig::CONFIG["EXEEXT"])
-        File.symlink(ruby_interpreter_path, '/usr/bin/ruby2.0')
+        File.symlink(ruby_interpreter_path, '/usr/bin/ruby2.3')
       end
     end
   end
@@ -146,23 +141,17 @@ EOF
     @type = ARGV.shift.downcase;
   end
 
-  def force_ruby20()
-    # change interpreter when symlink /usr/bin/ruby2.0 exists, but running with lower ruby version
-    actual_ruby_version = RUBY_VERSION.split('.').map{|s|s.to_i}
-    left_bound = '2.0.0'.split('.').map{|s|s.to_i}
-    right_bound = '2.1.0'.split('.').map{|s|s.to_i}
-    if (actual_ruby_version <=> left_bound) < 0
+  def force_ruby23()
+    # change interpreter when symlink /usr/bin/ruby2.3 exists, but running with lower ruby version
+    if RUBY_VERSION < '2.3.0'
       if(!@reexeced)
-        @log.info("The current Ruby version is not 2.0.x! Restarting the installer with /usr/bin/ruby2.0")
-        exec('/usr/bin/ruby2.0', __FILE__, '--re-execed' , *@args)
+        @log.info("The current Ruby version is less than 2.3! Restarting the installer with /usr/bin/ruby2.3")
+        exec('/usr/bin/ruby2.3', __FILE__, '--re-execed' , *@args)
       else
-        @log.error('The Ruby version in /usr/bin/ruby2.0 is '+RUBY_VERSION+', but this must be Ruby version 2.0.x. Installation cannot continue.')
-        @log.error('If you have Ruby version 2.0.x installed, please correct the symlink. Otherwise, please install Ruby 2.0')
+        @log.error('The Ruby version in /usr/bin/ruby2.3 is '+RUBY_VERSION+', but this must be at least Ruby version 2.3. Installation cannot continue.')
+        @log.error('If you have Ruby version 2.3 or higher installed, please correct the symlink. Otherwise, please install Ruby 2.3')
         exit(1)
       end
-    elsif (actual_ruby_version <=> right_bound) >= 0
-      @log.warn('The Ruby version in /usr/bin/ruby2.0 is '+RUBY_VERSION+', but this must be Ruby version 2.0.x. Attempting to install anyway.')
-      @log.warn('If you have Ruby version 2.0.x installed, please correct the symlink. Otherwise, please install Ruby 2.0')
     end
   end
 
@@ -173,9 +162,9 @@ EOF
 
   parse_args()
 
-  ########## Force running as Ruby 2.0 or fail here       ##########
+  ########## Force running as Ruby >= 2.3 or fail here       ##########
   check_ruby_version_and_symlink()
-  force_ruby20()
+  force_ruby23()
 
   def run_command(*args)
     exit_ok = system(*args)
