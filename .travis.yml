@@ -1,6 +1,7 @@
 language: ruby
 rvm:
-  - 2.0.0
+  - ruby-head
+  - 2.3.0
 after_success: coveralls
 notifications:
   email:

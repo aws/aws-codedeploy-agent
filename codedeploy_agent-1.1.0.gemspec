@@ -9,6 +9,8 @@ Gem::Specification.new do |spec|
   spec.bindir        = ['bin']
   spec.require_paths = ['lib']
 
+  spec.required_ruby_version = '~> 2.3'
+
   spec.add_dependency('gli', '~> 2.5')
   spec.add_dependency('json_pure', '~> 1.6')
   spec.add_dependency('archive-tar-minitar', '~> 0.5.2')
