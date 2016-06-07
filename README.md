@@ -2,6 +2,14 @@
 
 [![Code Climate](https://codeclimate.com/github/aws/aws-codedeploy-agent.png)](https://codeclimate.com/github/aws/aws-codedeploy-agent) [![Build Status](https://travis-ci.org/aws/aws-codedeploy-agent.png?branch=master)](https://travis-ci.org/aws/aws-codedeploy-agent) [![Coverage Status](https://coveralls.io/repos/aws/aws-codedeploy-agent/badge.svg?branch=master&service=github)](https://coveralls.io/r/aws/aws-codedeploy-agent?branch=master)
 
+## Xenial Installation
+1. git clone https://github.com/bdashrad/aws-codedeploy-agent.git
+1. apt-get install ruby-dev gcc make
+1. gem install fpm
+1. cd aws-codedeploy-agent
+1. rake package_deb
+1. dpkg -i codedeploy-agent_1.0-1.950-bdashrad_amd64.deb
+
 
 ## Build Steps
 

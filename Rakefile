@@ -50,3 +50,11 @@ end
 task :clean do
   rm_rf 'deployment'
 end
+
+# Build deb package
+desc 'build debian package for installation on xenial'
+require 'fpm'
+task :package_deb do
+  sh "fpm -s dir -t deb -n 'codedeploy-agent' -v 1.0-1.950-bdashrad -x .git --deb-systemd ./init.d/codedeploy-agent.service --after-install ./install_scripts/post_install.sh --before-remove ./install_scripts/pre_remove.sh conf/codedeployagent.yml=/etc/codedeploy-agent/conf/codedeployagent.yml ./=/opt/codedeploy-agent"
+end
+
