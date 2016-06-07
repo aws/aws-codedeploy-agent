@@ -20,3 +20,7 @@ group :test do
   gem 'shoulda-matchers'
   gem 'shoulda-context'
 end
+
+group :build do
+  gem 'fpm'
+end
