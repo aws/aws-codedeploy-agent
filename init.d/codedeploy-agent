@@ -27,7 +27,7 @@ prog="codedeploy-agent"
 USER=""
 AGENT_ROOT="/opt/codedeploy-agent/"
 INSTALLER="/opt/codedeploy-agent/bin/install"
-BIN="/opt/codedeploy-agent/bin/start-wrapper"
+BIN="/opt/codedeploy-agent/bin/codedeploy-agent-wrapper"
 
 start() {
         echo -n $"Starting $prog:"
