@@ -166,7 +166,7 @@ def get_user_data
               "$BUNDLE install\n"\
               "mkdir -p /etc/codedeploy-agent/conf\n"\
               "cp conf/codedeployagent.yml /etc/codedeploy-agent/conf/\n"\
-              "$BUNDLE exec bin/codedeploy-agent start"
+              "$BUNDLE exec bin/codedeploy-agent-wrapper start"
   Base64.encode64(user_data)
 end
 
