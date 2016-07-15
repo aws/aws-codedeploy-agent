@@ -3,7 +3,7 @@ Description=AWS CodeDeploy Host Agent
 
 [Service]
 Type=forking
-ExecStart=/bin/sh -a -c '[ -f /etc/profile ] && source /etc/profile; /opt/codedeploy-agent/bin/codedeploy-agent-wrapper start'
+ExecStart=/bin/bash -a -c '[ -f /etc/profile ] && source /etc/profile; /opt/codedeploy-agent/bin/codedeploy-agent-wrapper start'
 ExecStop=/opt/codedeploy-agent/bin/codedeploy-agent-wrapper stop
 RemainAfterExit=no
 # Comment out the following line to run the agent as the codedeploy user
