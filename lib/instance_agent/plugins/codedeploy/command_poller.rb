@@ -35,14 +35,14 @@ module InstanceAgent
 
         def create_hook_mapping
           #Map commands to lifecycle hooks
-          { "BeforeELBRemove"=>["BeforeELBRemove"],
-            "AfterELBRemove"=>["AfterELBRemove"],
+          { "BeforeBlockTraffic"=>["BeforeBlockTraffic"],
+            "AfterBlockTraffic"=>["AfterBlockTraffic"],
             "ApplicationStop"=>["ApplicationStop"],
             "BeforeInstall"=>["BeforeInstall"],
             "AfterInstall"=>["AfterInstall"],
             "ApplicationStart"=>["ApplicationStart"],
-            "BeforeELBAdd"=>["BeforeELBAdd"],
-            "AfterELBAdd"=>["AfterELBAdd"],
+            "BeforeAllowTraffic"=>["BeforeAllowTraffic"],
+            "AfterAllowTraffic"=>["AfterAllowTraffic"],
             "ValidateService"=>["ValidateService"]}
         end
 

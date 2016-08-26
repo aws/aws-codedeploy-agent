@@ -193,14 +193,14 @@ module InstanceAgent
 
         private
         def mapping_between_hooks_and_deployments
-          {"BeforeELBRemove"=>LAST_SUCCESSFUL_DEPLOYMENT,
-            "AfterELBRemove"=>LAST_SUCCESSFUL_DEPLOYMENT,
+          { "BeforeBlockTraffic"=>LAST_SUCCESSFUL_DEPLOYMENT,
+            "AfterBlockTraffic"=>LAST_SUCCESSFUL_DEPLOYMENT,
             "ApplicationStop"=>LAST_SUCCESSFUL_DEPLOYMENT,
             "BeforeInstall"=>CURRENT,
             "AfterInstall"=>CURRENT,
             "ApplicationStart"=>CURRENT,
-            "BeforeELBAdd"=>CURRENT,
-            "AfterELBAdd"=>CURRENT,
+            "BeforeAllowTraffic"=>CURRENT,
+            "AfterAllowTraffic"=>CURRENT,
             "ValidateService"=>CURRENT}
         end
 

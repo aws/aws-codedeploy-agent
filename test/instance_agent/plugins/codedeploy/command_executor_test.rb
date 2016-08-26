@@ -16,14 +16,14 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
 
   context 'The CodeDeploy Plugin Command Executor' do
     setup do
-      @test_hook_mapping = { "BeforeELBRemove"=>["BeforeELBRemove"],
-        "AfterELBRemove"=>["AfterELBRemove"],
+      @test_hook_mapping = { "BeforeBlockTraffic"=>["BeforeBlockTraffic"],
+        "AfterBlockTraffic"=>["AfterBlockTraffic"],
         "ApplicationStop"=>["ApplicationStop"],
         "BeforeInstall"=>["BeforeInstall"],
         "AfterInstall"=>["AfterInstall"],
         "ApplicationStart"=>["ApplicationStart"],
-        "BeforeELBAdd"=>["BeforeELBAdd"],
-        "AfterELBAdd"=>["AfterELBAdd"],
+        "BeforeAllowTraffic"=>["BeforeAllowTraffic"],
+        "AfterAllowTraffic"=>["AfterAllowTraffic"],
         "ValidateService"=>["ValidateService"]}
       @deploy_control_client = mock
       @command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new({
@@ -372,26 +372,26 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           @mock_hook_executor = mock
         end
 
-        context "BeforeELBRemove" do
+        context "BeforeBlockTraffic" do
           setup do
-            @command.command_name = "BeforeELBRemove"
-            @hook_executor_constructor_hash[:lifecycle_event] = "BeforeELBRemove"
+            @command.command_name = "BeforeBlockTraffic"
+            @hook_executor_constructor_hash[:lifecycle_event] = "BeforeBlockTraffic"
           end
 
-          should "call execute a hook executor object with BeforeELBRemove as one of the params" do
+          should "call execute a hook executor object with BeforeBlockTraffic as one of the params" do
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
           end
         end
 
-        context "AfterELBRemove" do
+        context "AfterBlockTraffic" do
           setup do
-            @command.command_name = "AfterELBRemove"
-            @hook_executor_constructor_hash[:lifecycle_event] = "AfterELBRemove"
+            @command.command_name = "AfterBlockTraffic"
+            @hook_executor_constructor_hash[:lifecycle_event] = "AfterBlockTraffic"
           end
 
-          should "call execute a hook executor object with AfterELBRemove as one of the params" do
+          should "call execute a hook executor object with AfterBlockTraffic as one of the params" do
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
@@ -450,26 +450,26 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           end
         end
 
-        context "BeforeELBAdd" do
+        context "BeforeAllowTraffic" do
           setup do
-            @command.command_name = "BeforeELBAdd"
-            @hook_executor_constructor_hash[:lifecycle_event] = "BeforeELBAdd"
+            @command.command_name = "BeforeAllowTraffic"
+            @hook_executor_constructor_hash[:lifecycle_event] = "BeforeAllowTraffic"
           end
 
-          should "call execute a hook executor object with BeforeELBAdd as one of the params" do
+          should "call execute a hook executor object with BeforeAllowTraffic as one of the params" do
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
           end
         end
 
-        context "AfterELBAdd" do
+        context "AfterAllowTraffic" do
           setup do
-            @command.command_name = "AfterELBAdd"
-            @hook_executor_constructor_hash[:lifecycle_event] = "AfterELBAdd"
+            @command.command_name = "AfterAllowTraffic"
+            @hook_executor_constructor_hash[:lifecycle_event] = "AfterAllowTraffic"
           end
 
-          should "call execute a hook executor object with AfterELBAdd as one of the params" do
+          should "call execute a hook executor object with AfterAllowTraffic as one of the params" do
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)

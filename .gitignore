@@ -3,3 +3,5 @@ Gemfile.lock
 deployment/
 coverage/
 .version
+.metadata/
+RemoteSystemsTempFiles/

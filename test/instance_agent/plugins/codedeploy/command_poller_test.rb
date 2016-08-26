@@ -49,14 +49,14 @@ class CommandPollerTest < InstanceAgentTestCase
       end
 
       should 'construct an CodeDeploy command executor' do
-        test_hook_mapping = { "BeforeELBRemove"=>["BeforeELBRemove"],
-          "AfterELBRemove"=>["AfterELBRemove"],
+        test_hook_mapping = { "BeforeBlockTraffic"=>["BeforeBlockTraffic"],
+          "AfterBlockTraffic"=>["AfterBlockTraffic"],
           "ApplicationStop"=>["ApplicationStop"],
           "BeforeInstall"=>["BeforeInstall"],
           "AfterInstall"=>["AfterInstall"],
           "ApplicationStart"=>["ApplicationStart"],
-          "BeforeELBAdd"=>["BeforeELBAdd"],
-          "AfterELBAdd"=>["AfterELBAdd"],
+          "BeforeAllowTraffic"=>["BeforeAllowTraffic"],
+          "AfterAllowTraffic"=>["AfterAllowTraffic"],
           "ValidateService"=>["ValidateService"]}
         InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.expects(:new).
           with(:hook_mapping => test_hook_mapping).
