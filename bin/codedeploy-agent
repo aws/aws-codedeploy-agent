@@ -19,7 +19,7 @@ else
 end
 
 if ruby_bin
-  exec("#{ruby_bin} #{File.join(File.expand_path(File.dirname(__FILE__)), "/codedeploy-agent")} #{ARGV.join(' ')}")
+  exec("#{ruby_bin} #{File.join(File.expand_path(File.dirname(__FILE__)), "../lib/codedeploy-agent.rb")} #{ARGV.join(' ')}")
 end
 
 STDERR.puts "No supported ruby version found. Code Deploy Host Agent supports Ruby version of 2.0.x to 2.3.x."
