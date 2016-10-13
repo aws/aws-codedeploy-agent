@@ -156,7 +156,8 @@ end
 
 def get_user_data
   user_data = "#!/bin/bash\n"\
-              "yum install -y git gcc gcc-c++ ruby-devel\n"\
+              "yum remove -y ruby20\n"\
+              "yum install -y git gcc gcc-c++ ruby22 ruby22-devel\n"\
               "cd /home/ec2-user\n"\
               "gem install io-console\n"\
               "gem install bundler\n"\
@@ -166,7 +167,7 @@ def get_user_data
               "$BUNDLE install\n"\
               "mkdir -p /etc/codedeploy-agent/conf\n"\
               "cp conf/codedeployagent.yml /etc/codedeploy-agent/conf/\n"\
-              "$BUNDLE exec bin/codedeploy-agent-wrapper start"
+              "$BUNDLE exec bin/codedeploy-agent start"
   Base64.encode64(user_data)
 end
 
