@@ -15,6 +15,6 @@ Gem::Specification.new do |spec|
   spec.add_dependency('rubyzip', '~> 1.1.0')
   spec.add_dependency('rake', '~> 0.9')
   spec.add_dependency('logging', '~> 1.8')
-  spec.add_dependency('aws-sdk-core', '~> 2.3.0')
+  spec.add_dependency('aws-sdk-core', '~> 2.6.11')
   spec.add_dependency('simple_pid', '~> 0.2.1')
 end
