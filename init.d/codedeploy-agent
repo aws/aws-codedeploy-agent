@@ -22,9 +22,9 @@ RETVAL=0
 [ -f /etc/profile ] && [ "`stat --format '%U %G' /etc/profile`" == "root root" ] && source /etc/profile
 
 prog="codedeploy-agent"
-# Modify the following CODEDEPLOY_USER variable to run the codedeploy process as a non-root user
 # Note: You also need to chown /opt/codedeploy /var/log/aws 
-CODEDEPLOY_USER=""
+# Note: you can modify or set CODEDEPLOY_USER as an environment variable to run the codedeploy process as a non-root user
+if [ -z ${CODEDEPLOY_USER+x} ]; then CODEDEPLOY_USER=""; fi
 AGENT_ROOT="/opt/codedeploy-agent/"
 INSTALLER="/opt/codedeploy-agent/bin/install"
 BIN="/opt/codedeploy-agent/bin/codedeploy-agent"
