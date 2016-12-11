@@ -119,7 +119,7 @@ module InstanceAgent
             type_list ||= supported_types
             type_list.each do |type|
               if !supported_types.include?(type)
-                raise AppSpecValidationException, "The deployment failed because the application specification file specifies a permission for an object type not supported for permissions (#{type}). Update the permissions section of the AppSpec file, and then try again."
+                raise AppSpecValidationException, "The deployment failed because the application specification filespecifies a permission for an object type not supported for permissions (#{type}). Update the permissions section of the AppSpec file, and then try again."
               end
             end
             type_list
