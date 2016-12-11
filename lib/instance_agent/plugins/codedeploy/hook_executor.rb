@@ -59,7 +59,8 @@ module InstanceAgent
 
       class HookExecutor
 
-        LAST_SUCCESSFUL_DEPLOYMENT = "OldOrIgnore"
+        LAST_SUCCESSFUL_DEPLOYMENT = "LastSuccessfulOrIgnore"
+        MOST_RECENT_DEPLOYMENT = "MostRecentOrIgnore"
         CURRENT = "New"
         def initialize(arguments = {})
           #check arguments
@@ -69,13 +70,17 @@ module InstanceAgent
           raise "App Spec Path Required " if arguments[:app_spec_path].nil?
           raise "Application name required" if arguments[:application_name].nil?
           raise "Deployment Group name required" if arguments[:deployment_group_name].nil?
+          raise "Deployment creator required" if arguments[:deployment_creator].nil?
+          raise "Deployment type required" if arguments[:deployment_type].nil?
           @lifecycle_event = arguments[:lifecycle_event]
           @deployment_id = arguments[:deployment_id]
           @application_name = arguments[:application_name]
           @deployment_group_name = arguments[:deployment_group_name]
           @deployment_group_id = arguments[:deployment_group_id]
+          @deployment_creator = arguments[:deployment_creator]
+          @deployment_type = arguments[:deployment_type]
           @current_deployment_root_dir = arguments[:deployment_root_dir]
-          select_correct_deployment_root_dir(arguments[:deployment_root_dir], arguments[:last_successful_deployment_dir])
+          select_correct_deployment_root_dir(arguments[:deployment_root_dir], arguments[:last_successful_deployment_dir], arguments[:most_recent_deployment_dir])
           return if @deployment_root_dir.nil?
           @deployment_archive_dir = File.join(@deployment_root_dir, 'deployment-archive')
           @app_spec_path = arguments[:app_spec_path]
@@ -183,12 +188,23 @@ module InstanceAgent
         end
 
         private
-        def select_correct_deployment_root_dir(current_deployment_root_dir, last_successful_deployment_root_dir)
+        def select_correct_deployment_root_dir(current_deployment_root_dir, last_successful_deployment_root_dir, most_recent_deployment_dir)
           @deployment_root_dir = current_deployment_root_dir
           hook_deployment_mapping = mapping_between_hooks_and_deployments
-          if(hook_deployment_mapping[@lifecycle_event] == LAST_SUCCESSFUL_DEPLOYMENT && !File.exist?(File.join(@deployment_root_dir, 'deployment-archive')))
+          if(select_correct_mapping_for_hooks == LAST_SUCCESSFUL_DEPLOYMENT && !File.exist?(File.join(@deployment_root_dir, 'deployment-archive')))
             @deployment_root_dir = last_successful_deployment_root_dir
+          elsif(select_correct_mapping_for_hooks == MOST_RECENT_DEPLOYMENT && !File.exists?(File.join(@deployment_root_dir, 'deployment-archive')))
+            @deployment_root_dir = most_recent_deployment_dir
           end
+        end
+
+        private
+        def select_correct_mapping_for_hooks
+          hook_deployment_mapping = mapping_between_hooks_and_deployments
+          if((@deployment_creator.eql? "codeDeployRollback") && (@deployment_type.eql? "BLUE_GREEN"))
+            hook_deployment_mapping = rollback_deployment_mapping_between_hooks_and_deployments
+          end
+          hook_deployment_mapping[@lifecycle_event]
         end
 
         private
@@ -201,6 +217,19 @@ module InstanceAgent
             "ApplicationStart"=>CURRENT,
             "BeforeAllowTraffic"=>CURRENT,
             "AfterAllowTraffic"=>CURRENT,
+            "ValidateService"=>CURRENT}
+        end
+
+        private 
+        def rollback_deployment_mapping_between_hooks_and_deployments
+          { "BeforeBlockTraffic"=>MOST_RECENT_DEPLOYMENT,
+            "AfterBlockTraffic"=>MOST_RECENT_DEPLOYMENT,
+            "ApplicationStop"=>LAST_SUCCESSFUL_DEPLOYMENT,
+            "BeforeInstall"=>CURRENT,
+            "AfterInstall"=>CURRENT,
+            "ApplicationStart"=>CURRENT,
+            "BeforeAllowTraffic"=>LAST_SUCCESSFUL_DEPLOYMENT,
+            "AfterAllowTraffic"=>LAST_SUCCESSFUL_DEPLOYMENT,
             "ValidateService"=>CURRENT}
         end
 

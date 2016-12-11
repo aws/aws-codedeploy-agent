@@ -12,6 +12,8 @@ class CodeDeployControlTest < InstanceAgentTestCase
         ENV['AWS_SECRET_ACCESS_KEY'] = "Test Secret Access Key"
         ENV['AWS_REGION'] = nil
         ENV['AWSDEPLOY_CONTROL_ENDPOINT'] = "https://tempuri"
+        ENV['DEPLOYMENT_CREATOR'] = "User"
+        ENV['DEPLOYMENT_TYPE'] = "IN_PLACE"
       end
 
       context "with region, endpoint and credentials" do
@@ -25,7 +27,10 @@ class CodeDeployControlTest < InstanceAgentTestCase
         should "raise an exception" do
           assert_raise {
             codedeploy_control_client = CodeDeployControl.new()
-            codedeploy_control_client.get_client
+            codedeploy_control_client.get_client.put_host_command_complete(
+              :command_status => 'Succeeded',
+              :diagnostics => nil,
+              :host_command_identifier => "TestCommand")
           }
         end
       end

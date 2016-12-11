@@ -17,6 +17,8 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
       @deployment_id = SecureRandom.uuid.to_s
       @deployment_group_id = SecureRandom.uuid.to_s
       @deployment_group_name = "TestDeploymentGroup"
+      @deployment_creator = "User"
+      @deployment_type = "IN_PLACE"
       @application_name = "TestApplication"
       @s3Revision = {
         "Bucket" => "mybucket",
@@ -32,6 +34,8 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
         "DeploymentId" => @deployment_id,
         "DeploymentGroupName" => @deployment_group_name,
         "DeploymentGroupId" => @deployment_group_id,
+        "DeploymentCreator" => @deployment_creator,
+        "DeploymentType" => @deployment_type,
         "Revision" => @revision
       }
       
@@ -46,18 +50,14 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
         assert_equal @s3Revision, parsed_deployment_spec.revision
         assert_equal @deployment_group_name, parsed_deployment_spec.deployment_group_name
         assert_equal @application_name, parsed_deployment_spec.application_name
+        assert_equal @deployment_creator, parsed_deployment_spec.deployment_creator
+        assert_equal @deployment_type, parsed_deployment_spec.deployment_type
       end
     end
 
     context "with arn deployment id" do
       setup do
-        @deployment_spec = {
-          "ApplicationName" => @application_name,
-          "DeploymentId" => "arn:aws:codedeploy:region:account:deployment/#{@deployment_id}",
-          "DeploymentGroupId" => @deployment_group_id,
-          "DeploymentGroupName" => @deployment_group_name,
-          "Revision" => @revision
-        }
+        @deployment_spec["DeploymentId"] = "arn:aws:codedeploy:region:account:deployment/#{@deployment_id}"
         @packed_message = generate_signed_message_for(@deployment_spec)
       end
 
@@ -68,6 +68,8 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
         assert_equal @s3Revision, parsed_deployment_spec.revision
         assert_equal @deployment_group_name, parsed_deployment_spec.deployment_group_name
         assert_equal @application_name, parsed_deployment_spec.application_name
+        assert_equal @deployment_creator, parsed_deployment_spec.deployment_creator
+        assert_equal @deployment_type, parsed_deployment_spec.deployment_type
       end
     end
 
@@ -96,6 +98,8 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
         assert_equal @s3Revision, parsed_deployment_spec.revision
         assert_equal @deployment_group_name, parsed_deployment_spec.deployment_group_name
         assert_equal @application_name, parsed_deployment_spec.application_name
+        assert_equal @deployment_creator, parsed_deployment_spec.deployment_creator
+        assert_equal @deployment_type, parsed_deployment_spec.deployment_type
       end
     end
 
@@ -188,6 +192,19 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
       end
     end
 
+    context "with empty instance group id" do
+      setup do
+        @deployment_spec["DeploymentGroupId"] = ""
+        @packed_message = generate_signed_message_for(@deployment_spec)
+      end
+
+      should "raise a runtime exception" do
+        assert_raised_with_message("Deployment Spec has no DeploymentGroupId") do
+          InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(@packed_message)
+        end
+      end
+    end
+
     context "with no deployment group name" do
       setup do
         @deployment_spec.delete("DeploymentGroupName")
@@ -204,6 +221,19 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
     context "with null deployment group name" do
       setup do
         @deployment_spec["DeploymentGroupName"] = nil
+        @packed_message = generate_signed_message_for(@deployment_spec)
+      end
+
+      should "raise a runtime exception" do
+        assert_raised_with_message("Deployment Spec has no DeploymentGroupName") do
+          InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(@packed_message)
+        end
+      end
+    end
+
+    context "with empty deployment group name" do
+      setup do
+        @deployment_spec["DeploymentGroupName"] = ""
         @packed_message = generate_signed_message_for(@deployment_spec)
       end
 
@@ -240,14 +270,14 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
       end
     end
 
-    context "with empty instance group id" do
+    context "with empty application name" do
       setup do
-        @deployment_spec["DeploymentGroupId"] = ""
+        @deployment_spec["ApplicationName"] = ""
         @packed_message = generate_signed_message_for(@deployment_spec)
       end
 
       should "raise a runtime exception" do
-        assert_raised_with_message("Deployment Spec has no DeploymentGroupId") do
+        assert_raised_with_message("Deployment Spec has no ApplicationName") do
           InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(@packed_message)
         end
       end

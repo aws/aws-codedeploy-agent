@@ -12,8 +12,11 @@ class HookExecutorTest < InstanceAgentTestCase
                         :deployment_id => @deployment_id,
                         :deployment_group_name => @deployment_group_name,
                         :deployment_group_id => @deployment_group_id,
+                        :deployment_creator => @deployment_creator,
+                        :deployment_type => @deployment_type,
                         :deployment_root_dir => @deployment_root_dir,
                         :last_successful_deployment_dir => @last_successful_deployment_dir,
+                        :most_recent_deployment_dir => @most_recent_deployment_dir,
                         :app_spec_path => @app_spec_path})
   end
 
@@ -23,8 +26,11 @@ class HookExecutorTest < InstanceAgentTestCase
       @application_name='TestApplication'
       @deployment_group_name='TestDeploymentGroup'
       @deployment_group_id='foo'
+      @deployment_creator = 'User'
+      @deployment_type = 'IN_PLACE'
       @deployment_root_dir = "deployment/root/dir"
-      @last_successful_deployment_dir = "last/deployment/root/dir"
+      @last_successful_deployment_dir = "last/successful/deployment/root/dir"
+      @most_recent_deployment_dir = "most/recent/deployment/root/dir"
       @app_spec_path = "app_spec"
       @app_spec =  { "version" => 0.0, "os" => "linux" }
       YAML.stubs(:load).returns(@app_spec)
@@ -47,6 +53,8 @@ class HookExecutorTest < InstanceAgentTestCase
                                               :deployment_id => @deployment_id,
                                               :deployment_group_name => @deployment_group_name,
                                               :deployment_group_id => @deployment_group_id,
+                                              :deployment_creator => @deployment_creator,
+                                              :deployment_type => @deployment_type,
                                               :deployment_root_dir => @deployment_root_dir,
                                               :app_spec_path => @app_spec_path})
         end
@@ -65,6 +73,8 @@ class HookExecutorTest < InstanceAgentTestCase
                                                 :deployment_group_name => @deployment_group_name,
                                                 :deployment_group_id => @deployment_group_id,
                                                 :deployment_id => @deployment_id,
+                                                :deployment_creator => @deployment_creator,
+                                                :deployment_type => @deployment_type,
                                                 :deployment_root_dir => @deployment_root_dir})
           end
         end
@@ -86,8 +96,32 @@ class HookExecutorTest < InstanceAgentTestCase
             @lifecycle_event = "ApplicationStop"
           end
 
-          should "parse an app spec from the previous deployment's directory" do
+          should "parse an app spec from the last successful deployment's directory" do
             File.expects(:read).with(File.join(@last_successful_deployment_dir, 'deployment-archive', @app_spec_path))
+            @hook_executor = create_full_hook_executor
+          end
+        end
+
+        context "hook is before block traffic" do
+          setup do
+            @lifecycle_event = "BeforeBlockTraffic"
+          end
+
+          should "parse an app spec from the last successful deployment's directory" do
+            File.expects(:read).with(File.join(@last_successful_deployment_dir, 'deployment-archive', @app_spec_path))
+            @hook_executor = create_full_hook_executor
+          end
+        end
+
+        context "hook is before block traffic blue green rollback deployment" do
+          setup do
+            @deployment_creator = 'codeDeployRollback'
+            @deployment_type = 'BLUE_GREEN'
+            @lifecycle_event = "BeforeBlockTraffic"
+          end
+
+          should "parse an app spec from the most recent deployment's directory" do
+            File.expects(:read).with(File.join(@most_recent_deployment_dir, 'deployment-archive', @app_spec_path))
             @hook_executor = create_full_hook_executor
           end
         end

@@ -6,7 +6,7 @@ module InstanceAgent
   module Plugins
     module CodeDeployPlugin
       class DeploymentSpecification
-        attr_accessor :deployment_id, :deployment_group_id, :deployment_group_name, :revision, :revision_source, :application_name
+        attr_accessor :deployment_id, :deployment_group_id, :deployment_group_name, :revision, :revision_source, :application_name, :deployment_type, :deployment_creator
         attr_accessor :bucket, :key, :bundle_type, :version, :etag
         attr_accessor :external_account, :repository, :commit_id, :anonymous, :external_auth_token
         class << self
@@ -40,6 +40,8 @@ module InstanceAgent
             @deployment_id = data["DeploymentId"]
           end
           @deployment_group_id = data["DeploymentGroupId"]
+          @deployment_creator = data["DeploymentCreator"] || "user"
+          @deployment_type = data["DeploymentType"] || "IN_PLACE"
 
           raise 'Must specify a revison' unless data["Revision"]
           @revision_source = data["Revision"]["RevisionType"]

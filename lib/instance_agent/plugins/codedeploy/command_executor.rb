@@ -97,14 +97,19 @@ module InstanceAgent
 
           unpack_bundle(cmd, bundle_file, deployment_spec)
 
+          FileUtils.mkdir_p(deployment_instructions_dir)
+          log(:debug, "Instructions directory created at #{deployment_instructions_dir}")
+          update_most_recent_install(deployment_spec)
           nil
         end
 
         command "Install" do |cmd, deployment_spec|
           log(:debug, "Executing Install command for execution #{cmd.deployment_execution_id}")
 
-          FileUtils.mkdir_p(deployment_instructions_dir)
-          log(:debug, "Instructions directory created at #{deployment_instructions_dir}")
+          if !File.directory?(deployment_instructions_dir)
+            FileUtils.mkdir_p(deployment_instructions_dir)
+            log(:debug, "Instructions directory created at #{deployment_instructions_dir}")
+          end
 
           installer = Installer.new(:deployment_instructions_dir => deployment_instructions_dir,
           :deployment_archive_dir => archive_root_dir(deployment_spec))
@@ -127,8 +132,11 @@ module InstanceAgent
                 :deployment_id => deployment_spec.deployment_id,
                 :deployment_group_name => deployment_spec.deployment_group_name,
                 :deployment_group_id => deployment_spec.deployment_group_id,
+                :deployment_creator => deployment_spec.deployment_creator,
+                :deployment_type => deployment_spec.deployment_type,
                 :deployment_root_dir => deployment_root_dir(deployment_spec),
                 :last_successful_deployment_dir => last_successful_deployment_dir(deployment_spec.deployment_group_id),
+                :most_recent_deployment_dir => most_recent_deployment_dir(deployment_spec.deployment_group_id),
                 :app_spec_path => app_spec_path)
                 script_log.concat_log(hook_command.execute)
               end
@@ -154,11 +162,20 @@ module InstanceAgent
 
         private
         def last_successful_deployment_dir(deployment_group)
-          last_install_file_location = last_install_file_path(deployment_group)
-          return unless File.exist? last_install_file_location
-          File.open last_install_file_location do |f|
+          last_successful_install_file_location = last_successful_install_file_path(deployment_group)
+          return unless File.exist? last_successful_install_file_location
+          File.open last_successful_install_file_location do |f|
             return f.read.chomp
-          end
+          end 
+        end
+
+        private
+        def most_recent_deployment_dir(deployment_group)
+          most_recent_install_file_location = most_recent_install_file_path(deployment_group)
+          return unless File.exist? most_recent_install_file_location
+          File.open most_recent_install_file_location do |f|
+            return f.read.chomp
+          end 
         end
 
         private
@@ -169,8 +186,13 @@ module InstanceAgent
         end
 
         private
-        def last_install_file_path(deployment_group)
+        def last_successful_install_file_path(deployment_group)
           File.join(deployment_instructions_dir, "#{deployment_group}_last_successful_install")
+        end
+
+        private
+        def most_recent_install_file_path(deployment_group)
+          File.join(deployment_instructions_dir, "#{deployment_group}_most_recent_install")
         end
 
         private
@@ -330,10 +352,17 @@ module InstanceAgent
 
         private
         def update_last_successful_install(deployment_spec)
-          File.open(last_install_file_path(deployment_spec.deployment_group_id), 'w+') do |f|
+          File.open(last_successful_install_file_path(deployment_spec.deployment_group_id), 'w+') do |f|
             f.write deployment_root_dir(deployment_spec)
           end
         end
+
+        private
+        def update_most_recent_install(deployment_spec)
+          File.open(most_recent_install_file_path(deployment_spec.deployment_group_id), 'w+') do |f|
+            f.write deployment_root_dir(deployment_spec)
+          end
+        end  
 
         private
         def cleanup_old_archives(deployment_spec)

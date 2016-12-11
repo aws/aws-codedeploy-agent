@@ -47,6 +47,8 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
         @deployment_group_name = "TestDeploymentGroup"
         @application_name = "TestApplicationName"
         @deployment_group_id = "foo"
+        @deployment_creator = "User"
+        @deployment_type = "IN_PLACE"
         @s3Revision = {
           "Bucket" => "mybucket",
           "Key" => "mykey",
@@ -57,6 +59,8 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           "DeploymentGroupId" => @deployment_group_id,
           "ApplicationName" => @application_name,
           "DeploymentGroupName" => @deployment_group_name,
+          "DeploymentCreator" => @deployment_creator,
+          "DeploymentType" => @deployment_type,
           "Revision" => {
             "RevisionType" => "S3",
             "S3Revision" => @s3Revision
@@ -73,7 +77,8 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
 
         FileUtils.stubs(:mkdir_p)
         File.stubs(:directory?).with(@deployment_root_dir).returns(true)
-        @previous_install_file_location = File.join(@deployment_instructions_dir, "#{@deployment_group_id}_last_successful_install")
+        @last_successful_install_file_location = File.join(@deployment_instructions_dir, "#{@deployment_group_id}_last_successful_install")
+        @most_recent_install_file_location = File.join(@deployment_instructions_dir, "#{@deployment_group_id}_most_recent_install")
       end
 
       context "when executing an unknown command" do
@@ -130,10 +135,11 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::ApplicationSpecification.stubs(:parse).returns(@app_spec)
           @installer = stub("installer", :install => nil)
           Installer.stubs(:new).returns(@installer)
-          File.stubs(:exist?).with(@previous_install_file_location).returns(true)
+          File.stubs(:directory?).with(@deployment_instructions_dir).returns(true)
+          File.stubs(:exist?).with(@last_successful_install_file_location).returns(true)
           File.stubs(:exist?).with(@archive_root_dir).returns(true)
-          File.stubs(:open).with(@previous_install_file_location, 'w+')
-          File.stubs(:open).with(@previous_install_file_location)
+          File.stubs(:open).with(@last_successful_install_file_location, 'w+')
+          File.stubs(:open).with(@last_successful_install_file_location)
 
           @app_spec = mock("parsed application specification")
           File.
@@ -141,12 +147,6 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           with("#@archive_root_dir/appspec.yml").
           returns("APP SPEC")
           ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC").returns(@app_spec)
-        end
-
-        should "idempotently create the instructions directory" do
-          FileUtils.expects(:mkdir_p).with(@deployment_instructions_dir)
-
-          @command_executor.execute_command(@command, @deployment_spec)
         end
 
         should "create an appropriate Installer" do
@@ -167,7 +167,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
 
         should "write the archive root dir to the install instructions file" do
           mock_file = mock
-          File.expects(:open).with(@previous_install_file_location, 'w+').yields(mock_file)
+          File.expects(:open).with(@last_successful_install_file_location, 'w+').yields(mock_file)
           mock_file.expects(:write).with(@deployment_root_dir)
 
           @command_executor.execute_command(@command, @deployment_spec)
@@ -355,6 +355,20 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           InstanceAgent::LinuxUtil.expects(:extract_tar).in_sequence(call_sequence)
           @command_executor.execute_command(@command, @deployment_spec)
         end
+
+        should "idempotently create the instructions directory" do
+          FileUtils.expects(:mkdir_p).with(@deployment_instructions_dir)
+
+          @command_executor.execute_command(@command, @deployment_spec)
+        end
+
+        should "write the archive root dir to the install instructions file" do
+          mock_file = mock
+          File.expects(:open).with(@most_recent_install_file_location, 'w+').yields(mock_file)
+          mock_file.expects(:write).with(@deployment_root_dir)
+
+          @command_executor.execute_command(@command, @deployment_spec)
+        end
       end
 
       context "I have an empty app spec (for script mapping)" do
@@ -366,8 +380,11 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             :deployment_id => @deployment_id,
             :deployment_group_name => @deployment_group_name,
             :deployment_group_id => @deployment_group_id,
+            :deployment_creator => @deployment_creator,
+            :deployment_type => @deployment_type,
             :deployment_root_dir => @deployment_root_dir, 
             :last_successful_deployment_dir => nil,
+            :most_recent_deployment_dir => nil,
             :app_spec_path => 'appspec.yml'}
           @mock_hook_executor = mock
         end
@@ -505,7 +522,10 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             :deployment_id => @deployment_id,
             :deployment_group_name => @deployment_group_name,
             :deployment_group_id => @deployment_group_id,
+            :deployment_creator => @deployment_creator,
+            :deployment_type => @deployment_type,
             :last_successful_deployment_dir => nil,
+            :most_recent_deployment_dir => nil,
             :app_spec_path => 'appspec.yml'}
           @hook_executor_constructor_hash_1 = hook_executor_constructor_hash.merge({:lifecycle_event => "lifecycle_event_1"})
           @hook_executor_constructor_hash_2 = hook_executor_constructor_hash.merge({:lifecycle_event => "lifecycle_event_2"})
@@ -522,12 +542,11 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
 
         context "when the first script is forced to fail" do
           setup do
-            HookExecutor.stubs(:new).with(@hook_executor_constructor_hash_1).raises("failed to create hook caommand")
-
+            HookExecutor.stubs(:new).with(@hook_executor_constructor_hash_1).raises("failed to create hook command")
           end
 
-          should "calls lifecycle event 1 and fails but not 2" do
-            assert_raised_with_message('failed to create hook caommand') do
+          should "calls lifecycle event 1 and fails but not lifecycle event 2" do
+            assert_raised_with_message('failed to create hook command') do
               @command_executor.execute_command(@command, @deployment_spec)
             end
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash_2).never
