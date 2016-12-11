@@ -9,7 +9,7 @@ module InstanceAgent
           def initialize(object, opts = {})
             object = object.to_s
             if (object.empty?)
-              raise AppSpecValidationException, 'Permission needs a object value'
+              raise AppSpecValidationException, 'The deployment failed because a permission listed in the application specification file has no object value. Update the permissions section of the AppSpec file, and then try again.'
             end
             @object = object
             @pattern = opts[:pattern] || "**"
@@ -25,10 +25,10 @@ module InstanceAgent
           def validate_file_permission()
             if @type.include?("file")
               if !"**".eql?(@pattern)
-                raise AppSpecValidationException, "Attempt to use pattern #{@pattern} when assigning permissions to file #{@object}"
+                raise AppSpecValidationException, "The deployment failed because the application specification file includes an object (#{@object}) with an invalid pattern (#{@pattern}), such as a pattern for a file applied to a directory. Correct the permissions section of the AppSpec file, and then try again."
               end
               if !@except.empty?
-                raise AppSpecValidationException, "Attempt to use except #{@except} when assigning permissions to file #{@object}"
+                raise AppSpecValidationException, "The deployment failed because the except parameter for a pattern in the permissions section (#{@except}) for the object named #{@object} contains an invalid format. Update the AppSpec file, and then try again."
               end
             end
           end
@@ -37,7 +37,7 @@ module InstanceAgent
             if !@acls.nil?
               default_acl = @acls.get_default_ace
               if !default_acl.nil?
-                raise "Attempt to set default acl #{default_acl} on file #{object}"
+                raise "The deployment failed because the -d parameter has been specified to apply an acl setting to a file. This parameter is supported for directories only. Update the AppSpec file, and then try again."
               end
             end
           end

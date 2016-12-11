@@ -12,7 +12,7 @@ module InstanceAgent
               file_config = YAML.load(File.read(file_path)).symbolize_keys
             rescue
               log(:error, "Invalid on premises config file")
-              raise "Invalid on premises config file"
+              raise "The deployment failed because the format of the following on-premises configuration file is invalid: #{file_path}"
             end
           else
             log(:info, "On Premises config file does not exist or not readable")

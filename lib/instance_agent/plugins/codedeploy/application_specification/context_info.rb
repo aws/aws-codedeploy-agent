@@ -8,7 +8,7 @@ module InstanceAgent
           attr_reader :user, :role, :type, :range
           def initialize(context)
             if context['type'].nil?
-              raise AppSpecValidationException, "invalid context type required #{context.inspect}"
+              raise AppSpecValidationException, "The deployment failed because the application specification file specifies an invalid context type (#{context.inspect}). Update the permissions section of the AppSpec file, and then try again."
             end
             @user = context['name']
             @role = nil

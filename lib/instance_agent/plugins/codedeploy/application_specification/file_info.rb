@@ -8,9 +8,9 @@ module InstanceAgent
           attr_reader :source, :destination
           def initialize(source, destination, opts = {})
             if(source.nil?)
-              raise AppSpecValidationException, 'File needs to have a source'
+              raise AppSpecValidationException, 'The deployment failed because the application specification file specifies a destination file, but no source file. Update the files section of the AppSpec file, and then try again.'
             elsif (destination.nil?)
-              raise AppSpecValidationException, "File #{source} needs to have a destination"
+              raise AppSpecValidationException, "The deployment failed because the application specification file specifies only a source file (#{source}). Add the name of the destination file to the files section of the AppSpec file, and then try again."
             end
             @source = source
             @destination = destination

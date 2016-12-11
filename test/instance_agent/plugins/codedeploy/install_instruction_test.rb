@@ -78,7 +78,7 @@ module InstanceAgent
               File.stubs(:exists?).with("directory").returns(true)
               FileUtils.stubs(:copy)
 
-              assert_raised_with_message("File already exists at directory") do
+              assert_raised_with_message("The deployment failed because a specified file already exists at this location: directory.") do
                 commands.each do |command|
                   command.execute(@mock_file)
                 end
@@ -383,7 +383,7 @@ module InstanceAgent
             end
 
             should "raise a duplicate exception when a copy collides with another copy" do
-              assert_raised_with_message("Duplicate copy instruction to /tmp/destination from source and source") do
+              assert_raised_with_message("The deployment failed because the application specification file specifies two source files named source and source for the same destination (/tmp/destination). Remove one of the source file paths from the AppSpec file, and then try again.") do
                 @command_builder.copy("source", "destination")
               end
             end
@@ -402,7 +402,7 @@ module InstanceAgent
 
             should "raise a duplicate exception when trying to create a directory collides with a copy" do
               @command_builder.copy("source", "directory/dir1")
-              assert_raised_with_message("Duplicate mkdir instruction for /tmp/directory/dir1 which is already being copied from source") do
+              assert_raised_with_message("The deployment failed because the application specification file includes an mkdir command more than once for the same destination path (/tmp/directory/dir1) from (source). Update the files section of the AppSpec file, and then try again.") do
                 @command_builder.mkdir("directory/dir1")
               end
             end
@@ -416,7 +416,7 @@ module InstanceAgent
             end
 
             should "raise a duplicate exception when trying to make a copy collides with a mkdir" do
-              assert_raised_with_message("Duplicate copy instruction to /tmp/directory/target from target which is already being installed as a directory") do
+              assert_raised_with_message("The deployment failed because the application specification file calls for installing the file target, but a file with that name already exists at the location (/tmp/directory/target). Update your AppSpec file or directory structure, and then try again.") do
                 @command_builder.copy( "target", "directory/target")
               end
             end
@@ -515,7 +515,7 @@ module InstanceAgent
               @permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("testfile.txt")
               @command_builder = CommandBuilder.new()
               @command_builder.set_permissions("testfile.txt", @permission)
-              assert_raised_with_message("Duplicate permission setting instructions for /tmp/testfile.txt") do
+              assert_raised_with_message("The deployment failed because the permissions setting for (/tmp/testfile.txt) is specified more than once in the application specification file. Update the files section of the AppSpec file, and then try again.") do
                 @command_builder.set_permissions("testfile.txt", @permission)
               end
             end

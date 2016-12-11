@@ -12,12 +12,12 @@ module InstanceAgent
             @name = ""
             parts = ace.split(":", -1).reverse
             if (parts.length < 2) || (parts.length > 4)
-              raise AppSpecValidationException, "invalid acl entry #{ace}"
+              raise AppSpecValidationException, "The deployment failed because of a problem with the acls permission settings in the application specification file. Invalid acl entry (#{ace})."
             end
 
             if (parts.length == 4)
               if !(parts[3].eql?("d") || (parts[3].eql?("default")))
-                raise AppSpecValidationException, "invalid acl entry #{ace}"
+                raise AppSpecValidationException, "The deployment failed because of a problem with the acls permission settings in the application specification file. Invalid acl entry (#{ace})."
               end
               @default = true
             end
@@ -25,7 +25,7 @@ module InstanceAgent
             if parts.length >= 3
               if parts[2].eql?("d") || (parts[2].eql?("default"))
                 if @default
-                  raise AppSpecValidationException, "invalid acl entry #{ace}"
+                  raise AppSpecValidationException, "The deployment failed because of a problem with the acls permission settings in the application specification file. Invalid acl entry (#{ace})."
                 end
                 @default = true
               elsif parts[2].eql?("m") || parts[2].eql?("mask")
@@ -37,7 +37,7 @@ module InstanceAgent
               elsif parts[2].eql?("u") || parts[2].eql?("user")
                 @type = "user"
               else
-                raise AppSpecValidationException, "invalid acl entry #{ace}"
+                raise AppSpecValidationException, "The deployment failed because of a problem with the acls permission settings in the application specification file. Invalid acl entry (#{ace})."
               end
             end
 
@@ -61,10 +61,10 @@ module InstanceAgent
             end
 
             if (@type.eql?("mask") || @type.eql?("other")) && !@name.empty?
-              raise AppSpecValidationException, "invalid acl entry #{ace}"
+              raise AppSpecValidationException, "The deployment failed because of a problem with the acls permission settings in the application specification file. Invalid acl entry (#{ace})."
             end
             if (!internal && !@default && !@type.eql?("mask") && @name.empty?)
-              raise AppSpecValidationException, "use mode to set the base acl entry #{ace}"
+              raise AppSpecValidationException, "The deployment failed because of a problem with the acls permission settings in the application specification file. Use mode to set the base acl entry (#{ace}). Update the permissions section of the AppSpec file, and then try again."
             end
 
             perm_chars = parts[0].chars.entries
@@ -87,7 +87,7 @@ module InstanceAgent
                   @execute = true
                 when '-'
                 else
-                  raise AppSpecValidationException, "unrecognized permission character #{perm} in #{ace}"
+                  raise AppSpecValidationException, "The deployment failed because the access control list (ACL) named #{ace} in the application specification file contains an invalid character (#{perm}). Correct the ACL in the hooks section of the AppSpec file, and then try again."
                 end
               end
             end

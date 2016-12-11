@@ -35,7 +35,7 @@ module InstanceAgent
               commands << ChangeAclCommand.new(mapping['file'], InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::AclInfo.new(mapping['acl']))
             when "semanage"
               if !mapping['context']['role'].nil?
-                raise "Attempt to set role on object, not supported"
+                raise "The deployment failed because the application specification file specifies a role, but roles are not supported. Remove the role from the AppSpec file, and then try again."
               end
               commands << ChangeContextCommand.new(mapping['file'], InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::ContextInfo.new(mapping['context']))
             else
@@ -82,8 +82,8 @@ module InstanceAgent
         def copy(source, destination)
           destination = sanitize_dir_path(destination)
           log(:debug, "Copying #{source} to #{destination}")
-          raise "Duplicate copy instruction to #{destination} from #{source} and #{@copy_targets[destination]}" if @copy_targets.has_key?(destination)
-          raise "Duplicate copy instruction to #{destination} from #{source} which is already being installed as a directory" if @mkdir_targets.include?(destination)
+          raise "The deployment failed because the application specification file specifies two source files named #{source} and #{@copy_targets[destination]} for the same destination (#{destination}). Remove one of the source file paths from the AppSpec file, and then try again." if @copy_targets.has_key?(destination)
+          raise "The deployment failed because the application specification file calls for installing the file #{source}, but a file with that name already exists at the location (#{destination}). Update your AppSpec file or directory structure, and then try again." if @mkdir_targets.include?(destination)
           @command_array << CopyCommand.new(source, destination)
           @copy_targets[destination] = source
         end
@@ -91,7 +91,7 @@ module InstanceAgent
         def mkdir(destination)
           destination = sanitize_dir_path(destination)
           log(:debug, "Making directory #{destination}")
-          raise "Duplicate mkdir instruction for #{destination} which is already being copied from #{@copy_targets[destination]}" if @copy_targets.has_key?(destination)
+          raise "The deployment failed because the application specification file includes an mkdir command more than once for the same destination path (#{destination}) from (#{@copy_targets[destination]}). Update the files section of the AppSpec file, and then try again." if @copy_targets.has_key?(destination)
           @command_array << MakeDirectoryCommand.new(destination) unless @mkdir_targets.include?(destination)
           @mkdir_targets.add(destination)
         end
@@ -99,7 +99,7 @@ module InstanceAgent
         def set_permissions(object, permission)
           object = sanitize_dir_path(object)
           log(:debug, "Setting permissions on #{object}")
-          raise "Duplicate permission setting instructions for #{object}" if @permission_targets.include?(object)
+          raise "The deployment failed because the permissions setting for (#{object}) is specified more than once in the application specification file. Update the files section of the AppSpec file, and then try again." if @permission_targets.include?(object)
           @permission_targets.add(object)
 
           if !permission.mode.nil?
@@ -228,7 +228,7 @@ module InstanceAgent
         end
 
         def execute(cleanup_file)
-          raise "File already exists at #{@destination}"  if File.exists?(@destination)
+          raise "The deployment failed because a specified file already exists at this location: #{@destination}."  if File.exists?(@destination)
           cleanup_file.puts(@destination)
           if File.symlink?(@source)
             FileUtils.symlink(File.readlink(@source), @destination)
@@ -248,7 +248,7 @@ module InstanceAgent
         end
 
         def execute(cleanup_file)
-          raise "File already exists at #{@directory}" if
+          raise "The deployment failed because a specified file already exists at this location: #{@directory}." if
           File.exists?(@directory)
           FileUtils.mkdir(@directory)
           cleanup_file.puts(@directory)
@@ -285,7 +285,7 @@ module InstanceAgent
             get_full_acl
             acl = @acl.get_acl.join(",")
             if !system("setfacl --set #{acl} #{@object}")
-              raise "Unable to set acl correctly: setfacl --set #{acl} #{@object}, exit code: #{$?}"
+              raise "The deployment failed because of a problem with the acls permission settings in the application specification file for this object: #{@object}. Failed command: setfacl --set #{acl} #{@object}. Exit code: #{$?}"
             end
           ensure
             clear_full_acl
@@ -352,7 +352,7 @@ module InstanceAgent
 
         def execute(cleanup_file)
           if !@context.role.nil?
-            raise "Attempt to set role on object, not supported"
+            raise "The deployment failed because the application specification file specifies a role, but roles are not supported. Remove the role from the AppSpec file, and then try again."
           end
           args = "-t #{@context.type}"
           if (!@context.user.nil?)
@@ -364,10 +364,10 @@ module InstanceAgent
 
           object = File.realpath(@object)
           if !system("semanage fcontext -a #{args} #{object}")
-            raise "Unable to set context: semanage fcontext -a #{args} #{object}, exit code: #{$?}"
+            raise "The deployment failed because the application specification file contains an error in the settings for the context parameter. Update the permissions section of the AppSpec file, and then try again. Failed command: semanage fcontext -a #{args} #{object}. Exit code: #{$?}"
           end
           if !system("restorecon -v #{object}")
-            raise "Unable to apply context: restorcecon -v #{object}, exit code: #{$?}"
+            raise "The deployment failed because the application specification file contains an error in the settings for the context parameter. Update the permissions section of the AppSpec file, and then try again. Failed command: restorecon -v #{object}. Exit code: #{$?}"
           end
           cleanup_file.puts("semanage\0#{object}")
         end

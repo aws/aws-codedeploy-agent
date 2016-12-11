@@ -140,7 +140,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
           should "raise an error if the file already exists" do
             File.stubs(:exists?).with("dst2/src2").returns(true)
 
-            assert_raised_with_message("File already exists at location dst2/src2") do
+            assert_raised_with_message("The deployment failed because a specified file already exists at this location: dst2/src2") do
               @installer.install(@deployment_group_id, @app_spec)
             end
           end
@@ -287,7 +287,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
             @instruction_builder.stubs(:mkdir)
             @instruction_builder.stubs(:copy)
 
-            assert_raised_with_message("File already exists at location dst1/bar") do
+            assert_raised_with_message("The deployment failed because a specified file already exists at this location: dst1/bar") do
               @installer.install(@deployment_group_id, @app_spec)
             end
           end
@@ -355,7 +355,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
               @instruction_builder.stubs(:mkdir)
               @instruction_builder.stubs(:copy)
 
-              assert_raised_with_message("File already exists at location dst1/foo/bar") do
+              assert_raised_with_message("The deployment failed because a specified file already exists at this location: dst1/foo/bar") do
                 @installer.install(@deployment_group_id, @app_spec)
               end
             end

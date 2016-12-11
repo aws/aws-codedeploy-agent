@@ -26,7 +26,7 @@ module InstanceAgent
 
           def parse_version(version)
             if !supported_versions.include?(version)
-              raise AppSpecValidationException, "unsupported version: #{version}"
+              raise AppSpecValidationException, "The deployment failed because an invalid version value (#{version}) was entered in the application specification file. Make sure your AppSpec file specifies \"0.0\" as the version, and then try again."
             end
             version
           end
@@ -37,7 +37,7 @@ module InstanceAgent
 
           def parse_os(os)
             if !supported_oses.include?(os)
-              raise AppSpecValidationException, "unsupported os: #{os}"
+              raise AppSpecValidationException, "The deployment failed because the application specification file specifies an unsupported operating system (#{os}). Specify either \"linux\" or \"windows\" in the os section of the AppSpec file, and then try again."
             end
             os
           end
@@ -64,7 +64,7 @@ module InstanceAgent
                     :timeout => script['timeout']
                   })
                 else
-                  raise AppSpecValidationException, 'script provided without a location value'
+                  raise AppSpecValidationException, 'The deployment failed because the application specification file specifies a script with no location value. Specify the location in the hooks section of the AppSpec file, and then try again.'
                 end
               end
               temp_hooks_hash[hook] = current_hook_scripts
@@ -77,7 +77,7 @@ module InstanceAgent
             #loop through list and create permissionsInfo representations
             permissions_list.each do |permission|
               if !permission.has_key?('object') || permission['object'].nil?
-                raise AppSpecValidationException, 'permission provided without a object value'
+                raise AppSpecValidationException, 'The deployment failed because a permission listed in the application specification file has no object value. Update the permissions section of the AppSpec file, and then try again.'
               end
               if @os.eql?('linux')
                 permissions << InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new(permission['object'].to_s.strip,
@@ -92,7 +92,7 @@ module InstanceAgent
                   :context => parse_context(permission['context'])
                 })
               else
-                raise AppSpecValidationException, 'permissions only supported with linux os currently'
+                raise AppSpecValidationException, 'The deployment failed because the application specification file specifiles file permissions, but the deployment is targeting one or more Windows Server instances. Permissions are supported only for Amazon Linux, Ubuntu Server, and Red Hat Enterprise Linux (RHEL) instances. Update the permissions section of the AppSpec file, and then try again.'
               end
             end
             permissions
@@ -119,7 +119,7 @@ module InstanceAgent
             type_list ||= supported_types
             type_list.each do |type|
               if !supported_types.include?(type)
-                raise AppSpecValidationException, "assigning permissions to objects of type #{type} not supported"
+                raise AppSpecValidationException, "The deployment failed because the application specification file specifies a permission for an object type not supported for permissions (#{type}). Update the permissions section of the AppSpec file, and then try again."
               end
             end
             type_list

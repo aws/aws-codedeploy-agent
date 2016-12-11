@@ -16,11 +16,11 @@ module InstanceAgent
               mode = "0" + mode;
             end
             if mode.length > 4
-              raise AppSpecValidationException, "permission mode length incorrect: #{mode}"
+              raise AppSpecValidationException, "The deployment failed because the length of a permissions mode (#{mode}) in the application specification file is invalid. Permissions modes must be between one and four characters long. Update the permissions section of the AppSpec file, and then try again."
             end
             mode.each_char do |char|
               if (char.ord < '0'.ord) || (char.ord > '7'.ord)
-                raise AppSpecValidationException, "invalid character #{char} in permission mode #{mode}"
+                raise AppSpecValidationException, "The deployment failed because the permissions mode (#{mode}) in the application specification file contains an invalid character (#{char}). Update the permissions section of the AppSpec file, and then try again."
               end
             end
             @mode = mode

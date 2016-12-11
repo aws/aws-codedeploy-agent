@@ -27,7 +27,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('unsupported version: ',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because an invalid version value () was entered in the application specification file. Make sure your AppSpec file specifies "0.0" as the version, and then try again.',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -42,7 +42,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('unsupported version: invalid',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because an invalid version value (invalid) was entered in the application specification file. Make sure your AppSpec file specifies "0.0" as the version, and then try again.',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -56,7 +56,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('unsupported os: ',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because the application specification file specifies an unsupported operating system (). Specify either "linux" or "windows" in the os section of the AppSpec file, and then try again.',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -71,7 +71,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('unsupported os: unsupported',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because the application specification file specifies an unsupported operating system (unsupported). Specify either "linux" or "windows" in the os section of the AppSpec file, and then try again.',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -218,7 +218,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('script provided without a location value',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because the application specification file specifies a script with no location value. Specify the location in the hooks section of the AppSpec file, and then try again.',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -238,7 +238,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('Timeout needs to be an integer greater than 0',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because an invalid timeout value was provided for a script in the application specification file. Make corrections in the hooks section of the AppSpec file, and then try again.',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -296,7 +296,7 @@ module InstanceAgent
                 end
 
                 should  "raise and AppSpecValidationException" do
-                  assert_raised_with_message('File test_source needs to have a destination',AppSpecValidationException) do
+                  assert_raised_with_message('The deployment failed because the application specification file specifies only a source file (test_source). Add the name of the destination file to the files section of the AppSpec file, and then try again.',AppSpecValidationException) do
                     make_app_spec()
                   end
                 end
@@ -313,7 +313,7 @@ module InstanceAgent
                 end
 
                 should  "raise and AppSpecValidationException" do
-                  assert_raised_with_message('File needs to have a source',AppSpecValidationException) do
+                  assert_raised_with_message('The deployment failed because the application specification file specifies a destination file, but no source file. Update the files section of the AppSpec file, and then try again.',AppSpecValidationException) do
                     make_app_spec()
                   end
                 end
@@ -331,7 +331,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('permission provided without a object value',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because a permission listed in the application specification file has no object value. Update the permissions section of the AppSpec file, and then try again.',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -388,7 +388,7 @@ module InstanceAgent
 
               should "raise when validated as file permission" do
                 app_spec = make_app_spec()
-                assert_raised_with_message('Attempt to use pattern glob when assigning permissions to file /',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because the application specification file includes an object (/) with an invalid pattern (glob), such as a pattern for a file applied to a directory. Correct the permissions section of the AppSpec file, and then try again.',AppSpecValidationException) do
                   app_spec.permissions[0].validate_file_permission
                 end
               end
@@ -408,7 +408,7 @@ module InstanceAgent
 
               should "raise when validated as file permission" do
                 app_spec = make_app_spec()
-                assert_raised_with_message('Attempt to use except ["glob"] when assigning permissions to file /',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because the except parameter for a pattern in the permissions section (["glob"]) for the object named / contains an invalid format. Update the AppSpec file, and then try again.',AppSpecValidationException) do
                   app_spec.permissions[0].validate_file_permission
                 end
               end
@@ -487,7 +487,7 @@ module InstanceAgent
 
               should "be able to validate as a file acl" do
                 app_spec = make_app_spec()
-                assert_raised_with_message('Attempt to set default acl default:user:name:rwx on file test',RuntimeError) do
+                assert_raised_with_message('The deployment failed because the -d parameter has been specified to apply an acl setting to a file. This parameter is supported for directories only. Update the AppSpec file, and then try again.',RuntimeError) do
                   app_spec.permissions[0].validate_file_acl("test")
                 end
               end
@@ -616,7 +616,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('invalid acl entry 7',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because of a problem with the acls permission settings in the application specification file. Invalid acl entry (7).',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -635,7 +635,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('invalid acl entry d:u:bob:7:rwx',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because of a problem with the acls permission settings in the application specification file. Invalid acl entry (d:u:bob:7:rwx).',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -654,7 +654,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('invalid acl entry invalid:u:bob:7:rwx',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because of a problem with the acls permission settings in the application specification file. Invalid acl entry (invalid:u:bob:7:rwx).',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -673,7 +673,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('invalid acl entry d:invalid:bob:7:rwx',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because of a problem with the acls permission settings in the application specification file. Invalid acl entry (d:invalid:bob:7:rwx).',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -692,7 +692,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('invalid acl entry d:d:bob:7:rwx',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because of a problem with the acls permission settings in the application specification file. Invalid acl entry (d:d:bob:7:rwx).',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -711,7 +711,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('invalid acl entry mask:name:rwx',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because of a problem with the acls permission settings in the application specification file. Invalid acl entry (mask:name:rwx).',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -730,7 +730,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('invalid acl entry d:other:name:rwx',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because of a problem with the acls permission settings in the application specification file. Invalid acl entry (d:other:name:rwx).',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -749,7 +749,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('unrecognized permission character d in user:bob:rwxd',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because the access control list (ACL) named user:bob:rwxd in the application specification file contains an invalid character (d). Correct the ACL in the hooks section of the AppSpec file, and then try again.',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -962,7 +962,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('invalid sensitivity range in s3-s2:c0',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because of a problem with the SELinux range specified (s3-s2:c0) for the context parameter in the permissions section of the application specification file. Make corrections in the permissions section of the AppSpec file, and then try again.',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -1279,7 +1279,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message("invalid context type required {\"name\"=>\"name\"}",AppSpecValidationException) do
+                assert_raised_with_message("The deployment failed because the application specification file specifies an invalid context type ({\"name\"=>\"name\"}). Update the permissions section of the AppSpec file, and then try again.",AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -1360,7 +1360,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('permission mode length incorrect: 12345',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because the length of a permissions mode (12345) in the application specification file is invalid. Permissions modes must be between one and four characters long. Update the permissions section of the AppSpec file, and then try again.',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -1412,7 +1412,7 @@ module InstanceAgent
               end
 
               should "raise an exception" do
-                assert_raised_with_message('invalid character a in permission mode 12a',AppSpecValidationException) do
+                assert_raised_with_message('The deployment failed because the permissions mode (12a) in the application specification file contains an invalid character (a). Update the permissions section of the AppSpec file, and then try again.',AppSpecValidationException) do
                   make_app_spec()
                 end
               end
@@ -1709,19 +1709,19 @@ module InstanceAgent
             end
 
             should "raise when not internal and has base user" do
-              assert_raised_with_message("use mode to set the base acl entry u::7",AppSpecValidationException) do
+              assert_raised_with_message("The deployment failed because of a problem with the acls permission settings in the application specification file. Use mode to set the base acl entry (u::7). Update the permissions section of the AppSpec file, and then try again.",AppSpecValidationException) do
                 InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::AceInfo.new("u::7")
               end
             end
 
             should "raise when not internal and has base group" do
-              assert_raised_with_message("use mode to set the base acl entry g::7",AppSpecValidationException) do
+              assert_raised_with_message("The deployment failed because of a problem with the acls permission settings in the application specification file. Use mode to set the base acl entry (g::7). Update the permissions section of the AppSpec file, and then try again.",AppSpecValidationException) do
                 InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::AceInfo.new("g::7")
               end
             end
 
             should "raise when not internal and has base other" do
-              assert_raised_with_message("use mode to set the base acl entry o:7",AppSpecValidationException) do
+              assert_raised_with_message("The deployment failed because of a problem with the acls permission settings in the application specification file. Use mode to set the base acl entry (o:7). Update the permissions section of the AppSpec file, and then try again.",AppSpecValidationException) do
                 InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::AceInfo.new("o:7")
               end
             end

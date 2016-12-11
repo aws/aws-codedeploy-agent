@@ -13,7 +13,7 @@ module InstanceAgent
             if sensitivity_parts.length == 2
               @high_sensitivity = getSensitivityNumber(sensitivity_parts[1])
               if @high_sensitivity < @low_sensitivity
-                raise AppSpecValidationException, "invalid sensitivity range in #{range}"
+                raise AppSpecValidationException, "The deployment failed because of a problem with the SELinux range specified (#{range}) for the context parameter in the permissions section of the application specification file. Make corrections in the permissions section of the AppSpec file, and then try again."
               end
             else
               @high_sensitivity = @low_sensitivity

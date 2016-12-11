@@ -112,7 +112,7 @@ module InstanceAgent
 
         private
         def generate_normal_copy(i, absolute_source_path, destination)
-          raise "File already exists at location #{destination}" if
+          raise "The deployment failed because a specified file already exists at this location: #{destination}" if
           File.exists?(destination)
 
           i.copy(absolute_source_path, destination)
