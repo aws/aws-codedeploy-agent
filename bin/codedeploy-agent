@@ -1,12 +1,11 @@
 #!/usr/bin/env ruby
 
-ruby_versions = ["2.3", "2.2", "2.1", "2.0"]
+ruby_versions = ["2.4", "2.3", "2.2", "2.1", "2.0"]
 actual_ruby_version = RUBY_VERSION.split('.').map{|s|s.to_i}
 left_bound = '2.0.0'.split('.').map{|s|s.to_i}
-right_bound = '2.3.1'.split('.').map{|s|s.to_i}
 ruby_bin = nil
 
-if (actual_ruby_version <=> left_bound) > -1 && (actual_ruby_version <=> right_bound) < 1
+if (actual_ruby_version <=> left_bound) > -1
   ruby_bin = "ruby"
 else
   ruby_versions.each do |i|
@@ -22,5 +21,5 @@ if ruby_bin
   exec("#{ruby_bin} #{File.join(File.expand_path(File.dirname(__FILE__)), "../lib/codedeploy-agent.rb")} #{ARGV.join(' ')}")
 end
 
-STDERR.puts "No supported ruby version found. Code Deploy Host Agent supports Ruby version of 2.0.x to 2.3.x."
+STDERR.puts "No supported ruby version found. Code Deploy Host Agent supports Ruby version 2.0.x and greater."
 exit(1)
