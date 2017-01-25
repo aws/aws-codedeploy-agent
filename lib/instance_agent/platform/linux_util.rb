@@ -40,12 +40,18 @@ module InstanceAgent
 
     def self.extract_tar(bundle_file, dst)
       FileUtils.mkdir_p(dst)
-      execute_tar_command("/bin/tar -xpsf #{bundle_file} -C #{dst}")
+      working_dir = FileUtils.pwd()
+      FileUtils.cd(dst)
+      execute_tar_command("/bin/tar -xpsf #{bundle_file}")
+      FileUtils.cd(working_dir)
     end
 
     def self.extract_tgz(bundle_file, dst)
       FileUtils.mkdir_p(dst)
-      execute_tar_command("/bin/tar -zxpsf #{bundle_file} -C #{dst}")
+      working_dir = FileUtils.pwd()
+      FileUtils.cd(dst)
+      execute_tar_command("/bin/tar -zxpsf #{bundle_file}")
+      FileUtils.cd(working_dir)
     end
 
     def self.supports_process_groups?()
