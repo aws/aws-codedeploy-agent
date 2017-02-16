@@ -8,8 +8,13 @@ class InstanceMetadata
   PORT = 80
   
   def self.host_identifier
+    country = region.split('-')[0]
     doc = JSON.parse(http_get('/latest/dynamic/instance-identity/document').strip)
-    "arn:aws:ec2:#{doc['region']}:#{doc['accountId']}:instance/#{doc['instanceId']}"
+    if "cn" == country
+        "arn:aws-cn:ec2:#{doc['region']}:#{doc['accountId']}:instance/#{doc['instanceId']}"
+    else
+        "arn:aws:ec2:#{doc['region']}:#{doc['accountId']}:instance/#{doc['instanceId']}"
+    end
   end
 
   def self.region

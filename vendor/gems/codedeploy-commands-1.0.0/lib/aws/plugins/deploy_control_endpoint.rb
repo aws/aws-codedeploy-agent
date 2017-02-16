@@ -7,6 +7,9 @@ module Aws
         url = ENV['AWS_DEPLOY_CONTROL_ENDPOINT']
         if url.nil?
           url = "https://codedeploy-commands.#{cfg.region}.amazonaws.com"
+          if "cn" == cfg.region.split("-")[0]
+            url.concat(".cn")
+          end
         end
         url
       end

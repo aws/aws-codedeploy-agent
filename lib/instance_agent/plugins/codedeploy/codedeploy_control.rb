@@ -92,7 +92,11 @@ module InstanceAgent
         # Do minimal cert pinning
         def verify_subject
           InstanceAgent::Log.debug("#{self.class.to_s}: Actual certificate subject is '#{@cert.subject.to_s}'")
-          @cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-commands."+@region+".amazonaws.com"
+          if "cn" == @region.split("-")[0]
+            @cert.subject.to_s == "/C=CN/ST=Beijing/L=Beijing/O=Amazon Connect Technology Services (Beijing) Co., Ltd./CN=codedeploy-commands."+@region+".amazonaws.com.cn"
+          else
+            @cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-commands."+@region+".amazonaws.com"
+          end
         end
 
       end
