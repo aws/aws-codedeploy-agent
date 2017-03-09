@@ -166,7 +166,7 @@ module InstanceAgent
           return unless File.exist? last_successful_install_file_location
           File.open last_successful_install_file_location do |f|
             return f.read.chomp
-          end 
+          end
         end
 
         private
@@ -175,7 +175,7 @@ module InstanceAgent
           return unless File.exist? most_recent_install_file_location
           File.open most_recent_install_file_location do |f|
             return f.read.chomp
-          end 
+          end
         end
 
         private
@@ -199,7 +199,7 @@ module InstanceAgent
         def download_from_s3(deployment_spec, bucket, key, version, etag)
           log(:debug, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
           region = ENV['AWS_REGION'] || InstanceMetadata.region
-          
+
           proxy_uri = nil
           if InstanceAgent::Config.config[:proxy_uri]
             proxy_uri = URI(InstanceAgent::Config.config[:proxy_uri])
@@ -314,12 +314,18 @@ module InstanceAgent
           elsif "tgz".eql? deployment_spec.bundle_type
             InstanceAgent::Platform.util.extract_tgz(bundle_file, dst)
           elsif "zip".eql? deployment_spec.bundle_type
-            Zip::File.open(bundle_file) do |zipfile|
-              zipfile.each do |f|
-                file_dst = File.join(dst, f.name)
-                FileUtils.mkdir_p(File.dirname(file_dst))
-                zipfile.extract(f, file_dst)
+            begin
+              # First try to unzip with pure Ruby.
+              Zip::File.open(bundle_file) do |zipfile|
+                zipfile.each do |f|
+                  file_dst = File.join(dst, f.name)
+                  FileUtils.mkdir_p(File.dirname(file_dst))
+                  zipfile.extract(f, file_dst)
+                end
               end
+              rescue
+                # Fallback to platform-specific tools.
+                InstanceAgent::Platform.util.extract_zip(bundle_file, dst)
             end
           else
             # If the bundle was a generated through a Sabini Repository
@@ -362,7 +368,7 @@ module InstanceAgent
           File.open(most_recent_install_file_path(deployment_spec.deployment_group_id), 'w+') do |f|
             f.write deployment_root_dir(deployment_spec)
           end
-        end  
+        end
 
         private
         def cleanup_old_archives(deployment_spec)
@@ -374,7 +380,7 @@ module InstanceAgent
 
           full_path_deployment_archives = deployment_archives.map{ |f| File.join(ProcessManager::Config.config[:root_dir], deployment_group, f)}
           full_path_deployment_archives.delete(deployment_root_dir(deployment_spec))
-          
+
           extra = full_path_deployment_archives.size - @archives_to_retain + 1
           return unless extra > 0
 

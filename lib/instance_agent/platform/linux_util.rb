@@ -25,7 +25,7 @@ module InstanceAgent
       end
 
       # If neither sudo or runas is specified, execute the
-      # command as the code deploy agent user 
+      # command as the code deploy agent user
       absolute_cmd_path
     end
 
@@ -50,7 +50,15 @@ module InstanceAgent
       FileUtils.mkdir_p(dst)
       working_dir = FileUtils.pwd()
       FileUtils.cd(dst)
-      execute_tar_command("/bin/tar -zxpsf #{bundle_file}")
+      execute_command("/bin/tar -zxpsf #{bundle_file}")
+      FileUtils.cd(working_dir)
+    end
+
+    def self.extract_zip(bundle_file, dst)
+      FileUtils.mkdir_p(dst)
+      working_dir = FileUtils.pwd()
+      FileUtils.cd(dst)
+      execute_command("/usr/sbin/unzip #{bundle_file}")
       FileUtils.cd(working_dir)
     end
 
@@ -65,9 +73,9 @@ module InstanceAgent
     def self.fallback_version_file
       "/opt/codedeploy-agent"
     end
-    
+
     private
-    def self.execute_tar_command(cmd)
+    def self.execute_command(cmd)
       log(:debug, "Executing #{cmd}")
 
       output = `#{cmd} 2>&1`
@@ -77,7 +85,7 @@ module InstanceAgent
       log(:debug, "Command output: #{output}")
 
       if exit_status != 0
-        msg = "Error extracting tar archive: #{exit_status}"
+        msg = "Error extracting archive: #{exit_status}"
         log(:error, msg)
         raise msg
       end
