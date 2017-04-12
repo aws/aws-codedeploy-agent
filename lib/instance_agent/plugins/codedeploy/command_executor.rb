@@ -112,7 +112,8 @@ module InstanceAgent
           end
 
           installer = Installer.new(:deployment_instructions_dir => deployment_instructions_dir,
-          :deployment_archive_dir => archive_root_dir(deployment_spec))
+          :deployment_archive_dir => archive_root_dir(deployment_spec),
+          :file_exists_behavior => deployment_spec.file_exists_behavior)
 
           log(:debug, "Installing revision #{deployment_spec.revision} in "+
           "instance group #{deployment_spec.deployment_group_id}")

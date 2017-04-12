@@ -54,6 +54,9 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           "Key" => "mykey",
           "BundleType" => "tar"
         }
+        @file_exists_behavior = "RETAIN"
+        @agent_actions_overrides_map = {"FileExistsBehavior" => @file_exists_behavior}
+        @agent_actions_overrides = {"AgentOverrides" => @agent_actions_overrides_map}
         @deployment_spec = generate_signed_message_for({
           "DeploymentId" => @deployment_id.to_s,
           "DeploymentGroupId" => @deployment_group_id,
@@ -61,6 +64,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           "DeploymentGroupName" => @deployment_group_name,
           "DeploymentCreator" => @deployment_creator,
           "DeploymentType" => @deployment_type,
+          "AgentActionOverrides" => @agent_actions_overrides,
           "Revision" => {
             "RevisionType" => "S3",
             "S3Revision" => @s3Revision
@@ -153,7 +157,8 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           Installer.
           expects(:new).
           with(:deployment_instructions_dir => @deployment_instructions_dir,
-          :deployment_archive_dir => @archive_root_dir).
+          :deployment_archive_dir => @archive_root_dir,
+          :file_exists_behavior => @file_exists_behavior).
           returns(@installer)
 
           @command_executor.execute_command(@command, @deployment_spec)

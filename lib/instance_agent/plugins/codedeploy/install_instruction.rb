@@ -228,7 +228,8 @@ module InstanceAgent
         end
 
         def execute(cleanup_file)
-          raise "The deployment failed because a specified file already exists at this location: #{@destination}."  if File.exists?(@destination)
+          # NO need to check if file already exists in here, because if that's the case,
+          # the CopyCommand entry should not even be created by Installer
           cleanup_file.puts(@destination)
           if File.symlink?(@source)
             FileUtils.symlink(File.readlink(@source), @destination)
@@ -248,8 +249,8 @@ module InstanceAgent
         end
 
         def execute(cleanup_file)
-          raise "The deployment failed because a specified file already exists at this location: #{@directory}." if
-          File.exists?(@directory)
+          # NO need to check if file already exists in here, because if that's the case,
+          # the MakeDirectoryCommand entry should not even be created by Installer
           FileUtils.mkdir(@directory)
           cleanup_file.puts(@directory)
         end

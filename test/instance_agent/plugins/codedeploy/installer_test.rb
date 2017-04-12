@@ -11,19 +11,25 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
       @deployment_archive_dir = "deploy-archive-dir"
       @deployment_instructions_dir = "deploy-instructions-dir"
       @deployment_group_id = "ig1"
+      @file_exists_behavior = "DISALLOW"
       @installer =
         Installer.new(:deployment_archive_dir => @deployment_archive_dir,
-                      :deployment_instructions_dir => @deployment_instructions_dir)
+                      :deployment_instructions_dir => @deployment_instructions_dir,
+                      :file_exists_behavior => @file_exists_behavior)
     end
 
     context "when initializing" do
 
       should "require a deployment archive directory" do
-        assert_raise { Installer.new(:deployment_instructions_dir => "otherdir") }
+        assert_raise { Installer.new(:deployment_instructions_dir => "otherdir", :file_exists_behavior => @file_exists_behavior) }
       end
 
       should "require a deployment instructions directory" do
-        assert_raise { Installer.new(:deployment_archive_dir => "somedir") }
+        assert_raise { Installer.new(:deployment_archive_dir => "somedir", :file_exists_behavior => @file_exists_behavior) }
+      end
+
+      should "require file exists behavior" do
+        assert_raise {Installer.new(:deployment_instructions_dir => "otherdir", :deployment_archive_dir => "somedir")}
       end
 
     end
@@ -37,6 +43,12 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
     context "deployment instructions directory getter" do
       should "return the deployment instructions directory from the initializer" do
         assert_equal(@deployment_instructions_dir, @installer.deployment_instructions_dir)
+      end
+    end
+
+    context "file exists behavior getter" do
+      should "return the file exisits behavior from the initializer" do
+        assert_equal(@file_exists_behavior, @installer.file_exists_behavior)
       end
     end
 
@@ -137,10 +149,43 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
             @installer.install(@deployment_group_id, @app_spec)
           end
 
-          should "raise an error if the file already exists" do
+          should "raise an error if the file already exists and @file_exists_behavior is set to 'DISALLOW'" do
             File.stubs(:exists?).with("dst2/src2").returns(true)
 
             assert_raised_with_message("The deployment failed because a specified file already exists at this location: dst2/src2") do
+              @installer.install(@deployment_group_id, @app_spec)
+            end
+          end
+
+          should "generate a copy command if the file already exists and @file_exists_behavior is set to 'OVERWRITE'" do
+            @app_spec
+              .stubs(:files)
+              .returns([stub(:source => "src1",
+                             :destination => "dst1")])
+            File.stubs(:exists?).with("dst1/src1").returns(true)
+            @instruction_builder
+              .expects(:copy)
+              .with("deploy-archive-dir/src1", "dst1/src1")
+            @installer.file_exists_behavior = "OVERWRITE"
+            @installer.install(@deployment_group_id, @app_spec)
+          end
+
+          should "neither generate a copy command nor raise an error if the file already exists and @file_exists_behavior is set to 'RETAIN'" do
+            @app_spec
+              .stubs(:files)
+              .returns([stub(:source => "src1",
+                             :destination => "dst1")])
+            File.stubs(:exists?).with("dst1/src1").returns(true)
+            @instruction_builder.expects(:copy).never
+            @installer.file_exists_behavior = "RETAIN"
+            @installer.install(@deployment_group_id, @app_spec)
+          end
+
+          should "raise an error if the file already exists and @file_exists_behavior is set to some invalid value" do
+            File.stubs(:exists?).with("dst2/src2").returns(true)
+            @installer.file_exists_behavior = "SOMETHING_WEIRD"
+
+            assert_raised_with_message("The deployment failed because an invalid option was specified for fileExistsBehavior: #{@installer.file_exists_behavior}. Valid options include OVERWRITE, RETAIN, and DISALLOW.") do
               @installer.install(@deployment_group_id, @app_spec)
             end
           end
@@ -279,7 +324,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
             @installer.install(@deployment_group_id, @app_spec)
           end
 
-          should "raise an error if an entry already exists" do
+          should "raise an error if an entry already exists and @file_exists_behavior is set to 'DISALLOW'" do
             Dir.stubs(:entries)
               .with("deploy-archive-dir/src1")
               .returns([".", "..", "foo", "bar"])
@@ -290,6 +335,41 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
             assert_raised_with_message("The deployment failed because a specified file already exists at this location: dst1/bar") do
               @installer.install(@deployment_group_id, @app_spec)
             end
+          end
+
+          should "generate a copy command if the file already exists and @file_exists_behavior is set to 'OVERWRITE'" do
+            Dir.stubs(:entries)
+              .with("deploy-archive-dir/src1")
+              .returns([".", "..", "foo", "bar"])
+            File.stubs(:directory?).with("dst1").returns(true)
+            File.stubs(:exists?).with("dst1/bar").returns(true)
+            @instruction_builder
+              .expects(:copy)
+              .with("deploy-archive-dir/src1/foo", "dst1/foo")
+              .in_sequence(@command_sequence)
+            @instruction_builder
+              .expects(:copy)
+              .with("deploy-archive-dir/src1/bar", "dst1/bar")
+              .in_sequence(@command_sequence)
+            @installer.file_exists_behavior = "OVERWRITE"
+            @installer.install(@deployment_group_id, @app_spec)
+          end
+
+          should "neither generate a copy command nor raise an error if the file already exists and @file_exists_behavior is set to 'RETAIN'" do
+            Dir.stubs(:entries)
+              .with("deploy-archive-dir/src1")
+              .returns([".", "..", "foo", "bar"])
+            File.stubs(:directory?).with("dst1").returns(true)
+            File.stubs(:exists?).with("dst1/bar").returns(true)
+            @instruction_builder
+              .expects(:copy)
+              .with("deploy-archive-dir/src1/foo", "dst1/foo")
+            @instruction_builder
+              .expects(:copy)
+              .with("deploy-archive-dir/src1/bar", "dst1/bar")
+              .never
+            @installer.file_exists_behavior = "RETAIN"
+            @installer.install(@deployment_group_id, @app_spec)
           end
 
           context "with subdirectories" do
@@ -344,7 +424,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
               @installer.install(@deployment_group_id, @app_spec)
             end
 
-            should "raise an error if the entry already exists" do
+            should "raise an error if an entry already exists and @file_exists_behavior is set to 'DISALLOW'" do
               File.stubs(:exists?).with("dst1/foo/bar").returns(true)
               Dir.stubs(:entries)
                 .with("deploy-archive-dir/src1")
@@ -358,6 +438,38 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
               assert_raised_with_message("The deployment failed because a specified file already exists at this location: dst1/foo/bar") do
                 @installer.install(@deployment_group_id, @app_spec)
               end
+            end
+
+            should "generate a copy command if the file already exists and @file_exists_behavior is set to 'OVERWRITE'" do
+              File.stubs(:directory?).with("dst1/foo").returns(true)
+              File.stubs(:exists?).with("dst1/foo/bar").returns(true)
+              Dir.stubs(:entries)
+                .with("deploy-archive-dir/src1")
+                .returns([".", "..", "foo"])
+              Dir.stubs(:entries)
+                .with("deploy-archive-dir/src1/foo")
+                .returns([".", "..", "bar"])
+              @instruction_builder
+                .expects(:copy)
+                .with("deploy-archive-dir/src1/foo/bar", "dst1/foo/bar")
+              @installer.file_exists_behavior = "OVERWRITE"
+              @installer.install(@deployment_group_id, @app_spec)
+            end
+
+            should "neither generate a copy command nor raise an error if the file already exists and @file_exists_behavior is set to 'RETAIN'" do
+              File.stubs(:directory?).with("dst1/foo").returns(true)
+              File.stubs(:exists?).with("dst1/foo/bar").returns(true)
+              Dir.stubs(:entries)
+                .with("deploy-archive-dir/src1")
+                .returns([".", "..", "foo"])
+              Dir.stubs(:entries)
+                .with("deploy-archive-dir/src1/foo")
+                .returns([".", "..", "bar"])
+              @instruction_builder
+                .expects(:copy)
+                .never
+              @installer.file_exists_behavior = "RETAIN"
+              @installer.install(@deployment_group_id, @app_spec)
             end
 
           end # "with subdirectories"

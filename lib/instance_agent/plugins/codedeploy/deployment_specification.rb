@@ -9,6 +9,7 @@ module InstanceAgent
         attr_accessor :deployment_id, :deployment_group_id, :deployment_group_name, :revision, :revision_source, :application_name, :deployment_type, :deployment_creator
         attr_accessor :bucket, :key, :bundle_type, :version, :etag
         attr_accessor :external_account, :repository, :commit_id, :anonymous, :external_auth_token
+        attr_accessor :file_exists_behavior
         class << self
           attr_accessor :cert_store
         end
@@ -46,6 +47,17 @@ module InstanceAgent
           raise 'Must specify a revison' unless data["Revision"]
           @revision_source = data["Revision"]["RevisionType"]
           raise 'Must specify a revision source' unless @revision_source
+
+          @file_exists_behavior = 'DISALLOW'
+          if property_set?(data, "AgentActionOverrides")
+            agentActionsOverrides = data["AgentActionOverrides"]
+            if property_set?(agentActionsOverrides,  "AgentOverrides")
+              agentActionsOverridesMap = agentActionsOverrides["AgentOverrides"]
+              if property_set?(agentActionsOverridesMap, "FileExistsBehavior")
+                @file_exists_behavior = agentActionsOverridesMap["FileExistsBehavior"].upcase
+              end
+            end
+          end
 
           case @revision_source
           when 'S3'

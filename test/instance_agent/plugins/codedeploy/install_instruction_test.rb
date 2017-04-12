@@ -72,18 +72,6 @@ module InstanceAgent
                 command.execute(@mock_file)
               end
             end
-
-            should "raise an error if a file exists at the mkdir location" do
-              commands = InstallInstruction.parse_install_commands(@parse_string)
-              File.stubs(:exists?).with("directory").returns(true)
-              FileUtils.stubs(:copy)
-
-              assert_raised_with_message("The deployment failed because a specified file already exists at this location: directory.") do
-                commands.each do |command|
-                  command.execute(@mock_file)
-                end
-              end
-            end
           end
 
           context "correctly determines method from file type" do

@@ -29,6 +29,9 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
         "RevisionType" => "S3",
         "S3Revision" => @s3Revision
       }
+      @file_exists_behavior = "RETAIN"
+      @agent_actions_overrides_map = {"FileExistsBehavior" => @file_exists_behavior}
+      @agent_actions_overrides = {"AgentOverrides" => @agent_actions_overrides_map}
       @deployment_spec = {
         "ApplicationName" => @application_name,
         "DeploymentId" => @deployment_id,
@@ -36,6 +39,7 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
         "DeploymentGroupId" => @deployment_group_id,
         "DeploymentCreator" => @deployment_creator,
         "DeploymentType" => @deployment_type,
+        "AgentActionOverrides" => @agent_actions_overrides,
         "Revision" => @revision
       }
       
@@ -431,6 +435,34 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
             raise e.message
           end
         end
+      end
+    end
+
+    context "with file_exists_behavior" do
+      should "set file_exists_behavior to DISALLOW when AgentActionOverrides is not set" do
+        @deployment_spec.delete("AgentActionOverrides")
+        @packed_message = generate_signed_message_for(@deployment_spec)
+        parsed_deployment_spec = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(@packed_message)
+        assert_equal "DISALLOW", parsed_deployment_spec.file_exists_behavior
+      end
+
+      should "set file_exists_behavior to DISALLOW when AgentActionOverrides[\"AgentOverrides\"] is not set" do
+        @deployment_spec["AgentActionOverrides"].delete("AgentOverrides")
+        @packed_message = generate_signed_message_for(@deployment_spec)
+        parsed_deployment_spec = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(@packed_message)
+        assert_equal "DISALLOW", parsed_deployment_spec.file_exists_behavior
+      end
+
+      should "set file_exists_behavior to DISALLOW when AgentActionOverrides[\"AgentOverrides\"][\"FileExistsBehavior\"] is not set" do
+        @deployment_spec["AgentActionOverrides"]["AgentOverrides"].delete("FileExistsBehavior")
+        @packed_message = generate_signed_message_for(@deployment_spec)
+        parsed_deployment_spec = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(@packed_message)
+        assert_equal "DISALLOW", parsed_deployment_spec.file_exists_behavior
+      end
+
+      should "set file_exists_behavior when AgentActionOverrides[\"AgentOverrides\"][\"FileExistsBehavior\"] is set" do
+        parsed_deployment_spec = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(@packed_message)
+        assert_equal @file_exists_behavior, parsed_deployment_spec.file_exists_behavior
       end
     end
   end

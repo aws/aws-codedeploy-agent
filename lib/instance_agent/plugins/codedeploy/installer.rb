@@ -8,14 +8,18 @@ module InstanceAgent
 
         attr_reader :deployment_archive_dir
         attr_reader :deployment_instructions_dir
+        attr_accessor :file_exists_behavior
         def initialize(opts = {})
           raise "the deployment_archive_dir option is required" if
           opts[:deployment_archive_dir].nil?
           raise "the deployment_instructions_dir option is required" if
           opts[:deployment_instructions_dir].nil?
+          raise "the file_exists_behavior option is required" if
+          opts[:file_exists_behavior].nil?
 
           @deployment_archive_dir = opts[:deployment_archive_dir]
           @deployment_instructions_dir = opts[:deployment_instructions_dir]
+          @file_exists_behavior = opts[:file_exists_behavior]
         end
 
         def install(deployment_group_id, application_specification)
@@ -112,10 +116,20 @@ module InstanceAgent
 
         private
         def generate_normal_copy(i, absolute_source_path, destination)
-          raise "The deployment failed because a specified file already exists at this location: #{destination}" if
-          File.exists?(destination)
-
-          i.copy(absolute_source_path, destination)
+          if File.exists?(destination)
+            case @file_exists_behavior
+            when "DISALLOW"
+              raise "The deployment failed because a specified file already exists at this location: #{destination}"
+            when "OVERWRITE"
+              i.copy(absolute_source_path, destination)
+            when "RETAIN"
+              # neither generate copy command or fail the deployment
+            else
+              raise "The deployment failed because an invalid option was specified for fileExistsBehavior: #{@file_exists_behavior}. Valid options include OVERWRITE, RETAIN, and DISALLOW."
+            end
+          else
+            i.copy(absolute_source_path, destination)
+          end
         end
 
         private
