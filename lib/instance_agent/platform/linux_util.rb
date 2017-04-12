@@ -41,16 +41,18 @@ module InstanceAgent
     def self.extract_tar(bundle_file, dst)
       FileUtils.mkdir_p(dst)
       working_dir = FileUtils.pwd()
+      absolute_bundle_path = File.expand_path(bundle_file)
       FileUtils.cd(dst)
-      execute_tar_command("/bin/tar -xpsf #{bundle_file}")
+      execute_tar_command("/bin/tar -xpsf #{absolute_bundle_path}")
       FileUtils.cd(working_dir)
     end
 
     def self.extract_tgz(bundle_file, dst)
       FileUtils.mkdir_p(dst)
       working_dir = FileUtils.pwd()
+      absolute_bundle_path = File.expand_path(bundle_file)
       FileUtils.cd(dst)
-      execute_tar_command("/bin/tar -zxpsf #{bundle_file}")
+      execute_tar_command("/bin/tar -zxpsf #{absolute_bundle_path}")
       FileUtils.cd(working_dir)
     end
 
