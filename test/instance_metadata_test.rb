@@ -6,6 +6,7 @@ class InstanceMetadataTest < InstanceAgentTestCase
   def self.should_check_status_code(&blk)
     should 'raise unless status code is 200' do
       @response.stubs(:code).returns(503)
+      @instance_doc_response.stubs(:code).returns(503)
       assert_raise(&blk)
     end
   end
@@ -15,14 +16,20 @@ class InstanceMetadataTest < InstanceAgentTestCase
       region = 'us-east-1'
       account_id = '123456789012'
       instance_id = 'i-deadbeef'
-      @host_identifier = "arn:aws:ec2:#{region}:#{account_id}:instance/#{instance_id}"
+      @partition = 'aws'
+      @host_identifier = "arn:#{@partition}:ec2:#{region}:#{account_id}:instance/#{instance_id}"
       @instance_document = JSON.dump({"accountId" => account_id, "region" => region, "instanceId" => instance_id})
       @http = mock()
       @response = mock()
       @instance_doc_response = mock()
+      @partition_response = mock()
+      @partition_response.stubs(:code).returns("200")
       @response.stubs(:code).returns("200")
       @instance_doc_response.stubs(:code).returns("200")
-      @http.stubs(:get).returns(@response, @instance_doc_response)
+
+      @http.stubs(:get).with('/latest/meta-data/services/partition').returns(@partition_response)
+      @http.stubs(:get).with('/latest/meta-data/placement/availability-zone').returns(@response)
+      @http.stubs(:get).with('/latest/dynamic/instance-identity/document').returns(@instance_doc_response)
       Net::HTTP.stubs(:start).yields(@http)
     end
 
@@ -30,6 +37,7 @@ class InstanceMetadataTest < InstanceAgentTestCase
 
       setup do
         @response.stubs(:body).returns("us-east-1a")
+        @partition_response.stubs(:body).returns(@partition)
         @instance_doc_response.stubs(:body).returns(@instance_document)
       end
 

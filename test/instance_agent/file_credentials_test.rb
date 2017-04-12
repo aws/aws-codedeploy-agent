@@ -1,3 +1,5 @@
+require 'test_helper'
+
 class FileCredentialsTest < InstanceAgentTestCase
   context 'The file credentials' do
     should 'pass the path to SharedCredentials' do

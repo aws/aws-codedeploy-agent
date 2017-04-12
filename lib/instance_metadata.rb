@@ -8,13 +8,12 @@ class InstanceMetadata
   PORT = 80
   
   def self.host_identifier
-    country = region.split('-')[0]
     doc = JSON.parse(http_get('/latest/dynamic/instance-identity/document').strip)
-    if "cn" == country
-        "arn:aws-cn:ec2:#{doc['region']}:#{doc['accountId']}:instance/#{doc['instanceId']}"
-    else
-        "arn:aws:ec2:#{doc['region']}:#{doc['accountId']}:instance/#{doc['instanceId']}"
-    end
+    "arn:#{partition}:ec2:#{doc['region']}:#{doc['accountId']}:instance/#{doc['instanceId']}"
+  end
+
+  def self.partition
+    http_get('/latest/meta-data/services/partition').strip
   end
 
   def self.region
