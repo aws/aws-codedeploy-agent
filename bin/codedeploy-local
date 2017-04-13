@@ -22,18 +22,23 @@ Options:
   -h, --help      Show this screen.
   -v, --version   Show version.
 
+Examples:
+  #{__FILE__} deploy --location /path/to/local/bundle.tgz --type tgz
+  #{__FILE__} deploy --location /path/to/local/bundle.zip --type zip
+  #{__FILE__} deploy --location /path/to/local/bundle/dir --type uncompressed
+  #{__FILE__} deploy --location https://s3-aws-region.amazonaws.com/bucket/bundle.tgz --type tgz
+  #{__FILE__} deploy --location https://api.github.com/repos/octokit/octokit.rb/zipball --type zip
+  #{__FILE__} deploy --location /path/to/local/bundle.tgz --event Stop Start HealthCheck CustomHook
+
 Specifying AWS Credentials:
   #{__FILE__} allows you to provide your aws access key, secret key, and region in multiple ways. It uses the aws sdk, which contains the following in its documentation concerning credential configuration:
   The SDK searches the following locations for credentials:
     *ENV['AWS_ACCESS_KEY_ID'] and ENV['AWS_SECRET_ACCESS_KEY']
-    *Unless ENV['AWS_SDK_CONFIG_OPT_OUT'] is set, the shared configuration files (~/.aws/credentials and ~/.aws/config) will be checked for a role_arn and source_profile, which if present will be used to attempt to assume a role.
     *The shared credentials ini file at ~/.aws/credentials (for more information see https://aws.amazon.com/blogs/security/a-new-and-standardized-way-to-manage-credentials-in-the-aws-sdks/ )
-      *Unless ENV['AWS_SDK_CONFIG_OPT_OUT'] is set, the shared configuration ini file at ~/.aws/config will also be parsed for credentials.
     *From an instance profile when running on EC2, or from the ECS credential provider when running in an ECS container with that feature enabled.
 
   The SDK searches the following locations for a region:
     *ENV['AWS_REGION']
-    *Unless ENV['AWS_SDK_CONFIG_OPT_OUT'] is set, the shared configuration files (~/.aws/credentials and ~/.aws/config) will also be checked for a region selection.
   See https://docs.aws.amazon.com/sdkforruby/api/index.html
 
 Specifying Github Credentials:
@@ -51,6 +56,8 @@ begin
   args = Docopt::docopt(doc, version: '1.0')
   pp args
   AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
+rescue Docopt::Exit => e
+  puts e.message
 rescue StandardError => e
   puts "ERROR: #{e.message}"
 end
