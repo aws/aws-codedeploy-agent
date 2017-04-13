@@ -1,0 +1,56 @@
+#!/usr/bin/env ruby
+
+$:.unshift File.join(File.dirname(File.expand_path('..', __FILE__)), 'lib')
+require 'docopt'
+
+require 'aws/codedeploy/local/cli_validator'
+
+doc = <<DOCOPT
+CodeDeploy Local Deployments.
+
+Usage:
+  #{__FILE__} deploy --location <location> --type (tgz|zip|uncompressed)
+  #{__FILE__} deploy --location <location> --type (tgz|zip|uncompressed) [--event <event>...|(--event <event>)...]
+  #{__FILE__} deploy [options]
+  #{__FILE__} -h | --help
+  #{__FILE__} -v | --version
+
+Options:
+  -l, --location  Bundle Location. The prefix and suffix determine whether this location is locally accessible or online (s3 or github).
+  -t, --type      Choose bundle type from tgz, zip, or uncompressed
+  -e, --event     Optional set of override lifecycle events to run. Any number of lifecycle events can be provided one after another (order matters). If none specificed runs only default events found in the Appspec file using CodeDeploy's ordering. See https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html
+  -h, --help      Show this screen.
+  -v, --version   Show version.
+
+Specifying AWS Credentials:
+  #{__FILE__} allows you to provide your aws access key, secret key, and region in multiple ways. It uses the aws sdk, which contains the following in its documentation concerning credential configuration:
+  The SDK searches the following locations for credentials:
+    *ENV['AWS_ACCESS_KEY_ID'] and ENV['AWS_SECRET_ACCESS_KEY']
+    *Unless ENV['AWS_SDK_CONFIG_OPT_OUT'] is set, the shared configuration files (~/.aws/credentials and ~/.aws/config) will be checked for a role_arn and source_profile, which if present will be used to attempt to assume a role.
+    *The shared credentials ini file at ~/.aws/credentials (for more information see https://aws.amazon.com/blogs/security/a-new-and-standardized-way-to-manage-credentials-in-the-aws-sdks/ )
+      *Unless ENV['AWS_SDK_CONFIG_OPT_OUT'] is set, the shared configuration ini file at ~/.aws/config will also be parsed for credentials.
+    *From an instance profile when running on EC2, or from the ECS credential provider when running in an ECS container with that feature enabled.
+
+  The SDK searches the following locations for a region:
+    *ENV['AWS_REGION']
+    *Unless ENV['AWS_SDK_CONFIG_OPT_OUT'] is set, the shared configuration files (~/.aws/credentials and ~/.aws/config) will also be checked for a region selection.
+  See https://docs.aws.amazon.com/sdkforruby/api/index.html
+
+Specifying Github Credentials:
+  #{__FILE__} simply downloads from the github url directly. The github api allows you to specify the access token as a query parameter.
+  See https://developer.github.com/v3/oauth/
+
+  Example:
+    #{__FILE__} deploy --location https://api.github.com/repos/octokit/octokit.rb/zipball --type zip
+    #{__FILE__} deploy --location https://api.github.com/repos/octokit/octokit.rb/zipball?access_token=OAUTH_TOKEN --type zip
+
+DOCOPT
+
+begin
+  require "pp"
+  args = Docopt::docopt(doc, version: '1.0')
+  pp args
+  AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
+rescue StandardError => e
+  puts "ERROR: #{e.message}"
+end

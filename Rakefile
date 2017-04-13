@@ -1,5 +1,6 @@
 require 'rake'
 require 'rake/testtask'
+require 'rspec/core/rake_task'
 require 'rubygems'
 
 # Run all units tests in test/
@@ -13,6 +14,10 @@ Rake::TestTask.new(:test) do |t|
 end
 task :default => [:version_tracking, :test]
 task :release => [:version_tracking, :test]
+
+desc "Run unit tests in spec/"
+RSpec::Core::RakeTask.new(:spec)
+task :test => :spec
 
 begin
   require 'cucumber'
