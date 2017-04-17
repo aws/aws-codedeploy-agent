@@ -5,3 +5,5 @@ coverage/
 .version
 .metadata/
 RemoteSystemsTempFiles/
+codedeploy-local.log*
+codedeploy-local.*.log

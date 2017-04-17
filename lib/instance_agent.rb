@@ -1,6 +1,7 @@
 # encoding: UTF-8
 
 Gem.use_paths(nil, Gem.path << "/opt/codedeploy-agent/vendor")
+Gem.use_paths(nil, Gem.path << File.join(File.dirname(File.expand_path('..', __FILE__)), 'vendor'))
 
 require 'core_ext'
 

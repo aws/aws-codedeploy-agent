@@ -1,3 +1,5 @@
+require 'instance_agent/plugins/codedeploy/install_instruction'
+
 module InstanceAgent
   module Plugins
     module CodeDeployPlugin
@@ -26,7 +28,7 @@ module InstanceAgent
           cleanup_file = File.join(deployment_instructions_dir, "#{deployment_group_id}-cleanup")
 
           if File.exists?(cleanup_file)
-            commands = InstallInstruction.parse_remove_commands(File.read(cleanup_file))
+            commands = InstanceAgent::Plugins::CodeDeployPlugin::InstallInstruction.parse_remove_commands(File.read(cleanup_file))
             commands.each do |cmd|
               cmd.execute
             end
@@ -55,7 +57,7 @@ module InstanceAgent
 
         private
         def generate_instructions(application_specification)
-          InstallInstruction.generate_instructions() do |i|
+          InstanceAgent::Plugins::CodeDeployPlugin::InstallInstruction.generate_instructions() do |i|
             application_specification.files.each do |fi|
 
               absolute_source_path = File.join(deployment_archive_dir,

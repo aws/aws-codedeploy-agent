@@ -3,14 +3,14 @@
 $:.unshift File.join(File.dirname(File.expand_path('..', __FILE__)), 'lib')
 require 'docopt'
 
-require 'aws/codedeploy/local/cli_validator'
+require 'aws/codedeploy/local/deployer'
 
 doc = <<DOCOPT
 CodeDeploy Local Deployments.
 
 Usage:
-  #{__FILE__} deploy --location <location> --type (tgz|zip|uncompressed)
-  #{__FILE__} deploy --location <location> --type (tgz|zip|uncompressed) [--event <event>...|(--event <event>)...]
+  #{__FILE__} deploy --location <location> --type (tgz|tar|zip|uncompressed)
+  #{__FILE__} deploy --location <location> --type (tgz|tar|zip|uncompressed) [--event <event>...|(--event <event>)...]
   #{__FILE__} deploy [options]
   #{__FILE__} -h | --help
   #{__FILE__} -v | --version
@@ -52,12 +52,14 @@ Specifying Github Credentials:
 DOCOPT
 
 begin
-  require "pp"
   args = Docopt::docopt(doc, version: '1.0')
-  pp args
-  AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
+  AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
 rescue Docopt::Exit => e
   puts e.message
-rescue StandardError => e
+  exit
+rescue AWS::CodeDeploy::Local::CLIValidator::ValidationError => e
   puts "ERROR: #{e.message}"
+  exit
 end
+
+puts 'Successfully deployed your bundle locally'

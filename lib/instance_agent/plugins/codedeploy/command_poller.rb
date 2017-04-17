@@ -7,6 +7,19 @@ module InstanceAgent
       class CommandPoller < InstanceAgent::Agent::Base
 
         VERSION = "2013-04-23"
+
+        #Map commands to lifecycle hooks
+        DEFAULT_HOOK_MAPPING =
+          { "BeforeBlockTraffic"=>["BeforeBlockTraffic"],
+            "AfterBlockTraffic"=>["AfterBlockTraffic"],
+            "ApplicationStop"=>["ApplicationStop"],
+            "BeforeInstall"=>["BeforeInstall"],
+            "AfterInstall"=>["AfterInstall"],
+            "ApplicationStart"=>["ApplicationStart"],
+            "BeforeAllowTraffic"=>["BeforeAllowTraffic"],
+            "AfterAllowTraffic"=>["AfterAllowTraffic"],
+            "ValidateService"=>["ValidateService"]}
+
         def initialize
           test_profile = InstanceAgent::Config.config[:codedeploy_test_profile]
           unless ["beta", "gamma"].include?(test_profile.downcase)
@@ -27,23 +40,10 @@ module InstanceAgent
           @deploy_control = InstanceAgent::Plugins::CodeDeployPlugin::CodeDeployControl.new(:region => region, :logger => InstanceAgent::Log, :ssl_ca_directory => ENV['AWS_SSL_CA_DIRECTORY'])
           @deploy_control_client = @deploy_control.get_client
 
-          @plugin = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => create_hook_mapping)
+          @plugin = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => DEFAULT_HOOK_MAPPING)
 
           log(:debug, "Initializing Host Agent: " +
           "Host Identifier = #{@host_identifier}")
-        end
-
-        def create_hook_mapping
-          #Map commands to lifecycle hooks
-          { "BeforeBlockTraffic"=>["BeforeBlockTraffic"],
-            "AfterBlockTraffic"=>["AfterBlockTraffic"],
-            "ApplicationStop"=>["ApplicationStop"],
-            "BeforeInstall"=>["BeforeInstall"],
-            "AfterInstall"=>["AfterInstall"],
-            "ApplicationStart"=>["ApplicationStart"],
-            "BeforeAllowTraffic"=>["BeforeAllowTraffic"],
-            "AfterAllowTraffic"=>["AfterAllowTraffic"],
-            "ValidateService"=>["ValidateService"]}
         end
 
         def validate

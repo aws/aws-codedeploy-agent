@@ -349,6 +349,66 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
 
         end
 
+        context "extract bundle from local file" do
+          setup do
+            InstanceAgent::LinuxUtil.stubs(:extract_tgz)
+            @command.command_name = "DownloadBundle"
+            @mock_file = mock
+            @mock_file_location = '/mock/file/location.tgz'
+            File.stubs(:symlink)
+            Dir.stubs(:entries).returns []
+            @mock_file.stubs(:close)
+
+            @deployment_spec = generate_signed_message_for({
+              "DeploymentId" => @deployment_id.to_s,
+              "DeploymentGroupId" => @deployment_group_id.to_s,
+              "ApplicationName" => @application_name,
+              "DeploymentGroupName" => @deployment_group_name,
+              "Revision" => {
+                "RevisionType" => "Local File",
+                "LocalRevision" => {
+                  "Location" => @mock_file_location,
+                  "BundleType" => 'tgz'
+                }
+              }
+            })
+          end
+
+          should 'symlink the file to the bundle location' do
+            File.expects(:symlink).with(@mock_file_location, File.join(@deployment_root_dir, 'bundle.tar'))
+            @command_executor.execute_command(@command, @deployment_spec)
+          end
+        end
+
+        context "handle bundle from local uncompressed directory" do
+          setup do
+            @command.command_name = "DownloadBundle"
+            @mock_directory_location = '/mock/directory/location/'
+            File.stubs(:symlink)
+            Dir.stubs(:entries).returns []
+            @mock_file.stubs(:close)
+
+            @deployment_spec = generate_signed_message_for({
+              "DeploymentId" => @deployment_id.to_s,
+              "DeploymentGroupId" => @deployment_group_id.to_s,
+              "ApplicationName" => @application_name,
+              "DeploymentGroupName" => @deployment_group_name,
+              "Revision" => {
+                "RevisionType" => "Local Directory",
+                "LocalRevision" => {
+                  "Location" => @mock_directory_location,
+                  "BundleType" => 'uncompressed'
+                }
+              }
+            })
+          end
+
+          should 'symlink the file to the bundle location' do
+            File.expects(:symlink).with(@mock_directory_location, @archive_root_dir)
+            @command_executor.execute_command(@command, @deployment_spec)
+          end
+        end
+
         should "unpack the bundle to the right directory" do
           InstanceAgent::LinuxUtil.expects(:extract_tar).with(File.join(@deployment_root_dir, 'bundle.tar'), @archive_root_dir)
           @command_executor.execute_command(@command, @deployment_spec)

@@ -10,6 +10,7 @@ module InstanceAgent
         attr_accessor :bucket, :key, :bundle_type, :version, :etag
         attr_accessor :external_account, :repository, :commit_id, :anonymous, :external_auth_token
         attr_accessor :file_exists_behavior
+        attr_accessor :local_location
         class << self
           attr_accessor :cert_store
         end
@@ -78,8 +79,12 @@ module InstanceAgent
             @commit_id = revision["CommitId"]
             @external_auth_token = data["GitHubAccessToken"]
             @anonymous = @external_auth_token.nil?
+          when 'Local File', 'Local Directory'
+            @revision = data["Revision"]["LocalRevision"]
+            @local_location = @revision["Location"]
+            @bundle_type = @revision["BundleType"]
           else
-            raise 'Exactly one of S3Revision or GitHubRevision must be specified'
+            raise 'Exactly one of S3Revision, GitHubRevision, or LocalRevision must be specified'
           end
         end
 
@@ -111,6 +116,10 @@ module InstanceAgent
             sanitized_spec["GitHubAccessToken"] &&= "REDACTED"
             InstanceAgent::Log.debug("#{self.to_s}: Parse: #{sanitized_spec}")
 
+            return new(deployment_spec)
+          when "TEXT/JSON"
+            deployment_spec = JSON.parse(envelope.payload)
+            InstanceAgent::Log.debug("#{self.to_s}: Parse: #{deployment_spec}")
             return new(deployment_spec)
           else
             raise "Unsupported DeploymentSpecification format: #{envelope.format}"

@@ -7,6 +7,10 @@ require 'instance_metadata'
 require 'open-uri'
 require 'uri'
 
+require 'instance_agent/plugins/codedeploy/deployment_specification'
+require 'instance_agent/plugins/codedeploy/hook_executor'
+require 'instance_agent/plugins/codedeploy/installer'
+
 module InstanceAgent
   module Plugins
     module CodeDeployPlugin
@@ -52,7 +56,7 @@ module InstanceAgent
           method_name = command_method(command.command_name)
           log(:debug, "Command #{command.command_name} maps to method #{method_name}")
 
-          deployment_specification = DeploymentSpecification.parse(deployment_specification)
+          deployment_specification = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(deployment_specification)
           log(:debug, "Successfully parsed the deployment spec")
 
           log(:debug, "Creating deployment root directory #{deployment_root_dir(deployment_specification)}")
@@ -87,15 +91,25 @@ module InstanceAgent
             deployment_spec.commit_id,
             deployment_spec.anonymous,
             deployment_spec.external_auth_token)
+          when 'Local File'
+            handle_local_file(
+              deployment_spec,
+              deployment_spec.local_location)
+          when 'Local Directory'
+            handle_local_directory(
+              deployment_spec,
+              deployment_spec.local_location)
           else
             # This should never happen since this is checked during creation of the deployment_spec object.
             raise "Unknown revision type '#{deployment_spec.revision_source}'"
           end
 
-          FileUtils.rm_rf(File.join(deployment_root_dir(deployment_spec), 'deployment-archive'))
-          bundle_file = artifact_bundle(deployment_spec)
+          if deployment_spec.bundle_type != 'uncompressed'
+            FileUtils.rm_rf(File.join(deployment_root_dir(deployment_spec), 'deployment-archive'))
+            bundle_file = artifact_bundle(deployment_spec)
 
-          unpack_bundle(cmd, bundle_file, deployment_spec)
+            unpack_bundle(cmd, bundle_file, deployment_spec)
+          end
 
           FileUtils.mkdir_p(deployment_instructions_dir)
           log(:debug, "Instructions directory created at #{deployment_instructions_dir}")
@@ -111,7 +125,7 @@ module InstanceAgent
             log(:debug, "Instructions directory created at #{deployment_instructions_dir}")
           end
 
-          installer = Installer.new(:deployment_instructions_dir => deployment_instructions_dir,
+          installer = InstanceAgent::Plugins::CodeDeployPlugin::Installer.new(:deployment_instructions_dir => deployment_instructions_dir,
           :deployment_archive_dir => archive_root_dir(deployment_spec),
           :file_exists_behavior => deployment_spec.file_exists_behavior)
 
@@ -126,7 +140,7 @@ module InstanceAgent
           @hook_mapping.each_pair do |command, lifecycle_events|
             InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.command command do |cmd, deployment_spec|
               #run the scripts
-              script_log = ScriptLog.new
+              script_log = InstanceAgent::Plugins::CodeDeployPlugin::ScriptLog.new
               lifecycle_events.each do |lifecycle_event|
                 hook_command = HookExecutor.new(:lifecycle_event => lifecycle_event,
                 :application_name => deployment_spec.application_name,
@@ -295,6 +309,20 @@ module InstanceAgent
               raise "Could not download bundle at '#{uri.to_s}' after #{retries} retries. Server returned codes: #{errors.join("; ")}."
             end
           end
+        end
+
+        private
+        def handle_local_file(deployment_spec, local_location)
+          # Symlink local file to the location where download is expected to go
+          bundle_file = artifact_bundle(deployment_spec)
+          File.symlink local_location, bundle_file
+        end
+
+        private
+        def handle_local_directory(deployment_spec, local_location)
+          # Symlink local directory to the location where a file would have been extracted
+          deployment_archive_location = archive_root_dir(deployment_spec)
+          File.symlink local_location, deployment_archive_location
         end
 
         private

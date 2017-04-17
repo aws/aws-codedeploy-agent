@@ -3,6 +3,8 @@ require 'open3'
 require 'json'
 require 'fileutils'
 
+require 'instance_agent/plugins/codedeploy/application_specification/application_specification'
+
 module InstanceAgent
   module Plugins
     module CodeDeployPlugin
@@ -184,7 +186,7 @@ module InstanceAgent
         def parse_app_spec
           app_spec_location = File.join(@deployment_archive_dir, @app_spec_path)
           log(:debug, "Checking for app spec in #{app_spec_location}")
-          @app_spec =  ApplicationSpecification::ApplicationSpecification.parse(File.read(app_spec_location))
+          @app_spec =  InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::ApplicationSpecification.parse(File.read(app_spec_location))
         end
 
         private
