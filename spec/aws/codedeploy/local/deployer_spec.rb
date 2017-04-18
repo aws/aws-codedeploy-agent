@@ -83,6 +83,7 @@ describe AWS::CodeDeploy::Local::Deployer do
                 "DeploymentGroupName" => "LocalFleet",
                 "DeploymentId" => TEST_DEPLOYMENT_ID, # needs to be different for each run
                 "Revision" => { "RevisionType" => "Local File", "LocalRevision" => {"Location" => SAMPLE_FILE_BUNDLE, "BundleType" => 'tgz'}},
+                "AllPossibleLifecycleEvents" => AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS
               }.to_json.to_s
             })).once.ordered
         end
@@ -127,6 +128,7 @@ describe AWS::CodeDeploy::Local::Deployer do
                 "DeploymentGroupName" => "LocalFleet",
                 "DeploymentId" => TEST_DEPLOYMENT_ID, # needs to be different for each run
                 "Revision" => { "RevisionType" => "Local Directory", "LocalRevision" => {"Location" => SAMPLE_DIRECTORY_BUNDLE, "BundleType" => 'uncompressed'}},
+                "AllPossibleLifecycleEvents" => AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS
               }.to_json.to_s
             })).once.ordered
         end

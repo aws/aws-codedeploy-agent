@@ -178,6 +178,31 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           @command_executor.execute_command(@command, @deployment_spec)
         end
 
+        should 'raise ArgumentError if appspec contains unknown hook and deployment_spec includes all_possible_lifecycle_events' do
+          all_possible_lifecycle_events = ['ExampleLifecycleEvent', 'SecondLifecycleEvent']
+          deployment_spec = generate_signed_message_for({
+            "DeploymentId" => @deployment_id.to_s,
+            "DeploymentGroupId" => @deployment_group_id,
+            "ApplicationName" => @application_name,
+            "DeploymentGroupName" => @deployment_group_name,
+            "DeploymentCreator" => @deployment_creator,
+            "DeploymentType" => @deployment_type,
+            "AgentActionOverrides" => @agent_actions_overrides,
+            "AllPossibleLifecycleEvents" => all_possible_lifecycle_events,
+            "Revision" => {
+              "RevisionType" => "S3",
+              "S3Revision" => @s3Revision
+            }
+          })
+
+          app_spec = mock("parsed application specification")
+          app_spec.expects(:hooks).returns({'UnknownHook' => nil})
+          File.stubs(:read).with("#@archive_root_dir/appspec.yml").returns("APP SPEC")
+          ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC").returns(app_spec)
+          assert_raised_with_message('appspec.yml file contains unknown lifecycle events', ArgumentError) do
+            @command_executor.execute_command(@command, deployment_spec)
+          end
+        end
       end
 
       context "when executing the DownloadBundle command" do

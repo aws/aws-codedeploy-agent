@@ -10,7 +10,7 @@ module InstanceAgent
         attr_accessor :bucket, :key, :bundle_type, :version, :etag
         attr_accessor :external_account, :repository, :commit_id, :anonymous, :external_auth_token
         attr_accessor :file_exists_behavior
-        attr_accessor :local_location
+        attr_accessor :local_location, :all_possible_lifecycle_events
         class << self
           attr_accessor :cert_store
         end
@@ -58,6 +58,10 @@ module InstanceAgent
                 @file_exists_behavior = agentActionsOverridesMap["FileExistsBehavior"].upcase
               end
             end
+          end
+
+          if property_set?(data, 'AllPossibleLifecycleEvents')
+            @all_possible_lifecycle_events = data['AllPossibleLifecycleEvents']
           end
 
           case @revision_source
@@ -110,23 +114,25 @@ module InstanceAgent
             raise "Validation of PKCS7 signed message failed" unless signer_certs.size == 1
             raise "Validation of PKCS7 signed message failed" unless verify_pkcs7_signer_cert(signer_certs[0])
 
-            deployment_spec = JSON.parse(pkcs7.data)
-
-            sanitized_spec = deployment_spec.clone
-            sanitized_spec["GitHubAccessToken"] &&= "REDACTED"
-            InstanceAgent::Log.debug("#{self.to_s}: Parse: #{sanitized_spec}")
-
-            return new(deployment_spec)
+            parse_deployment_spec_data(pkcs7.data)
           when "TEXT/JSON"
-            deployment_spec = JSON.parse(envelope.payload)
-            InstanceAgent::Log.debug("#{self.to_s}: Parse: #{deployment_spec}")
-            return new(deployment_spec)
+            parse_deployment_spec_data(envelope.payload)
           else
             raise "Unsupported DeploymentSpecification format: #{envelope.format}"
           end
         end
 
         private
+        def self.parse_deployment_spec_data(deployment_spec_data)
+            deployment_spec = JSON.parse(deployment_spec_data)
+
+            sanitized_spec = deployment_spec.clone
+            sanitized_spec["GitHubAccessToken"] &&= "REDACTED"
+            InstanceAgent::Log.debug("#{self.to_s}: Parse: #{sanitized_spec}")
+
+            new(deployment_spec)
+        end
+
         def property_set?(propertyHash, property)
           propertyHash.has_key?(property) && !propertyHash[property].nil? && !propertyHash[property].empty?
         end

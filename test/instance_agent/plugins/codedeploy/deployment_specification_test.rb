@@ -57,6 +57,14 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
         assert_equal @deployment_creator, parsed_deployment_spec.deployment_creator
         assert_equal @deployment_type, parsed_deployment_spec.deployment_type
       end
+
+      should "populate the all_possible_lifecycle_events field if present" do
+        deployment_spec_with_all_possible_lifecycle_events = @deployment_spec.clone
+        all_possible_lifecycle_events = ['ExampleLifecycleEvent', 'SecondLifecycleEvent']
+        deployment_spec_with_all_possible_lifecycle_events['AllPossibleLifecycleEvents'] = all_possible_lifecycle_events
+        parsed_deployment_spec = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(generate_signed_message_for(deployment_spec_with_all_possible_lifecycle_events))
+        assert_equal all_possible_lifecycle_events, parsed_deployment_spec.all_possible_lifecycle_events
+      end
     end
 
     context "with arn deployment id" do

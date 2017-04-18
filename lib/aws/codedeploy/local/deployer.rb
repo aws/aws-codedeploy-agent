@@ -41,15 +41,24 @@ module AWS
 
         def execute_events(args)
           args = AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
-          spec = build_spec(args['<location>'], bundle_type(args))
+          all_possible_lifecycle_events = ordered_lifecycle_events(args['<event>'])
+          spec = build_spec(args['<location>'], bundle_type(args), all_possible_lifecycle_events)
 
-          DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
+          all_possible_lifecycle_events.each do |name|
             @command_executor.execute_command(OpenStruct.new(:command_name => name), spec.clone)
           end
         end
 
+        def ordered_lifecycle_events(events)
+          if (events.empty?)
+            DEFAULT_ORDERED_LIFECYCLE_EVENTS
+          else
+            events
+          end
+        end
+
         private
-        def build_spec(location, bundle_type)
+        def build_spec(location, bundle_type, all_possible_lifecycle_events)
           raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("Unknown bundle type #{bundle_type} of #{location}") unless %w(tar zip tgz uncompressed).include? bundle_type
 
           OpenStruct.new({
@@ -63,6 +72,7 @@ module AWS
               "DeploymentGroupName" => "LocalFleet",
               "DeploymentId" => SecureRandom.uuid, # needs to be different for each run
               "Revision" => { "RevisionType" => revision_type(location, bundle_type), "LocalRevision" => {"Location" => location, "BundleType" => bundle_type}},
+              "AllPossibleLifecycleEvents" => all_possible_lifecycle_events
             }.to_json.to_s
           })
         end

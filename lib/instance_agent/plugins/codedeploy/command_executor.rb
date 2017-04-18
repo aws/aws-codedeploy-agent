@@ -6,6 +6,7 @@ require 'zip'
 require 'instance_metadata'
 require 'open-uri'
 require 'uri'
+require 'set'
 
 require 'instance_agent/plugins/codedeploy/deployment_specification'
 require 'instance_agent/plugins/codedeploy/hook_executor'
@@ -197,7 +198,16 @@ module InstanceAgent
         def default_app_spec(deployment_spec)
           default_app_spec_location = File.join(archive_root_dir(deployment_spec), app_spec_path)
           log(:debug, "Checking for app spec in #{default_app_spec_location}")
-          app_spec =  ApplicationSpecification::ApplicationSpecification.parse(File.read(default_app_spec_location))
+          validate_app_spec_hooks(ApplicationSpecification::ApplicationSpecification.parse(File.read(default_app_spec_location)), deployment_spec.all_possible_lifecycle_events)
+        end
+
+        private
+        def validate_app_spec_hooks(app_spec, all_possible_lifecycle_events)
+          if (!all_possible_lifecycle_events.nil? && !app_spec.hooks.keys.to_set.subset?(all_possible_lifecycle_events.to_set))
+            raise ArgumentError.new('appspec.yml file contains unknown lifecycle events')
+          end
+
+          app_spec
         end
 
         private
