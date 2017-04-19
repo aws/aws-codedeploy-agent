@@ -82,6 +82,43 @@ describe AWS::CodeDeploy::Local::Deployer do
       end
     end
 
+    context 'when non-default events specified' do
+      NON_DEFAULT_LIFECYCLE_EVENTS = ['Stop','Start','HealthCheck']
+
+      let(:args) do
+        {"deploy"=>true,
+         "--location"=>true,
+         "<location>"=>SAMPLE_FILE_BUNDLE,
+         "--type"=>true,
+         "tgz"=>false,
+         "tar"=>true,
+         "zip"=>false,
+         "directory"=>false,
+         "--event"=>0,
+         "<event>"=>NON_DEFAULT_LIFECYCLE_EVENTS,
+         "--help"=>false,
+         "--version"=>false}
+      end
+
+      it 'deploys the local file and calls the executor to execute all commands' do
+        allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+        executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
+
+        expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
+          with(:hook_mapping => EXPECTED_HOOK_MAPPING).
+          and_return(executor)
+
+        NON_DEFAULT_LIFECYCLE_EVENTS.each do |name|
+          expect(executor).to receive(:execute_command).with(
+            OpenStruct.new(:command_name => name),
+            deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File',
+                            'tar', SAMPLE_FILE_BASENAME.gsub('.','-'),
+                            NON_DEFAULT_LIFECYCLE_EVENTS)).once.ordered
+        end
+        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+      end
+    end
+
     context 'when local directory is specified' do
       let(:args) do
         {"deploy"=>true,
