@@ -100,7 +100,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--version"=>false}
       end
 
-      it 'deploys the local file and calls the executor to execute all commands' do
+      it 'deploys the local file and calls the executor to execute all specified commands' do
         allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
         executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
@@ -147,6 +147,40 @@ describe AWS::CodeDeploy::Local::Deployer do
             OpenStruct.new(:command_name => name),
             deployment_spec(SAMPLE_DIRECTORY_BUNDLE,  'Local Directory',
                             'directory', SAMPLE_DIRECTORY_BASENAME.gsub('.','-'),
+                            AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
+        end
+        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+      end
+    end
+
+    context 'when github https endpoint is specified' do
+      let(:args) do
+        {"deploy"=>true,
+         "--location"=>true,
+         "<location>"=>SAMPLE_FILE_BUNDLE,
+         "--type"=>true,
+         "tgz"=>true,
+         "zip"=>false,
+         "directory"=>false,
+         "--event"=>0,
+         "<event>"=>[],
+         "--help"=>false,
+         "--version"=>false}
+      end
+
+      it 'deploys the local file and calls the executor to execute all commands' do
+        allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+        executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
+
+        expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
+          with(:hook_mapping => EXPECTED_HOOK_MAPPING).
+          and_return(executor)
+
+        AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
+          expect(executor).to receive(:execute_command).with(
+            OpenStruct.new(:command_name => name),
+            deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File',
+                            'tgz', SAMPLE_FILE_BASENAME.gsub('.','-'),
                             AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
         end
         AWS::CodeDeploy::Local::Deployer.new.execute_events(args)

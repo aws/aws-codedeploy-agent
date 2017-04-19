@@ -85,6 +85,9 @@ module InstanceAgent
             @anonymous = @external_auth_token.nil?
           when 'Local File', 'Local Directory'
             @revision = data["Revision"]["LocalRevision"]
+            raise 'LocalRevision in Deployment Spec must specify Location and BundleType' unless valid_local_revision?(revision)
+            raise 'BundleType in LocalRevision must be tar, tgz, zip, or directory' unless valid_local_bundle_type?(@revision)
+
             @local_location = @revision["Location"]
             @bundle_type = @revision["BundleType"]
           else
@@ -149,9 +152,17 @@ module InstanceAgent
           revision.nil? || required_fields.all? { |k| revision.has_key?(k) }
         end
 
+        def valid_local_revision?(revision)
+          revision.nil? || %w(Location BundleType).all? { |k| revision.has_key?(k) }
+        end
+
         private
         def valid_bundle_type?(revision)
           revision.nil? || %w(tar zip tgz).any? { |k| revision["BundleType"] == k }
+        end
+
+        def valid_local_bundle_type?(revision)
+          revision.nil? || %w(tar zip tgz directory).any? { |k| revision["BundleType"] == k }
         end
 
         def self.verify_pkcs7_signer_cert(cert)
