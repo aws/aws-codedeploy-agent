@@ -405,7 +405,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           end
         end
 
-        context "handle bundle from local uncompressed directory" do
+        context "handle bundle from local directory directory" do
           setup do
             @command.command_name = "DownloadBundle"
             @mock_directory_location = '/mock/directory/location/'
@@ -422,7 +422,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
                 "RevisionType" => "Local Directory",
                 "LocalRevision" => {
                   "Location" => @mock_directory_location,
-                  "BundleType" => 'uncompressed'
+                  "BundleType" => 'directory'
                 }
               }
             })

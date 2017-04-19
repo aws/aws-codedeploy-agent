@@ -23,11 +23,11 @@ module AWS
               raise ValidationError.new("location #{location} is specified as a file or directory which does not exist")
           end
 
-          if (args['uncompressed'] && (uri.scheme != 'https' && uri.scheme != 's3' && File.file?(location)))
-              raise ValidationError.new("location #{location} is specified as an uncompressed local directory but it is a file")
+          if (args['directory'] && (uri.scheme != 'https' && uri.scheme != 's3' && File.file?(location)))
+              raise ValidationError.new("location #{location} is specified as an directory local directory but it is a file")
           end
 
-          if (!args['uncompressed'] && (uri.scheme != 'https' && uri.scheme != 's3' && File.directory?(location)))
+          if (!args['directory'] && (uri.scheme != 'https' && uri.scheme != 's3' && File.directory?(location)))
               raise ValidationError.new("location #{location} is specified as a compressed local file but it is a directory")
           end
 

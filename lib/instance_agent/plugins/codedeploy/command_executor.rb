@@ -105,7 +105,7 @@ module InstanceAgent
             raise "Unknown revision type '#{deployment_spec.revision_source}'"
           end
 
-          if deployment_spec.bundle_type != 'uncompressed'
+          if deployment_spec.bundle_type != 'directory'
             FileUtils.rm_rf(File.join(deployment_root_dir(deployment_spec), 'deployment-archive'))
             bundle_file = artifact_bundle(deployment_spec)
 

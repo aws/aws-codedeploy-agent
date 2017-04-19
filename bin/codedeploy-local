@@ -9,15 +9,15 @@ doc = <<DOCOPT
 CodeDeploy Local Deployments.
 
 Usage:
-  #{__FILE__} deploy --location <location> --type (tgz|tar|zip|uncompressed)
-  #{__FILE__} deploy --location <location> --type (tgz|tar|zip|uncompressed) [--event <event>...|(--event <event>)...]
+  #{__FILE__} deploy --location <location> --type (tgz|tar|zip|directory)
+  #{__FILE__} deploy --location <location> --type (tgz|tar|zip|directory) [--event <event>...|(--event <event>)...]
   #{__FILE__} deploy [options]
   #{__FILE__} -h | --help
   #{__FILE__} -v | --version
 
 Options:
   -l, --location  Bundle Location. The prefix and suffix determine whether this location is locally accessible or online (s3 or github).
-  -t, --type      Choose bundle type from tgz, zip, or uncompressed
+  -t, --type      Choose bundle type from tgz, zip, or directory
   -e, --event     Optional set of override lifecycle events to run. Any number of lifecycle events can be provided one after another (order matters). If none specificed runs only default events found in the Appspec file using CodeDeploy's ordering. See https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html
   -h, --help      Show this screen.
   -v, --version   Show version.
@@ -25,7 +25,7 @@ Options:
 Examples:
   #{__FILE__} deploy --location /path/to/local/bundle.tgz --type tgz
   #{__FILE__} deploy --location /path/to/local/bundle.zip --type zip
-  #{__FILE__} deploy --location /path/to/local/bundle/dir --type uncompressed
+  #{__FILE__} deploy --location /path/to/local/bundle/dir --type directory
   #{__FILE__} deploy --location https://s3-aws-region.amazonaws.com/bucket/bundle.tgz --type tgz
   #{__FILE__} deploy --location https://api.github.com/repos/octokit/octokit.rb/zipball --type zip
   #{__FILE__} deploy --location /path/to/local/bundle.tgz --event Stop Start HealthCheck CustomHook

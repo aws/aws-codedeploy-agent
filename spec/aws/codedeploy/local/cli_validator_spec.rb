@@ -16,7 +16,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--type"=>true,
          "tgz"=>true,
          "zip"=>false,
-         "uncompressed"=>false,
+         "directory"=>false,
          "--event"=>1,
          "<event>"=>["stop", "start"],
          "--help"=>false,
@@ -37,7 +37,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--type"=>true,
          "tgz"=>true,
          "zip"=>false,
-         "uncompressed"=>false,
+         "directory"=>false,
          "--event"=>1,
          "<event>"=>["stop", "start"],
          "--help"=>false,
@@ -59,7 +59,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--type"=>true,
          "tgz"=>true,
          "zip"=>false,
-         "uncompressed"=>false,
+         "directory"=>false,
          "--event"=>1,
          "<event>"=>["stop", "start"],
          "--help"=>false,
@@ -81,7 +81,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--type"=>true,
          "tgz"=>true,
          "zip"=>false,
-         "uncompressed"=>false,
+         "directory"=>false,
          "--event"=>1,
          "<event>"=>["stop", "start"],
          "--help"=>false,
@@ -103,7 +103,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--type"=>true,
          "tgz"=>false,
          "zip"=>true,
-         "uncompressed"=>false,
+         "directory"=>false,
          "--event"=>1,
          "<event>"=>["stop", "start"],
          "--help"=>false,
@@ -116,7 +116,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
     end
 
-    context 'when type is uncompressed and location is a file' do
+    context 'when type is directory and location is a file' do
       FAKE_FILE = "/path/directory/file.zip"
 
       let(:args) do
@@ -126,7 +126,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--type"=>true,
          "tgz"=>false,
          "zip"=>false,
-         "uncompressed"=>true,
+         "directory"=>true,
          "--event"=>1,
          "<event>"=>["stop", "start"],
          "--help"=>false,
@@ -136,7 +136,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       it 'throws a ValidationError' do
         allow(File).to receive(:exists?).with(FAKE_FILE).and_return(true)
         allow(File).to receive(:file?).with(FAKE_FILE).and_return(true)
-        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "location #{FAKE_FILE} is specified as an uncompressed local directory but it is a file")
+        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "location #{FAKE_FILE} is specified as an directory local directory but it is a file")
       end
     end
 
@@ -150,7 +150,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--type"=>true,
          "tgz"=>false,
          "zip"=>true,
-         "uncompressed"=>false,
+         "directory"=>false,
          "--event"=>1,
          "<event>"=>["stop", "start"],
          "--help"=>false,
@@ -164,7 +164,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--type"=>true,
          "tgz"=>true,
          "zip"=>false,
-         "uncompressed"=>false,
+         "directory"=>false,
          "--event"=>1,
          "<event>"=>["stop", "start"],
          "--help"=>false,

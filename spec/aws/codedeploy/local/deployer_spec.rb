@@ -56,7 +56,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--type"=>true,
          "tgz"=>true,
          "zip"=>false,
-         "uncompressed"=>false,
+         "directory"=>false,
          "--event"=>0,
          "<event>"=>[],
          "--help"=>false,
@@ -101,7 +101,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--type"=>true,
          "tgz"=>false,
          "zip"=>false,
-         "uncompressed"=>true,
+         "directory"=>true,
          "--event"=>0,
          "<event>"=>[],
          "--help"=>false,
@@ -127,7 +127,7 @@ describe AWS::CodeDeploy::Local::Deployer do
                 "DeploymentGroupId" => SAMPLE_DIRECTORY_BASENAME.gsub('.','-'),
                 "DeploymentGroupName" => "LocalFleet",
                 "DeploymentId" => TEST_DEPLOYMENT_ID,
-                "Revision" => { "RevisionType" => "Local Directory", "LocalRevision" => {"Location" => SAMPLE_DIRECTORY_BUNDLE, "BundleType" => 'uncompressed'}},
+                "Revision" => { "RevisionType" => "Local Directory", "LocalRevision" => {"Location" => SAMPLE_DIRECTORY_BUNDLE, "BundleType" => 'directory'}},
                 "AllPossibleLifecycleEvents" => AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS
               }.to_json.to_s
             })).once.ordered

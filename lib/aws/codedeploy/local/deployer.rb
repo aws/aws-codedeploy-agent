@@ -59,7 +59,7 @@ module AWS
 
         private
         def build_spec(location, bundle_type, all_possible_lifecycle_events)
-          raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("Unknown bundle type #{bundle_type} of #{location}") unless %w(tar zip tgz uncompressed).include? bundle_type
+          raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("Unknown bundle type #{bundle_type} of #{location}") unless %w(tar zip tgz directory).include? bundle_type
 
           OpenStruct.new({
             :format => "TEXT/JSON",
@@ -90,7 +90,7 @@ module AWS
         end
 
         def bundle_type(args)
-          args.select{|k,v| ['tar','tgz','zip','uncompressed'].include?(k) && v}.keys.first
+          args.select{|k,v| ['tar','tgz','zip','directory'].include?(k) && v}.keys.first
         end
 
         def revision_type(location, bundle_type)
@@ -100,7 +100,7 @@ module AWS
           elsif (uri.scheme == 'https' && uri.host.end_with?('github.com'))
             'GitHub'
           elsif (uri.scheme == 'file' || uri.scheme.nil?)
-            if bundle_type == 'uncompressed'
+            if bundle_type == 'directory'
               'Local Directory'
             else
               'Local File'
