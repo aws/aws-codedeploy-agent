@@ -14,9 +14,9 @@ describe AWS::CodeDeploy::Local::Deployer do
                             "BeforeInstall"=>["BeforeInstall"],
                             "AfterInstall"=>["AfterInstall"],
                             "ApplicationStart"=>["ApplicationStart"],
+                            "ValidateService"=>["ValidateService"],
                             "BeforeAllowTraffic"=>["BeforeAllowTraffic"],
-                            "AfterAllowTraffic"=>["AfterAllowTraffic"],
-                            "ValidateService"=>["ValidateService"]}
+                            "AfterAllowTraffic"=>["AfterAllowTraffic"]}
   let(:test_working_directory) { Dir.mktmpdir }
 
   before do
@@ -84,6 +84,7 @@ describe AWS::CodeDeploy::Local::Deployer do
 
     context 'when non-default events specified' do
       NON_DEFAULT_LIFECYCLE_EVENTS = ['Stop','Start','HealthCheck']
+      NON_DEFAULT_LIFECYCLE_EVENTS_AFTER_DOWNLOAD_BUNDLE_AND_INSTALL = ['DownloadBundle', 'Install', 'Stop','Start','HealthCheck']
 
       let(:args) do
         {"deploy"=>true,
@@ -100,22 +101,22 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--version"=>false}
       end
 
-      it 'deploys the local file and calls the executor to execute all specified commands' do
+      it 'deploys the local file and calls the executor to execute all specified commands after DownloadBundle and Install commands' do
         allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
         executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
         expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
-          with(:hook_mapping => EXPECTED_HOOK_MAPPING).
+          with(:hook_mapping => Hash[NON_DEFAULT_LIFECYCLE_EVENTS.map{|h|[h,[h]]}]).
           and_return(executor)
 
-        NON_DEFAULT_LIFECYCLE_EVENTS.each do |name|
+        NON_DEFAULT_LIFECYCLE_EVENTS_AFTER_DOWNLOAD_BUNDLE_AND_INSTALL.each do |name|
           expect(executor).to receive(:execute_command).with(
             OpenStruct.new(:command_name => name),
             deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File',
                             'tar', SAMPLE_FILE_BASENAME.gsub('.','-'),
-                            NON_DEFAULT_LIFECYCLE_EVENTS)).once.ordered
+                            NON_DEFAULT_LIFECYCLE_EVENTS_AFTER_DOWNLOAD_BUNDLE_AND_INSTALL)).once.ordered
         end
-        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+        AWS::CodeDeploy::Local::Deployer.new(args['<event>']).execute_events(args)
       end
     end
 

@@ -18,7 +18,7 @@ Usage:
 Options:
   -l, --location  Bundle Location. The prefix and suffix determine whether this location is locally accessible or online (s3 or github).
   -t, --type      Choose bundle type from tgz, zip, or directory
-  -e, --event     Optional set of override lifecycle events to run. Any number of lifecycle events can be provided one after another (order matters). If none specificed runs only default events found in the Appspec file using CodeDeploy's ordering. See https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html
+  -e, --event     Optional set of override lifecycle events to run. Any number of lifecycle events can be provided one after another (order matters). If none specificed runs only default events found in the Appspec file using CodeDeploy's ordering. Please note if you don't specify DownloadBundle and Install events they will always precede all your custom events. Those events extract your local bundle / download it as well as install the revision in the correct location. Really the only events that can run before them are the ones that do so today. See https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html
   -h, --help      Show this screen.
   -v, --version   Show version.
 
@@ -53,7 +53,7 @@ DOCOPT
 
 begin
   args = Docopt::docopt(doc, version: '1.0')
-  AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+  AWS::CodeDeploy::Local::Deployer.new(args['<event>']).execute_events(args)
 rescue Docopt::Exit => e
   puts e.message
   exit

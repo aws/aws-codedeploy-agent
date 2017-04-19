@@ -2,7 +2,6 @@ require 'ostruct'
 require 'securerandom'
 
 require 'aws/codedeploy/local/cli_validator'
-require 'instance_agent/plugins/codedeploy/command_poller'
 require 'instance_agent/plugins/codedeploy/command_executor'
 
 module AWS
@@ -24,7 +23,9 @@ module AWS
                                               BeforeAllowTraffic
                                               AfterAllowTraffic)
 
-        def initialize
+        REQUIRED_LIFECYCLE_EVENTS = %w(DownloadBundle Install)
+
+        def initialize(events=[])
           current_directory = Dir.pwd
           InstanceAgent::Log.init(File.join(current_directory, 'codedeploy-local.log'))
 
@@ -36,12 +37,13 @@ module AWS
           InstanceAgent::Config.load_config
           InstanceAgent::Platform.util = InstanceAgent::LinuxUtil
 
-          @command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => InstanceAgent::Plugins::CodeDeployPlugin::CommandPoller::DEFAULT_HOOK_MAPPING)
+          @events = add_download_bundle_and_install_events(ordered_lifecycle_events(events))
+          @command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => hook_mapping(events))
         end
 
         def execute_events(args)
           args = AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
-          all_possible_lifecycle_events = ordered_lifecycle_events(args['<event>'])
+          all_possible_lifecycle_events = ordered_lifecycle_events(@events)
           spec = build_spec(args['<location>'], bundle_type(args), all_possible_lifecycle_events)
 
           all_possible_lifecycle_events.each do |name|
@@ -58,6 +60,16 @@ module AWS
         end
 
         private
+        def add_download_bundle_and_install_events(events)
+          REQUIRED_LIFECYCLE_EVENTS.select{|hook| !events.include?(hook)} + events
+        end
+
+        def hook_mapping(events)
+          Hash[ordered_lifecycle_events(events)
+            .select{|hook| !REQUIRED_LIFECYCLE_EVENTS.include? hook}
+            .map{|h|[h,[h]]}]
+        end
+
         def build_spec(location, bundle_type, all_possible_lifecycle_events)
           raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("Unknown bundle type #{bundle_type} of #{location}") unless %w(tar zip tgz directory).include? bundle_type
 
