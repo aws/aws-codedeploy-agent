@@ -25,7 +25,7 @@ describe AWS::CodeDeploy::Local::Deployer do
     FileUtils.cp("#{Dir.pwd}#{AWS::CodeDeploy::Local::Deployer::CONF_REPO_LOCATION_SUFFIX}", config_file_location)
     allow(Dir).to receive(:pwd).and_return test_working_directory
     ProcessManager::Config.config[:root_dir] = test_working_directory
-    allow(SecureRandom).to receive(:uuid).and_return(TEST_DEPLOYMENT_ID)
+    allow(AWS::CodeDeploy::Local::Deployer).to receive(:random_deployment_id).and_return(TEST_DEPLOYMENT_ID)
     allow(File).to receive(:exists?).with(config_file_location).and_return(true)
   end
 
@@ -77,11 +77,11 @@ describe AWS::CodeDeploy::Local::Deployer do
             OpenStruct.new({
               :format => "TEXT/JSON",
               :payload => {
-                "ApplicationId" =>  SAMPLE_FILE_BASENAME,
-                "ApplicationName" => SAMPLE_FILE_BASENAME,
+                "ApplicationId" =>  SAMPLE_FILE_BASENAME.gsub('.','-'),
+                "ApplicationName" => SAMPLE_FILE_BASENAME.gsub('.','-'),
                 "DeploymentGroupId" => SAMPLE_FILE_BASENAME.gsub('.','-'),
                 "DeploymentGroupName" => "LocalFleet",
-                "DeploymentId" => TEST_DEPLOYMENT_ID, # needs to be different for each run
+                "DeploymentId" => TEST_DEPLOYMENT_ID,
                 "Revision" => { "RevisionType" => "Local File", "LocalRevision" => {"Location" => SAMPLE_FILE_BUNDLE, "BundleType" => 'tgz'}},
                 "AllPossibleLifecycleEvents" => AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS
               }.to_json.to_s
@@ -122,11 +122,11 @@ describe AWS::CodeDeploy::Local::Deployer do
             OpenStruct.new({
               :format => "TEXT/JSON",
               :payload => {
-                "ApplicationId" =>  SAMPLE_DIRECTORY_BASENAME,
-                "ApplicationName" => SAMPLE_DIRECTORY_BASENAME,
+                "ApplicationId" =>  SAMPLE_DIRECTORY_BASENAME.gsub('.','-'),
+                "ApplicationName" => SAMPLE_DIRECTORY_BASENAME.gsub('.','-'),
                 "DeploymentGroupId" => SAMPLE_DIRECTORY_BASENAME.gsub('.','-'),
                 "DeploymentGroupName" => "LocalFleet",
-                "DeploymentId" => TEST_DEPLOYMENT_ID, # needs to be different for each run
+                "DeploymentId" => TEST_DEPLOYMENT_ID,
                 "Revision" => { "RevisionType" => "Local Directory", "LocalRevision" => {"Location" => SAMPLE_DIRECTORY_BUNDLE, "BundleType" => 'uncompressed'}},
                 "AllPossibleLifecycleEvents" => AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS
               }.to_json.to_s

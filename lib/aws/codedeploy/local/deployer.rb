@@ -12,17 +12,17 @@ module AWS
         CONF_DEFAULT_LOCATION = '/etc/codedeploy-agent/conf/codedeployagent.yml'
         CONF_REPO_LOCATION_SUFFIX = '/conf/codedeployagent.yml'
 
-        DEFAULT_ORDERED_LIFECYCLE_EVENTS = %w(ApplicationStop
+        DEFAULT_ORDERED_LIFECYCLE_EVENTS = %w(BeforeBlockTraffic
+                                              AfterBlockTraffic
+                                              ApplicationStop
                                               DownloadBundle
                                               BeforeInstall
                                               Install
                                               AfterInstall
                                               ApplicationStart
-                                              BeforeBlockTraffic
-                                              AfterBlockTraffic
+                                              ValidateService
                                               BeforeAllowTraffic
-                                              AfterAllowTraffic
-                                              ValidateService)
+                                              AfterAllowTraffic)
 
         def initialize
           current_directory = Dir.pwd
@@ -66,15 +66,27 @@ module AWS
             #TODO: For S3 you need to extract the correct values (bucket, key, tag, etc.) from the location
             #TODO: For Github you need to extract out the token from the location
             :payload => {
-              "ApplicationId" =>  File.basename(location),
-              "ApplicationName" => File.basename(location),
-              "DeploymentGroupId" => File.basename(location).gsub('.','-'), # The deployment directory is used so we replace periods with dashes
+              "ApplicationId" =>  deployment_folder(location),
+              "ApplicationName" => deployment_folder(location),
+              "DeploymentGroupId" => deployment_folder(location),
               "DeploymentGroupName" => "LocalFleet",
-              "DeploymentId" => SecureRandom.uuid, # needs to be different for each run
+              "DeploymentId" => self.class.random_deployment_id, # needs to be different for each run
               "Revision" => { "RevisionType" => revision_type(location, bundle_type), "LocalRevision" => {"Location" => location, "BundleType" => bundle_type}},
               "AllPossibleLifecycleEvents" => all_possible_lifecycle_events
             }.to_json.to_s
           })
+        end
+
+        def deployment_folder(location)
+          File.basename(location).gsub('.','-')
+        end
+
+        def self.random_deployment_id
+          "d-#{random_alphanumeric(9)}-local"
+        end
+
+        def self.random_alphanumeric(length)
+          Array.new(length){[*"A".."Z", *"0".."9"].sample}.join
         end
 
         def bundle_type(args)
