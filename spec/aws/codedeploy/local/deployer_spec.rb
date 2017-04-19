@@ -74,24 +74,13 @@ describe AWS::CodeDeploy::Local::Deployer do
         AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
           expect(executor).to receive(:execute_command).with(
             OpenStruct.new(:command_name => name),
-            OpenStruct.new({
-              :format => "TEXT/JSON",
-              :payload => {
-                "ApplicationId" =>  SAMPLE_FILE_BASENAME.gsub('.','-'),
-                "ApplicationName" => SAMPLE_FILE_BASENAME.gsub('.','-'),
-                "DeploymentGroupId" => SAMPLE_FILE_BASENAME.gsub('.','-'),
-                "DeploymentGroupName" => "LocalFleet",
-                "DeploymentId" => TEST_DEPLOYMENT_ID,
-                "Revision" => { "RevisionType" => "Local File", "LocalRevision" => {"Location" => SAMPLE_FILE_BUNDLE, "BundleType" => 'tgz'}},
-                "AllPossibleLifecycleEvents" => AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS
-              }.to_json.to_s
-            })).once.ordered
+            deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File',
+                            'tgz', SAMPLE_FILE_BASENAME.gsub('.','-'),
+                            AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
         end
-        deployer = AWS::CodeDeploy::Local::Deployer.new
-        deployer.execute_events(args)
+        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
       end
     end
-
 
     context 'when local directory is specified' do
       let(:args) do
@@ -119,22 +108,27 @@ describe AWS::CodeDeploy::Local::Deployer do
         AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
           expect(executor).to receive(:execute_command).with(
             OpenStruct.new(:command_name => name),
-            OpenStruct.new({
-              :format => "TEXT/JSON",
-              :payload => {
-                "ApplicationId" =>  SAMPLE_DIRECTORY_BASENAME.gsub('.','-'),
-                "ApplicationName" => SAMPLE_DIRECTORY_BASENAME.gsub('.','-'),
-                "DeploymentGroupId" => SAMPLE_DIRECTORY_BASENAME.gsub('.','-'),
-                "DeploymentGroupName" => "LocalFleet",
-                "DeploymentId" => TEST_DEPLOYMENT_ID,
-                "Revision" => { "RevisionType" => "Local Directory", "LocalRevision" => {"Location" => SAMPLE_DIRECTORY_BUNDLE, "BundleType" => 'directory'}},
-                "AllPossibleLifecycleEvents" => AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS
-              }.to_json.to_s
-            })).once.ordered
+            deployment_spec(SAMPLE_DIRECTORY_BUNDLE,  'Local Directory',
+                            'directory', SAMPLE_DIRECTORY_BASENAME.gsub('.','-'),
+                            AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
         end
-        deployer = AWS::CodeDeploy::Local::Deployer.new
-        deployer.execute_events(args)
+        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
       end
+    end
+
+    def deployment_spec(location, revision_type, bundle_type, deployment_directory, all_possible_lifecycle_events)
+      OpenStruct.new({
+        :format => "TEXT/JSON",
+        :payload => {
+          "ApplicationId" =>  deployment_directory,
+          "ApplicationName" => deployment_directory,
+          "DeploymentGroupId" => deployment_directory,
+          "DeploymentGroupName" => "LocalFleet",
+          "DeploymentId" => TEST_DEPLOYMENT_ID,
+          "Revision" => { "RevisionType" => revision_type, "LocalRevision" => {"Location" => location, "BundleType" => bundle_type}},
+          "AllPossibleLifecycleEvents" => all_possible_lifecycle_events
+        }.to_json.to_s
+      })
     end
   end
 end

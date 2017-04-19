@@ -62,6 +62,7 @@ module AWS
           raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("Unknown bundle type #{bundle_type} of #{location}") unless %w(tar zip tgz directory).include? bundle_type
 
           OpenStruct.new({
+            #TODO: Sign JSON instead of passing it around in plaintext so you can avoid supporting special plaintext json messages and always use the signed way
             :format => "TEXT/JSON",
             #TODO: For S3 you need to extract the correct values (bucket, key, tag, etc.) from the location
             #TODO: For Github you need to extract out the token from the location
