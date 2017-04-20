@@ -17,6 +17,7 @@ describe AWS::CodeDeploy::Local::Deployer do
                             "ValidateService"=>["ValidateService"],
                             "BeforeAllowTraffic"=>["BeforeAllowTraffic"],
                             "AfterAllowTraffic"=>["AfterAllowTraffic"]}
+  DEPLOYMENT_GROUP_ID = 'deployment-group-id'
   let(:test_working_directory) { Dir.mktmpdir }
 
   before do
@@ -38,13 +39,6 @@ describe AWS::CodeDeploy::Local::Deployer do
       expect(InstanceAgent::Config).to receive(:load_config)
       AWS::CodeDeploy::Local::Deployer.new
     end
-
-    it 'constructs the correct command executor' do
-      expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
-        with(:hook_mapping => EXPECTED_HOOK_MAPPING)
-
-      AWS::CodeDeploy::Local::Deployer.new
-    end
   end
 
   describe 'execute_events' do
@@ -59,6 +53,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "directory"=>false,
          "--event"=>0,
          "<event>"=>[],
+         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -97,6 +92,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "directory"=>false,
          "--event"=>0,
          "<event>"=>NON_DEFAULT_LIFECYCLE_EVENTS,
+         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -116,7 +112,7 @@ describe AWS::CodeDeploy::Local::Deployer do
                             'tar', SAMPLE_FILE_BASENAME.gsub('.','-'),
                             NON_DEFAULT_LIFECYCLE_EVENTS_AFTER_DOWNLOAD_BUNDLE_AND_INSTALL)).once.ordered
         end
-        AWS::CodeDeploy::Local::Deployer.new(args['<event>']).execute_events(args)
+        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
       end
     end
 
@@ -131,6 +127,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "directory"=>true,
          "--event"=>0,
          "<event>"=>[],
+         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -165,6 +162,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "directory"=>false,
          "--event"=>0,
          "<event>"=>[],
+         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -194,7 +192,7 @@ describe AWS::CodeDeploy::Local::Deployer do
         :payload => {
           "ApplicationId" =>  deployment_directory,
           "ApplicationName" => deployment_directory,
-          "DeploymentGroupId" => deployment_directory,
+          "DeploymentGroupId" => DEPLOYMENT_GROUP_ID,
           "DeploymentGroupName" => "LocalFleet",
           "DeploymentId" => TEST_DEPLOYMENT_ID,
           "Revision" => { "RevisionType" => revision_type, "LocalRevision" => {"Location" => location, "BundleType" => bundle_type}},

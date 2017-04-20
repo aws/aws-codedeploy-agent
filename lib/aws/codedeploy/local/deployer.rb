@@ -25,7 +25,7 @@ module AWS
 
         REQUIRED_LIFECYCLE_EVENTS = %w(DownloadBundle Install)
 
-        def initialize(events=[])
+        def initialize
           current_directory = Dir.pwd
           InstanceAgent::Log.init(File.join(current_directory, 'codedeploy-local.log'))
 
@@ -36,18 +36,17 @@ module AWS
           end
           InstanceAgent::Config.load_config
           InstanceAgent::Platform.util = InstanceAgent::LinuxUtil
-
-          @events = add_download_bundle_and_install_events(ordered_lifecycle_events(events))
-          @command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => hook_mapping(events))
         end
 
         def execute_events(args)
           args = AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
-          all_possible_lifecycle_events = ordered_lifecycle_events(@events)
-          spec = build_spec(args['<location>'], bundle_type(args), all_possible_lifecycle_events)
 
+          all_possible_lifecycle_events = add_download_bundle_and_install_events(ordered_lifecycle_events(args['<event>']))
+          spec = build_spec(args['<location>'], bundle_type(args), args['<deployment-group-id>'], all_possible_lifecycle_events)
+
+          command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => hook_mapping(args['<event>']))
           all_possible_lifecycle_events.each do |name|
-            @command_executor.execute_command(OpenStruct.new(:command_name => name), spec.clone)
+            command_executor.execute_command(OpenStruct.new(:command_name => name), spec.clone)
           end
         end
 
@@ -70,7 +69,7 @@ module AWS
             .map{|h|[h,[h]]}]
         end
 
-        def build_spec(location, bundle_type, all_possible_lifecycle_events)
+        def build_spec(location, bundle_type, deployment_group_id, all_possible_lifecycle_events)
           raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("Unknown bundle type #{bundle_type} of #{location}") unless %w(tar zip tgz directory).include? bundle_type
 
           OpenStruct.new({
@@ -81,7 +80,7 @@ module AWS
             :payload => {
               "ApplicationId" =>  deployment_folder(location),
               "ApplicationName" => deployment_folder(location),
-              "DeploymentGroupId" => deployment_folder(location),
+              "DeploymentGroupId" => deployment_group_id,
               "DeploymentGroupName" => "LocalFleet",
               "DeploymentId" => self.class.random_deployment_id, # needs to be different for each run
               "Revision" => { "RevisionType" => revision_type(location, bundle_type), "LocalRevision" => {"Location" => location, "BundleType" => bundle_type}},
