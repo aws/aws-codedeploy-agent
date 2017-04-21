@@ -35,7 +35,12 @@ Examples:
   #{__FILE__} deploy --location /path/to/local/bundle.tgz  --deployment-group-id local-deployments--event Stop Start HealthCheck CustomHook
 
 Specifying AWS Credentials:
-  #{__FILE__} allows you to provide your aws access key, secret key, and region in multiple ways. It uses the aws sdk, which contains the following in its documentation concerning credential configuration:
+  #{__FILE__} allows you to provide your aws access key, secret key, and region in multiple ways. It uses the AWS SDK.
+  This means that if you're using an ec2 host with proper roles configured for the host with proper permissions you don't need to do anything else
+  to give permission for this host to download your bundle from S3. See https://docs.aws.amazon.com/codedeploy/latest/userguide/getting-started-create-iam-instance-profile.html
+
+  The AWS SDK also provides a few other ways to provide credentials. Its documentation contains the following:
+
   The SDK searches the following locations for credentials:
     *ENV['AWS_ACCESS_KEY_ID'] and ENV['AWS_SECRET_ACCESS_KEY']
     *The shared credentials ini file at ~/.aws/credentials (for more information see https://aws.amazon.com/blogs/security/a-new-and-standardized-way-to-manage-credentials-in-the-aws-sdks/ )
