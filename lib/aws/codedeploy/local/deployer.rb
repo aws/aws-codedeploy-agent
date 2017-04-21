@@ -76,21 +76,16 @@ module AWS
             #TODO: Sign JSON instead of passing it around in plaintext so you can avoid supporting special plaintext json messages and always use the signed way
             :format => "TEXT/JSON",
             #TODO: For S3 you need to extract the correct values (bucket, key, tag, etc.) from the location
-            #TODO: For Github you need to extract out the token from the location
             :payload => {
-              "ApplicationId" =>  deployment_folder(location),
-              "ApplicationName" => deployment_folder(location),
+              "ApplicationId" => location,
+              "ApplicationName" => location,
               "DeploymentGroupId" => deployment_group_id,
               "DeploymentGroupName" => "LocalFleet",
               "DeploymentId" => self.class.random_deployment_id, # needs to be different for each run
-              "Revision" => { "RevisionType" => revision_type(location, bundle_type), "LocalRevision" => {"Location" => location, "BundleType" => bundle_type}},
+              "Revision" => revision(location, bundle_type),
               "AllPossibleLifecycleEvents" => all_possible_lifecycle_events
             }.to_json.to_s
           })
-        end
-
-        def deployment_folder(location)
-          File.basename(location).gsub('.','-')
         end
 
         def self.random_deployment_id
@@ -105,21 +100,40 @@ module AWS
           args.select{|k,v| ['tar','tgz','zip','directory'].include?(k) && v}.keys.first
         end
 
-        def revision_type(location, bundle_type)
+        def revision(location, bundle_type)
           uri = URI.parse(location)
           if (uri.scheme == 's3' || uri.scheme == 'https' && /s3[a-zA-Z-]*.amazonaws.com/.match(uri.host))
             'S3'
           elsif (uri.scheme == 'https' && uri.host.end_with?('github.com'))
-            'GitHub'
+            github_revision(location, uri)
           elsif (uri.scheme == 'file' || uri.scheme.nil?)
-            if bundle_type == 'directory'
-              'Local Directory'
-            else
-              'Local File'
-            end
+            local_revision(location, bundle_type)
           else
             raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("unknown location #{location} cannot be determined to be S3, Github, or a local file / directory")
           end
+        end
+
+        def github_revision(location, uri)
+          if match = uri.path.match(/\/repos\/([^\/]*)\/([^\/]*)\/.*\/(.*)$/i)
+            owner, repository_name, commit = match.captures
+          else
+            raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("github location #{location} not in the expected format of 'https://api.github.com/repos/owner/repository_name/tarorzipball/commit'")
+          end
+          { 'RevisionType' => 'GitHub', 'GitHubRevision' => 
+            {'Account' => owner, 
+             'Repository' => repository_name, 
+             'CommitId' => commit}}
+        end
+
+        def local_revision(location, bundle_type)
+          if bundle_type == 'directory'
+            revision_type = 'Local Directory'
+          else
+            revision_type = 'Local File'
+          end
+          { 'RevisionType' => revision_type, 'LocalRevision' => 
+            {'Location' => location, 
+             'BundleType' => bundle_type}}
         end
       end
     end

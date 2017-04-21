@@ -45,14 +45,6 @@ Specifying AWS Credentials:
     *ENV['AWS_REGION']
   See https://docs.aws.amazon.com/sdkforruby/api/index.html
 
-Specifying Github Credentials:
-  #{__FILE__} simply downloads from the github url directly. The github api allows you to specify the access token as a query parameter.
-  See https://developer.github.com/v3/oauth/
-
-  Example:
-    #{__FILE__} deploy --location https://api.github.com/repos/octokit/octokit.rb/zipball --type zip
-    #{__FILE__} deploy --location https://api.github.com/repos/octokit/octokit.rb/zipball?access_token=OAUTH_TOKEN --type zip
-
 DOCOPT
 
 begin

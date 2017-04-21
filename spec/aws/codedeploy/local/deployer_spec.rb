@@ -7,6 +7,11 @@ describe AWS::CodeDeploy::Local::Deployer do
   SAMPLE_FILE_BASENAME = "#{SAMPLE_DIRECTORY_BASENAME}.tgz"
   SAMPLE_FILE_BUNDLE = "#{Dir.pwd}/spec/resource/#{SAMPLE_FILE_BASENAME}"
   SAMPLE_DIRECTORY_BUNDLE = "#{Dir.pwd}/spec/resource/#{SAMPLE_DIRECTORY_BASENAME}"
+  GIT_OWNER = 'owner'
+  GIT_REPO = 'repo'
+  GIT_BRANCH_OR_TAG = 'branchOrTag'
+  SAMPLE_GIT_LOCATION_TARBALL = "https://api.github.com/repos/#{GIT_OWNER}/#{GIT_REPO}/tarball/#{GIT_BRANCH_OR_TAG}"
+  SAMPLE_GIT_LOCATION_ZIPBALL = "https://api.github.com/repos/#{GIT_OWNER}/#{GIT_REPO}/zipball/#{GIT_BRANCH_OR_TAG}"
   TEST_DEPLOYMENT_ID = 123
   EXPECTED_HOOK_MAPPING = { "BeforeBlockTraffic"=>["BeforeBlockTraffic"],
                             "AfterBlockTraffic"=>["AfterBlockTraffic"],
@@ -28,6 +33,7 @@ describe AWS::CodeDeploy::Local::Deployer do
     ProcessManager::Config.config[:root_dir] = test_working_directory
     allow(AWS::CodeDeploy::Local::Deployer).to receive(:random_deployment_id).and_return(TEST_DEPLOYMENT_ID)
     allow(File).to receive(:exists?).with(config_file_location).and_return(true)
+    allow(File).to receive(:exists?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(true)
   end
 
   after do
@@ -69,8 +75,7 @@ describe AWS::CodeDeploy::Local::Deployer do
         AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
           expect(executor).to receive(:execute_command).with(
             OpenStruct.new(:command_name => name),
-            deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File',
-                            'tgz', SAMPLE_FILE_BASENAME.gsub('.','-'),
+            deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File', 'tgz',
                             AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
         end
         AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
@@ -108,8 +113,7 @@ describe AWS::CodeDeploy::Local::Deployer do
         NON_DEFAULT_LIFECYCLE_EVENTS_AFTER_DOWNLOAD_BUNDLE_AND_INSTALL.each do |name|
           expect(executor).to receive(:execute_command).with(
             OpenStruct.new(:command_name => name),
-            deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File',
-                            'tar', SAMPLE_FILE_BASENAME.gsub('.','-'),
+            deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File', 'tar',
                             NON_DEFAULT_LIFECYCLE_EVENTS_AFTER_DOWNLOAD_BUNDLE_AND_INSTALL)).once.ordered
         end
         AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
@@ -143,21 +147,21 @@ describe AWS::CodeDeploy::Local::Deployer do
         AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
           expect(executor).to receive(:execute_command).with(
             OpenStruct.new(:command_name => name),
-            deployment_spec(SAMPLE_DIRECTORY_BUNDLE,  'Local Directory',
-                            'directory', SAMPLE_DIRECTORY_BASENAME.gsub('.','-'),
+            deployment_spec(SAMPLE_DIRECTORY_BUNDLE, 'Local Directory', 'directory',
                             AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
         end
         AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
       end
     end
 
-    context 'when github https endpoint is specified' do
+    context 'when anonymous github tarball endpoint is specified' do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>SAMPLE_FILE_BUNDLE,
+         "<location>"=>SAMPLE_GIT_LOCATION_TARBALL,
          "--type"=>true,
-         "tgz"=>true,
+         "tgz"=>false,
+         "tar"=>true,
          "zip"=>false,
          "directory"=>false,
          "--event"=>0,
@@ -167,8 +171,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--version"=>false}
       end
 
-      it 'deploys the local file and calls the executor to execute all commands' do
-        allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+      it 'extracts the endpoint parameters, deploys the downloaded file, and calls the executor to execute all commands' do
         executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
         expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
@@ -178,27 +181,76 @@ describe AWS::CodeDeploy::Local::Deployer do
         AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
           expect(executor).to receive(:execute_command).with(
             OpenStruct.new(:command_name => name),
-            deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File',
-                            'tgz', SAMPLE_FILE_BASENAME.gsub('.','-'),
+            deployment_spec(SAMPLE_GIT_LOCATION_TARBALL, 'GitHub', 'tar',
                             AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
         end
         AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
       end
     end
 
-    def deployment_spec(location, revision_type, bundle_type, deployment_directory, all_possible_lifecycle_events)
+    context 'when anonymous github zipball endpoint is specified' do
+      let(:args) do
+        {"deploy"=>true,
+         "--location"=>true,
+         "<location>"=>SAMPLE_GIT_LOCATION_ZIPBALL,
+         "--type"=>true,
+         "tgz"=>false,
+         "zip"=>true,
+         "directory"=>false,
+         "--event"=>0,
+         "<event>"=>[],
+         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
+         "--help"=>false,
+         "--version"=>false}
+      end
+
+      it 'extracts the endpoint parameters, deploys the downloaded file, and calls the executor to execute all commands' do
+        executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
+
+        expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
+          with(:hook_mapping => EXPECTED_HOOK_MAPPING).
+          and_return(executor)
+
+        AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
+          expect(executor).to receive(:execute_command).with(
+            OpenStruct.new(:command_name => name),
+            deployment_spec(SAMPLE_GIT_LOCATION_ZIPBALL, 'GitHub', 'zip',
+                            AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
+        end
+        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+      end
+    end
+
+    def deployment_spec(location, revision_type, bundle_type, all_possible_lifecycle_events)
+      revision_data_key = revision_data(revision_type, location, bundle_type).keys.first
+      revision_data_value = revision_data(revision_type, location, bundle_type).values.first
       OpenStruct.new({
         :format => "TEXT/JSON",
         :payload => {
-          "ApplicationId" =>  deployment_directory,
-          "ApplicationName" => deployment_directory,
+          "ApplicationId" =>  location,
+          "ApplicationName" => location,
           "DeploymentGroupId" => DEPLOYMENT_GROUP_ID,
           "DeploymentGroupName" => "LocalFleet",
           "DeploymentId" => TEST_DEPLOYMENT_ID,
-          "Revision" => { "RevisionType" => revision_type, "LocalRevision" => {"Location" => location, "BundleType" => bundle_type}},
+          "Revision" => {"RevisionType" => revision_type, 
+                         revision_data_key => revision_data_value},
           "AllPossibleLifecycleEvents" => all_possible_lifecycle_events
         }.to_json.to_s
       })
+    end
+
+    def revision_data(revision_type, location, bundle_type)
+      case revision_type
+      when 'GitHub'
+        {'GitHubRevision' => {
+          'Account' => GIT_OWNER, 
+          'Repository' => GIT_REPO, 
+          'CommitId' => GIT_BRANCH_OR_TAG}}
+      when 'Local File', 'Local Directory'
+        {'LocalRevision' => {
+          'Location' => location, 
+          'BundleType' => bundle_type}}
+      end
     end
   end
 end
