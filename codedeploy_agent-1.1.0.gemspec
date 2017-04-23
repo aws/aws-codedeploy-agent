@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency('gli', '~> 2.5')
   spec.add_dependency('json_pure', '~> 1.6')
   spec.add_dependency('archive-tar-minitar', '~> 0.5.2')
-  spec.add_dependency('rubyzip', '~> 1.1.0')
+  spec.add_dependency('rubyzip', '~> 1.2.1')
   spec.add_dependency('rake', '~> 0.9')
   spec.add_dependency('logging', '~> 1.8')
   spec.add_dependency('aws-sdk-core', '~> 2.9.2')
