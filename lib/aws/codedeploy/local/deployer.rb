@@ -72,6 +72,8 @@ module AWS
         def build_spec(location, bundle_type, deployment_group_id, all_possible_lifecycle_events)
           raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("Unknown bundle type #{bundle_type} of #{location}") unless %w(tar zip tgz directory).include? bundle_type
 
+          deployment_id = self.class.random_deployment_id
+          puts "Starting to execute deployment from within folder #{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{deployment_id}"
           OpenStruct.new({
             #TODO: Sign JSON instead of passing it around in plaintext so you can avoid supporting special plaintext json messages and always use the signed way
             :format => "TEXT/JSON",
@@ -81,7 +83,7 @@ module AWS
               "ApplicationName" => location,
               "DeploymentGroupId" => deployment_group_id,
               "DeploymentGroupName" => "LocalFleet",
-              "DeploymentId" => self.class.random_deployment_id, # needs to be different for each run
+              "DeploymentId" => deployment_id,
               "Revision" => revision(location, bundle_type),
               "AllPossibleLifecycleEvents" => all_possible_lifecycle_events
             }.to_json.to_s

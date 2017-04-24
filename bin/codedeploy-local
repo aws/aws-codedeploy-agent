@@ -64,4 +64,4 @@ rescue AWS::CodeDeploy::Local::CLIValidator::ValidationError => e
   exit
 end
 
-puts 'Successfully deployed your bundle locally'
+puts "Successfully deployed your bundle locally"
