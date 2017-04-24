@@ -30,9 +30,10 @@ Examples:
   #{__FILE__} deploy --location /path/to/local/bundle.tgz --type tgz --deployment-group-id local-deployments
   #{__FILE__} deploy --location /path/to/local/bundle.zip --type zip --deployment-group-id 217ba5c8-5dd1-4774-89c6-30b107ac5dca
   #{__FILE__} deploy --location /path/to/local/bundle/dir --type directory --deployment-group-id local-deployments
-  #{__FILE__} deploy --location https://s3-aws-region.amazonaws.com/bucket/bundle.tgz --type tgz --deployment-group-id local-deployments
-  #{__FILE__} deploy --location https://api.github.com/repos/octokit/octokit.rb/zipball --type zip --deployment-group-id local-deployments
-  #{__FILE__} deploy --location /path/to/local/bundle.tgz  --deployment-group-id local-deployments--event Stop Start HealthCheck CustomHook
+  #{__FILE__} deploy --location s3://mybucket/bundle.tgz --type tgz --deployment-group-id local-deployments
+  #{__FILE__} deploy --location s3://mybucket/bundle.zip?versionId=1234&etag=47e8 --type tgz --deployment-group-id local-deployments
+  #{__FILE__} deploy --location https://api.github.com/repos/awslabs/aws-codedeploy-sample-tomcat/zipball/master --type zip --deployment-group-id local-deployments
+  #{__FILE__} deploy --location /path/to/local/bundle.tgz  --deployment-group-id local-deployments--event ApplicationStop DownloadBundle Install ApplicationStart HealthCheck CustomHook
 
 Specifying AWS Credentials:
   #{__FILE__} allows you to provide your aws access key, secret key, and region in multiple ways. It uses the AWS SDK.

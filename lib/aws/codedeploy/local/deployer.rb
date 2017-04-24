@@ -102,8 +102,8 @@ module AWS
 
         def revision(location, bundle_type)
           uri = URI.parse(location)
-          if (uri.scheme == 's3' || uri.scheme == 'https' && /s3[a-zA-Z-]*.amazonaws.com/.match(uri.host))
-            'S3'
+          if (uri.scheme == 's3')
+            s3_revision(location, uri, bundle_type)
           elsif (uri.scheme == 'https' && uri.host.end_with?('github.com'))
             github_revision(location, uri)
           elsif (uri.scheme == 'file' || uri.scheme.nil?)
@@ -111,6 +111,34 @@ module AWS
           else
             raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("unknown location #{location} cannot be determined to be S3, Github, or a local file / directory")
           end
+        end
+
+        def s3_revision(location, uri, bundle_type)
+          bucket = uri.host
+          if (uri.path[0] != '/')
+            raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("s3 location #{location} not in the expected format of 's3://bucket/key'")
+          end
+
+          key = uri.path[1..-1]
+
+          s3_revision = { 'RevisionType' => 'S3', 'S3Revision' =>
+            {'Bucket' => bucket,
+             'Key' => key,
+             'BundleType' => bundle_type}}
+
+          unless (uri.query.nil? || uri.query.empty?)
+            versionAndETagParameters = Hash[URI::decode_www_form(uri.query)]
+
+            if versionAndETagParameters.has_key?('versionId')
+              s3_revision['S3Revision']['Version'] = versionAndETagParameters['versionId']
+            end
+
+            if versionAndETagParameters.has_key?('etag')
+              s3_revision['S3Revision']['ETag'] = versionAndETagParameters['etag']
+            end
+          end
+
+          s3_revision
         end
 
         def github_revision(location, uri)

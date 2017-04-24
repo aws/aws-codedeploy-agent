@@ -13,6 +13,12 @@ describe AWS::CodeDeploy::Local::Deployer do
   SAMPLE_GIT_LOCATION_TARBALL = "https://api.github.com/repos/#{GIT_OWNER}/#{GIT_REPO}/tarball/#{GIT_BRANCH_OR_TAG}"
   SAMPLE_GIT_LOCATION_ZIPBALL = "https://api.github.com/repos/#{GIT_OWNER}/#{GIT_REPO}/zipball/#{GIT_BRANCH_OR_TAG}"
   TEST_DEPLOYMENT_ID = 123
+  S3_BUCKET = 'bucket'
+  S3_KEY = 'key'
+  S3_VERSION = 'version'
+  S3_ETAG = 'etag'
+  SAMPLE_S3_LOCATION = "s3://#{S3_BUCKET}/#{S3_KEY}"
+  SAMPLE_S3_LOCATION_WITH_VERSION_AND_ETAG = "s3://#{S3_BUCKET}/#{S3_KEY}?versionId=#{S3_VERSION}&etag=#{S3_ETAG}"
   EXPECTED_HOOK_MAPPING = { "BeforeBlockTraffic"=>["BeforeBlockTraffic"],
                             "AfterBlockTraffic"=>["AfterBlockTraffic"],
                             "ApplicationStop"=>["ApplicationStop"],
@@ -221,9 +227,76 @@ describe AWS::CodeDeploy::Local::Deployer do
       end
     end
 
-    def deployment_spec(location, revision_type, bundle_type, all_possible_lifecycle_events)
-      revision_data_key = revision_data(revision_type, location, bundle_type).keys.first
-      revision_data_value = revision_data(revision_type, location, bundle_type).values.first
+    context 'when s3 endpoint is specified' do
+      let(:args) do
+        {"deploy"=>true,
+         "--location"=>true,
+         "<location>"=>SAMPLE_S3_LOCATION,
+         "--type"=>true,
+         "tgz"=>false,
+         "zip"=>true,
+         "directory"=>false,
+         "--event"=>0,
+         "<event>"=>[],
+         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
+         "--help"=>false,
+         "--version"=>false}
+      end
+
+      it 'extracts the endpoint parameters, deploys the downloaded file, and calls the executor to execute all commands' do
+        executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
+
+        expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
+          with(:hook_mapping => EXPECTED_HOOK_MAPPING).
+          and_return(executor)
+
+        AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
+          expect(executor).to receive(:execute_command).with(
+            OpenStruct.new(:command_name => name),
+            deployment_spec(SAMPLE_S3_LOCATION, 'S3', 'zip',
+                            AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
+        end
+        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+      end
+    end
+
+    context 'when s3 endpoint with version and etag is specified' do
+      let(:args) do
+        {"deploy"=>true,
+         "--location"=>true,
+         "<location>"=>SAMPLE_S3_LOCATION_WITH_VERSION_AND_ETAG,
+         "--type"=>true,
+         "tgz"=>false,
+         "zip"=>true,
+         "directory"=>false,
+         "--event"=>0,
+         "<event>"=>[],
+         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
+         "--help"=>false,
+         "--version"=>false}
+      end
+
+      it 'extracts the endpoint parameters, deploys the downloaded file, and calls the executor to execute all commands' do
+        executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
+
+        expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
+          with(:hook_mapping => EXPECTED_HOOK_MAPPING).
+          and_return(executor)
+
+        AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
+          expect(executor).to receive(:execute_command).with(
+            OpenStruct.new(:command_name => name),
+            deployment_spec(SAMPLE_S3_LOCATION_WITH_VERSION_AND_ETAG, 'S3', 'zip',
+                            AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS,
+                            true, true)).once.ordered
+        end
+        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+      end
+    end
+
+    def deployment_spec(location, revision_type, bundle_type, all_possible_lifecycle_events, s3revision_includes_version=false, s3revision_includes_etag= false)
+      revision_data_key = revision_data(revision_type, location, bundle_type, s3revision_includes_version, s3revision_includes_etag).keys.first
+      revision_data_value = revision_data(revision_type, location, bundle_type, s3revision_includes_version, s3revision_includes_etag).values.first
       OpenStruct.new({
         :format => "TEXT/JSON",
         :payload => {
@@ -239,8 +312,23 @@ describe AWS::CodeDeploy::Local::Deployer do
       })
     end
 
-    def revision_data(revision_type, location, bundle_type)
+    def revision_data(revision_type, location, bundle_type, s3revision_includes_version, s3revision_includes_etag)
       case revision_type
+      when 'S3'
+        s3_revision = {'S3Revision' => {
+          'Bucket' => S3_BUCKET,
+          'Key' => S3_KEY,
+          'BundleType' => bundle_type}}
+
+        if s3revision_includes_version
+          s3_revision['S3Revision']['Version'] = S3_VERSION
+        end
+
+        if s3revision_includes_etag
+          s3_revision['S3Revision']['ETag'] = S3_ETAG
+        end
+
+        s3_revision
       when 'GitHub'
         {'GitHubRevision' => {
           'Account' => GIT_OWNER, 
