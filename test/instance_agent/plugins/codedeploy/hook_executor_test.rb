@@ -184,7 +184,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
             should "log and make the hook script executable" do
               FileUtils.expects(:chmod)#.with("+x", @script_location)
-              assert_raised_with_message('No such file or directory - deployment/root/dir/deployment-archive/test', Errno::ENOENT) do
+              assert_raised_with_message("Script at specified location: test failed with error Errno::ENOENT with message No such file or directory - deployment/root/dir/deployment-archive/test", ScriptError) do
                  @hook_executor.execute
               end
             end
@@ -214,6 +214,23 @@ class HookExecutorTest < InstanceAgentTestCase
               @value = mock
               @wait_thr.stubs(:value).returns(@value)
               @wait_thr.stubs(:join).returns(1000)
+            end
+
+            context 'scripts fail for unknown reason' do
+              setup do
+                @app_spec =  { "version" => 0.0, "os" => "linux", "hooks" => {'ValidateService'=> [{"location"=>"test", "timeout"=>"30"}]}}
+                YAML.stubs(:load).returns(@app_spec)
+                @hook_executor = create_full_hook_executor
+                @popen_error = Errno::ENOENT
+                Open3.stubs(:popen3).with(@child_env, @script_location, :pgroup => true).raises(@popen_error, 'su')
+              end
+
+              should "raise an exception" do
+                popen3_error_message = 'No such file or directory - su'
+                assert_raised_with_message("Script at specified location: test failed with error #{@popen_error.to_s} with message #{popen3_error_message}", ScriptError) do
+                  @hook_executor.execute
+                end
+              end
             end
 
             context "scripts timeout" do
