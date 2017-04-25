@@ -3,6 +3,7 @@ require 'securerandom'
 
 require 'aws/codedeploy/local/cli_validator'
 require 'instance_agent/plugins/codedeploy/command_executor'
+require 'instance_agent/plugins/codedeploy/onpremise_config'
 
 module AWS
   module CodeDeploy
@@ -29,13 +30,18 @@ module AWS
           current_directory = Dir.pwd
           InstanceAgent::Log.init(File.join(current_directory, 'codedeploy-local.log'))
 
-          if File.file?(CONF_DEFAULT_LOCATION)
+          if File.file?(CONF_DEFAULT_LOCATION) && File.readable?(CONF_DEFAULT_LOCATION)
             InstanceAgent::Config.config[:config_file] = CONF_DEFAULT_LOCATION
           else
             InstanceAgent::Config.config[:config_file] = "#{current_directory}#{CONF_REPO_LOCATION_SUFFIX}"
           end
+
           InstanceAgent::Config.load_config
           InstanceAgent::Platform.util = InstanceAgent::LinuxUtil
+
+          if File.file?(InstanceAgent::Config.config[:on_premises_config_file]) && File.readable?(InstanceAgent::Config.config[:on_premises_config_file])
+            InstanceAgent::Plugins::CodeDeployPlugin::OnPremisesConfig.configure
+          end
         end
 
         def execute_events(args)

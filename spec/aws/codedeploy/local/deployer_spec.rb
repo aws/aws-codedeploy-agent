@@ -1,6 +1,7 @@
 require 'spec_helper'
 
 require 'aws/codedeploy/local/deployer'
+require 'instance_agent/plugins/codedeploy/onpremise_config'
 
 describe AWS::CodeDeploy::Local::Deployer do
   SAMPLE_DIRECTORY_BASENAME = 'sample'
@@ -39,7 +40,10 @@ describe AWS::CodeDeploy::Local::Deployer do
     ProcessManager::Config.config[:root_dir] = test_working_directory
     allow(AWS::CodeDeploy::Local::Deployer).to receive(:random_deployment_id).and_return(TEST_DEPLOYMENT_ID)
     allow(File).to receive(:exists?).with(config_file_location).and_return(true)
-    allow(File).to receive(:exists?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(true)
+    allow(File).to receive(:readable?).with(config_file_location).and_return(true)
+    allow(File).to receive(:exists?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(false)
+    allow(File).to receive(:readable?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(false)
+    allow(File).to receive(:readable?).with(InstanceAgent::Config.config[:on_premises_config_file]).and_return(false)
   end
 
   after do
@@ -48,6 +52,15 @@ describe AWS::CodeDeploy::Local::Deployer do
 
   describe 'initialize' do
     it 'tries to load configuration' do
+      expect(InstanceAgent::Config).to receive(:load_config)
+      AWS::CodeDeploy::Local::Deployer.new
+    end
+
+    it 'tries to load on-premise-configuration from on_premises_config_file if it exists' do
+      allow(File).to receive(:file?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(false)
+      expect(File).to receive(:file?).with(InstanceAgent::Config.config[:on_premises_config_file]).and_return(true)
+      expect(File).to receive(:readable?).with(InstanceAgent::Config.config[:on_premises_config_file]).and_return(true)
+      expect(InstanceAgent::Plugins::CodeDeployPlugin::OnPremisesConfig).to receive(:configure)
       expect(InstanceAgent::Config).to receive(:load_config)
       AWS::CodeDeploy::Local::Deployer.new
     end
