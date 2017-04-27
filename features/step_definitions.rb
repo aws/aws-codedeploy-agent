@@ -240,15 +240,15 @@ Then(/^the expected files should have have been deployed to my host$/) do
 
   files_and_directories_in_deployment_id_folder = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{@deployment_id}")
   expect(files_and_directories_in_deployment_id_folder.size).to eq(3)
-  expect(files_and_directories_in_deployment_id_folder).to eq(%w(bundle.tar logs deployment-archive))
+  expect(files_and_directories_in_deployment_id_folder).to include(*%w(bundle.tar logs deployment-archive))
 
   files_and_directories_in_deployment_archive_folder = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{@deployment_id}/deployment-archive")
   expect(files_and_directories_in_deployment_archive_folder.size).to eq(2)
-  expect(files_and_directories_in_deployment_archive_folder).to eq(%w(appspec.yml scripts))
+  expect(files_and_directories_in_deployment_archive_folder).to include(*%w(appspec.yml scripts))
 
   files_in_scripts_folder = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{@deployment_id}/deployment-archive/scripts")
   expect(files_in_scripts_folder.size).to eq(9)
-  expect(files_in_scripts_folder).to eq(%w(after_allow_traffic.sh
+  expect(files_in_scripts_folder).to include(*%w(after_allow_traffic.sh
                                         application_start.sh
                                         after_install.sh
                                         after_block_traffic.sh
