@@ -1,4 +1,5 @@
-# require the code
+require 'tmpdir'
+
 require 'instance_agent'
 require 'instance_agent/plugins/codedeploy/register_plugin'
 
@@ -6,7 +7,7 @@ class InstanceAgentTestCase < Test::Unit::TestCase
   include ActiveSupport::Testing::Assertions
 
   def setup
-    @dir = '/tmp'
+    @dir = Dir.tmpdir()
     ProcessManager::Config.init
     InstanceAgent::Log.init(File.join(@dir, 'codedeploy-agent.log'))
     InstanceAgent::Config.init

@@ -47,7 +47,7 @@ describe AWS::CodeDeploy::Local::Deployer do
   end
 
   after do
-    FileUtils.remove_entry(test_working_directory)
+    FileUtils.rm_rf(test_working_directory)
   end
 
   describe 'initialize' do

@@ -7,3 +7,4 @@ coverage/
 RemoteSystemsTempFiles/
 codedeploy-local.log*
 codedeploy-local.*.log
+deployment/

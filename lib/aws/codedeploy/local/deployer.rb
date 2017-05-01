@@ -81,9 +81,7 @@ module AWS
           deployment_id = self.class.random_deployment_id
           puts "Starting to execute deployment from within folder #{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{deployment_id}"
           OpenStruct.new({
-            #TODO: Sign JSON instead of passing it around in plaintext so you can avoid supporting special plaintext json messages and always use the signed way
             :format => "TEXT/JSON",
-            #TODO: For S3 you need to extract the correct values (bucket, key, tag, etc.) from the location
             :payload => {
               "ApplicationId" => location,
               "ApplicationName" => location,
@@ -114,7 +112,9 @@ module AWS
             s3_revision(location, uri, bundle_type)
           elsif (uri.scheme == 'https' && uri.host.end_with?('github.com'))
             github_revision(location, uri)
-          elsif (uri.scheme == 'file' || uri.scheme.nil?)
+          elsif (uri.scheme == 'file' || uri.scheme.nil? || (uri.scheme.size == 1 && /[[:alpha:]]/.match(uri.scheme.chars.first)))
+            #For windows we want to check if the scheme is a single drive letter like C:/Users/username/file.zip
+            #unlike linux whose paths are usually scheme-less like with /home/user/file.zip
             local_revision(location, bundle_type)
           else
             raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("unknown location #{location} cannot be determined to be S3, Github, or a local file / directory")

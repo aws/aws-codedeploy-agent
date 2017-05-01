@@ -184,6 +184,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
             should "log and make the hook script executable" do
               FileUtils.expects(:chmod)#.with("+x", @script_location)
+              Open3.expects(:popen3).raises(Errno::ENOENT, 'deployment/root/dir/deployment-archive/test')
               assert_raised_with_message("Script at specified location: test failed with error Errno::ENOENT with message No such file or directory - deployment/root/dir/deployment-archive/test", ScriptError) do
                  @hook_executor.execute
               end

@@ -1,9 +1,11 @@
+require 'tmpdir'
+
 require 'test_helper'
 
 class RunnerChildTest < InstanceAgentTestCase
   context 'The runner child' do
     setup do
-      @dir = '/tmp'
+      @dir = Dir.tmpdir()
       @agent = mock()
       InstanceAgent::Plugins::CodeDeployPlugin::CommandPoller.stubs(:new).returns(@agent)
       @agent.stubs(:description).returns("CommandPoller")
