@@ -14,7 +14,7 @@ module AWS
     module Local
       class Deployer
         IS_WINDOWS = (RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/)
-        WINDOWS_DEFAULT_DIRECTORY = File.join(ENV['PROGRAMDATA'], 'Amazon/CodeDeploy')
+        WINDOWS_DEFAULT_DIRECTORY = File.join(ENV['PROGRAMDATA'] || '/', 'Amazon/CodeDeploy')
         CONF_DEFAULT_LOCATION = IS_WINDOWS ? "#{WINDOWS_DEFAULT_DIRECTORY}/conf.yml" : '/etc/codedeploy-agent/conf/codedeployagent.yml'
         CONF_REPO_LOCATION_SUFFIX = '/conf/codedeployagent.yml'
 

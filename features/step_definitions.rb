@@ -17,11 +17,14 @@ require 'instance_agent/platform'
 require 'instance_agent/platform/linux_util'
 require 'aws/codedeploy/local/deployer'
 
+IS_WINDOWS = (RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/)
 CODEDEPLOY_TEST_PREFIX = "codedeploy-agent-integ-test-"
 DEPLOYMENT_ROLE_NAME = "#{CODEDEPLOY_TEST_PREFIX}deployment-role"
-APP_BUNDLE_BUCKET = "#{CODEDEPLOY_TEST_PREFIX}bucket"
+APP_BUNDLE_BUCKET_SUFFIX = IS_WINDOWS ? '-windows' : '-linux'
+APP_BUNDLE_BUCKET = "#{CODEDEPLOY_TEST_PREFIX}bucket#{APP_BUNDLE_BUCKET_SUFFIX}"
 APP_BUNDLE_KEY = 'app_bundle.zip'
 REGION = 'us-west-2'
+SAMPLE_APP_BUNDLE_DIRECTORY = IS_WINDOWS ? 'sample_app_bundle_windows' : 'sample_app_bundle_linux'
 
 def instance_name
   @instance_name ||= SecureRandom.uuid
@@ -46,21 +49,23 @@ def eventually(options = {}, &block)
 end
 
 Before("@codedeploy-agent") do
+  configure_local_agent
   AwsCredentials.instance.configure
 
   #instantiate these clients first so they use user's aws creds instead of assumed role creds
   @codedeploy_client = Aws::CodeDeploy::Client.new
   @iam_client = Aws::IAM::Client.new
-
-  configure_local_agent
 end
 
 def configure_local_agent
   @working_directory = Dir.mktmpdir
+  puts "Running test out of temp directory #{@working_directory}"
   ProcessManager::Config.init
   InstanceAgent::Log.init(File.join(@working_directory, 'codedeploy-agent.log'))
   InstanceAgent::Config.init
-  InstanceAgent::Platform.util = InstanceAgent::LinuxUtil
+  InstanceAgent::Platform.util = IS_WINDOWS ? InstanceAgent::WindowsUtil : InstanceAgent::LinuxUtil
+
+  if IS_WINDOWS then configure_windows_certificate end
 
   configuration_contents = <<-CONFIG
 ---
@@ -69,7 +74,7 @@ def configure_local_agent
 :pid_dir: #{@working_directory}
 :program_name: codedeploy-agent
 :root_dir: #{@working_directory}/deployment-root
-:verbose: false
+:verbose: true
 :wait_between_runs: 1
 :proxy_uri:
 :max_revisions: 5
@@ -81,11 +86,18 @@ def configure_local_agent
   InstanceAgent::Config.load_config
 end
 
+def configure_windows_certificate
+  cert_dir = File.expand_path(File.join(File.dirname(__FILE__), '..\certs'))
+  Aws.config[:ssl_ca_bundle] = File.join(cert_dir, 'windows-ca-bundle.crt')
+  ENV['AWS_SSL_CA_DIRECTORY'] = File.join(cert_dir, 'windows-ca-bundle.crt')
+  ENV['SSL_CERT_FILE'] = File.join(cert_dir, 'windows-ca-bundle.crt')
+end
+
 After("@codedeploy-agent") do
-  InstanceAgent::Runner::Master.stop
+  @thread.kill
   @codedeploy_client.delete_application({:application_name => @application_name}) unless @application_name.nil?
   @codedeploy_client.deregister_on_premises_instance({:instance_name => instance_name})
-  FileUtils.remove_entry(@working_directory)
+  FileUtils.rm_rf(@working_directory)
 end
 
 Given(/^I have a CodeDeploy application$/) do
@@ -129,7 +141,12 @@ aws_session_token=#{@iam_session_token}
 end
 
 Given(/^I startup the CodeDeploy agent locally$/) do
-  InstanceAgent::Runner::Master.start
+  @thread = Thread.start do
+    loop do
+      InstanceAgent::Plugins::CodeDeployPlugin::CommandPoller.runner.run
+      sleep InstanceAgent::Config.config[:wait_between_runs].to_i
+    end
+  end
 end
 
 Given(/^I have a deployment group containing my host$/) do
@@ -159,7 +176,7 @@ end
 
 def zip_app_bundle
   zip_file_name = "#{@working_directory}/#{APP_BUNDLE_KEY}"
-  zip_directory("#{Dir.pwd}/features/resources/sample_app_bundle", zip_file_name)
+  zip_directory("#{Dir.pwd}/features/resources/#{SAMPLE_APP_BUNDLE_DIRECTORY}", zip_file_name)
   zip_file_name
 end
 
@@ -248,15 +265,9 @@ Then(/^the expected files should have have been deployed to my host$/) do
 
   files_in_scripts_folder = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{@deployment_id}/deployment-archive/scripts")
   expect(files_in_scripts_folder.size).to eq(9)
-  expect(files_in_scripts_folder).to include(*%w(after_allow_traffic.sh
-                                        application_start.sh
-                                        after_install.sh
-                                        after_block_traffic.sh
-                                        validate_service.sh
-                                        before_allow_traffic.sh
-                                        application_stop.sh
-                                        before_block_traffic.sh
-                                        before_install.sh))
+
+  sample_app_bundle_script_files = directories_and_files_inside("#{Dir.pwd}/features/resources/#{SAMPLE_APP_BUNDLE_DIRECTORY}/scripts")
+  expect(files_in_scripts_folder).to eq(sample_app_bundle_script_files)
 end
 
 Then(/^the scripts should have been executed$/) do
