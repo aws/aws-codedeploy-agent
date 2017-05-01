@@ -32,12 +32,10 @@ module InstanceAgent
     end
 
     def self.extract_tar(bundle_file, dst)
-      log(:warn, "Bundle format 'tar' not supported on Windows platforms. Bundle unpack may fail.")
       Minitar.unpack(bundle_file, dst)
     end
 
     def self.extract_tgz(bundle_file, dst)
-      log(:warn, "Bundle format 'tgz' not supported on Windows platforms. Bundle unpack may fail.")
       compressed = Zlib::GzipReader.open(bundle_file)
       Minitar.unpack(compressed, dst)
     end
