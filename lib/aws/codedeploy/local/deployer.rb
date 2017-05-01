@@ -1,7 +1,11 @@
 require 'ostruct'
 require 'securerandom'
+require 'rbconfig'
 
 require 'aws/codedeploy/local/cli_validator'
+require 'instance_agent'
+require 'instance_agent/log'
+require 'instance_agent/platform/windows_util'
 require 'instance_agent/plugins/codedeploy/command_executor'
 require 'instance_agent/plugins/codedeploy/onpremise_config'
 
@@ -9,7 +13,9 @@ module AWS
   module CodeDeploy
     module Local
       class Deployer
-        CONF_DEFAULT_LOCATION = '/etc/codedeploy-agent/conf/codedeployagent.yml'
+        IS_WINDOWS = (RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/)
+        WINDOWS_DEFAULT_DIRECTORY = File.join(ENV['PROGRAMDATA'], 'Amazon/CodeDeploy')
+        CONF_DEFAULT_LOCATION = IS_WINDOWS ? "#{WINDOWS_DEFAULT_DIRECTORY}/conf.yml" : '/etc/codedeploy-agent/conf/codedeployagent.yml'
         CONF_REPO_LOCATION_SUFFIX = '/conf/codedeployagent.yml'
 
         DEFAULT_ORDERED_LIFECYCLE_EVENTS = %w(BeforeBlockTraffic
@@ -29,6 +35,7 @@ module AWS
         def initialize
           current_directory = Dir.pwd
           InstanceAgent::Log.init(File.join(current_directory, 'codedeploy-local.log'))
+          if IS_WINDOWS then self.class.configure_windows_certificate end
 
           if File.file?(CONF_DEFAULT_LOCATION) && File.readable?(CONF_DEFAULT_LOCATION)
             InstanceAgent::Config.config[:config_file] = CONF_DEFAULT_LOCATION
@@ -37,11 +44,19 @@ module AWS
           end
 
           InstanceAgent::Config.load_config
-          InstanceAgent::Platform.util = InstanceAgent::LinuxUtil
+          InstanceAgent::Platform.util = IS_WINDOWS ? InstanceAgent::WindowsUtil : InstanceAgent::LinuxUtil
 
+          if IS_WINDOWS then InstanceAgent::Config.config[:on_premises_config_file] = "#{WINDOWS_DEFAULT_DIRECTORY}/conf.onpremises.yml" end
           if File.file?(InstanceAgent::Config.config[:on_premises_config_file]) && File.readable?(InstanceAgent::Config.config[:on_premises_config_file])
             InstanceAgent::Plugins::CodeDeployPlugin::OnPremisesConfig.configure
           end
+        end
+
+        def self.configure_windows_certificate
+          cert_dir = File.expand_path(File.join(File.dirname(__FILE__), '..\..\..\..\certs'))
+          Aws.config[:ssl_ca_bundle] = File.join(cert_dir, 'windows-ca-bundle.crt')
+          ENV['AWS_SSL_CA_DIRECTORY'] = File.join(cert_dir, 'windows-ca-bundle.crt')
+          ENV['SSL_CERT_FILE'] = File.join(cert_dir, 'windows-ca-bundle.crt')
         end
 
         def execute_events(args)

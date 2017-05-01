@@ -325,14 +325,24 @@ module InstanceAgent
         def handle_local_file(deployment_spec, local_location)
           # Symlink local file to the location where download is expected to go
           bundle_file = artifact_bundle(deployment_spec)
-          File.symlink local_location, bundle_file
+          begin
+            File.symlink local_location, bundle_file
+          rescue
+            #Symlinking fails on windows, copying recursively instead
+            FileUtils.cp_r local_location, bundle_file
+          end
         end
 
         private
         def handle_local_directory(deployment_spec, local_location)
           # Symlink local directory to the location where a file would have been extracted
           deployment_archive_location = archive_root_dir(deployment_spec)
-          File.symlink local_location, deployment_archive_location
+          begin
+            File.symlink local_location, deployment_archive_location
+          rescue
+            #Symlinking fails on windows, copying recursively instead
+            FileUtils.cp_r local_location, deployment_archive_location
+          end
         end
 
         private
