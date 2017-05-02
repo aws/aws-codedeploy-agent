@@ -125,15 +125,18 @@ describe AWS::CodeDeploy::Local::Deployer do
         allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
         executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
+        all_possible_lifecycle_events = AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.to_set.merge(NON_DEFAULT_LIFECYCLE_EVENTS).to_a
+        all_expected_hooks = all_possible_lifecycle_events - AWS::CodeDeploy::Local::Deployer::REQUIRED_LIFECYCLE_EVENTS
+        expected_hook_mapping = Hash[all_expected_hooks.map{|h|[h,[h]]}]
         expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
-          with(:hook_mapping => Hash[NON_DEFAULT_LIFECYCLE_EVENTS.map{|h|[h,[h]]}]).
+          with(:hook_mapping => expected_hook_mapping).
           and_return(executor)
 
         NON_DEFAULT_LIFECYCLE_EVENTS_AFTER_DOWNLOAD_BUNDLE_AND_INSTALL.each do |name|
           expect(executor).to receive(:execute_command).with(
             OpenStruct.new(:command_name => name),
             deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File', 'tar',
-                            NON_DEFAULT_LIFECYCLE_EVENTS_AFTER_DOWNLOAD_BUNDLE_AND_INSTALL)).once.ordered
+                            all_possible_lifecycle_events)).once.ordered
         end
         AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
       end

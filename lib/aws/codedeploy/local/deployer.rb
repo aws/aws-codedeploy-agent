@@ -62,11 +62,11 @@ module AWS
         def execute_events(args)
           args = AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
 
-          all_possible_lifecycle_events = add_download_bundle_and_install_events(ordered_lifecycle_events(args['<event>']))
-          spec = build_spec(args['<location>'], bundle_type(args), args['<deployment-group-id>'], all_possible_lifecycle_events)
+          spec = build_spec(args['<location>'], bundle_type(args), args['<deployment-group-id>'], all_possible_lifecycle_events(args['<event>']))
 
           command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => hook_mapping(args['<event>']))
-          all_possible_lifecycle_events.each do |name|
+          all_lifecycle_events_to_execute = add_download_bundle_and_install_events(ordered_lifecycle_events(args['<event>']))
+          all_lifecycle_events_to_execute.each do |name|
             command_executor.execute_command(OpenStruct.new(:command_name => name), spec.clone)
           end
         end
@@ -84,10 +84,13 @@ module AWS
           REQUIRED_LIFECYCLE_EVENTS.select{|hook| !events.include?(hook)} + events
         end
 
+        def all_possible_lifecycle_events(events)
+          DEFAULT_ORDERED_LIFECYCLE_EVENTS.to_set.merge(ordered_lifecycle_events(events)).to_a
+        end
+
         def hook_mapping(events)
-          Hash[ordered_lifecycle_events(events)
-            .select{|hook| !REQUIRED_LIFECYCLE_EVENTS.include? hook}
-            .map{|h|[h,[h]]}]
+          all_events_plus_default_events_minus_required_events = DEFAULT_ORDERED_LIFECYCLE_EVENTS.to_set.merge(ordered_lifecycle_events(events)) - REQUIRED_LIFECYCLE_EVENTS
+          Hash[all_events_plus_default_events_minus_required_events.map{|h|[h,[h]]}]
         end
 
         def build_spec(location, bundle_type, deployment_group_id, all_possible_lifecycle_events)

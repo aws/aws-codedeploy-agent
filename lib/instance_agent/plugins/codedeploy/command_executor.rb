@@ -203,8 +203,12 @@ module InstanceAgent
 
         private
         def validate_app_spec_hooks(app_spec, all_possible_lifecycle_events)
-          if (!all_possible_lifecycle_events.nil? && !app_spec.hooks.keys.to_set.subset?(all_possible_lifecycle_events.to_set))
-            raise ArgumentError.new('appspec.yml file contains unknown lifecycle events')
+          unless all_possible_lifecycle_events.nil?
+            app_spec_hooks_plus_hooks_from_mapping = app_spec.hooks.keys.to_set.merge(@hook_mapping.keys).to_a
+            unless app_spec_hooks_plus_hooks_from_mapping.to_set.subset?(all_possible_lifecycle_events.to_set)
+              unknown_lifecycle_events = app_spec_hooks_plus_hooks_from_mapping - all_possible_lifecycle_events
+              raise ArgumentError.new("appspec.yml file contains unknown lifecycle events: #{unknown_lifecycle_events}")
+            end
           end
 
           app_spec
@@ -224,7 +228,7 @@ module InstanceAgent
         def download_from_s3(deployment_spec, bucket, key, version, etag)
           log(:debug, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
           region = ENV['AWS_REGION'] || InstanceMetadata.region
-          
+
           proxy_uri = nil
           if InstanceAgent::Config.config[:proxy_uri]
             proxy_uri = URI(InstanceAgent::Config.config[:proxy_uri])
