@@ -11,7 +11,7 @@ class AwsCredentials
     if File.exists?(file_path) && File.readable?(file_path)
       begin
         file_config = YAML.load(File.read(file_path)).inject({}){|temp,(k,v)| temp[k.to_sym] = v; temp}
-      rescue Exception => e
+      rescue Exception
         puts("Invalid AwsCredentials file")
         raise "Invalid AwsCredentials file"
       end
@@ -27,6 +27,9 @@ class AwsCredentials
       end
       if file_config[:aws_secret_access_key]
         ENV['AWS_SECRET_ACCESS_KEY'] = file_config[:aws_secret_access_key]
+      end
+      if file_config[:aws_session_token]
+        ENV['AWS_SESSION_TOKEN'] = file_config[:aws_session_token]
       end
       @ec2_ami ||= file_config[:ec2_ami_id]
       @keypair_name ||= file_config[:keypair_name]

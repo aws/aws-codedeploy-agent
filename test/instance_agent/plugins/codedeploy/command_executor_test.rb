@@ -196,10 +196,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           })
 
           app_spec = mock("parsed application specification")
-          app_spec.expects(:hooks).returns({'UnknownHook' => nil})
+          app_spec_hooks = {'UnknownHook' => nil}
+          app_spec.expects(:hooks).returns(app_spec_hooks)
           File.stubs(:read).with("#@archive_root_dir/appspec.yml").returns("APP SPEC")
           ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC").returns(app_spec)
-          assert_raised_with_message('appspec.yml file contains unknown lifecycle events', ArgumentError) do
+          unknown_hooks = app_spec_hooks.merge(@test_hook_mapping)
+          assert_raised_with_message("appspec.yml file contains unknown lifecycle events: #{unknown_hooks.keys}", ArgumentError) do
             @command_executor.execute_command(@command, deployment_spec)
           end
         end

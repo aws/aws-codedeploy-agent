@@ -1,12 +1,11 @@
-require 'aws-sdk-core'
 require 'securerandom'
 require 'base64'
 require 'tempfile'
 require 'zip'
 require 'fileutils'
 
-$:.unshift File.join(File.dirname(File.expand_path('..', __FILE__)), 'lib')
-$:.unshift File.join(File.dirname(File.expand_path('..', __FILE__)), 'features')
+$:.unshift File.join(File.dirname(File.expand_path('../..', __FILE__)), 'lib')
+$:.unshift File.join(File.dirname(File.expand_path('../..', __FILE__)), 'features')
 require 'aws_credentials'
 require 'instance_agent'
 require 'instance_agent/plugins/codedeploy/register_plugin'
@@ -16,15 +15,9 @@ require 'instance_agent/runner/master'
 require 'instance_agent/platform'
 require 'instance_agent/platform/linux_util'
 require 'aws/codedeploy/local/deployer'
+require 'step_definitions/step_constants'
 
-IS_WINDOWS = (RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/)
-CODEDEPLOY_TEST_PREFIX = "codedeploy-agent-integ-test-"
-DEPLOYMENT_ROLE_NAME = "#{CODEDEPLOY_TEST_PREFIX}deployment-role"
-APP_BUNDLE_BUCKET_SUFFIX = IS_WINDOWS ? '-windows' : '-linux'
-APP_BUNDLE_BUCKET = "#{CODEDEPLOY_TEST_PREFIX}bucket#{APP_BUNDLE_BUCKET_SUFFIX}"
-APP_BUNDLE_KEY = 'app_bundle.zip'
-REGION = 'us-west-2'
-SAMPLE_APP_BUNDLE_DIRECTORY = IS_WINDOWS ? 'sample_app_bundle_windows' : 'sample_app_bundle_linux'
+DEPLOYMENT_ROLE_NAME = "#{StepConstants::CODEDEPLOY_TEST_PREFIX}deployment-role"
 
 def instance_name
   @instance_name ||= SecureRandom.uuid
@@ -49,7 +42,8 @@ def eventually(options = {}, &block)
 end
 
 Before("@codedeploy-agent") do
-  configure_local_agent
+  @working_directory = Dir.mktmpdir
+  configure_local_agent(@working_directory)
   AwsCredentials.instance.configure
 
   #instantiate these clients first so they use user's aws creds instead of assumed role creds
@@ -57,30 +51,30 @@ Before("@codedeploy-agent") do
   @iam_client = Aws::IAM::Client.new
 end
 
-def configure_local_agent
-  @working_directory = Dir.mktmpdir
-  puts "Running test out of temp directory #{@working_directory}"
+def configure_local_agent(working_directory)
   ProcessManager::Config.init
-  InstanceAgent::Log.init(File.join(@working_directory, 'codedeploy-agent.log'))
+  InstanceAgent::Log.init(File.join(working_directory, 'codedeploy-agent.log'))
   InstanceAgent::Config.init
-  InstanceAgent::Platform.util = IS_WINDOWS ? InstanceAgent::WindowsUtil : InstanceAgent::LinuxUtil
+  InstanceAgent::Platform.util = StepConstants::IS_WINDOWS ? InstanceAgent::WindowsUtil : InstanceAgent::LinuxUtil
 
-  if IS_WINDOWS then configure_windows_certificate end
+  if StepConstants::IS_WINDOWS then configure_windows_certificate end
+  InstanceAgent::Config.config[:on_premises_config_file] = "#{working_directory}/codedeploy.onpremises.yml"
 
   configuration_contents = <<-CONFIG
 ---
 :log_aws_wire: false
-:log_dir: #{@working_directory}
-:pid_dir: #{@working_directory}
+:log_dir: #{working_directory}
+:pid_dir: #{working_directory}
 :program_name: codedeploy-agent
-:root_dir: #{@working_directory}/deployment-root
+:root_dir: #{working_directory}/deployment-root
+:on_premises_config_file: #{InstanceAgent::Config.config[:on_premises_config_file]}
 :verbose: true
 :wait_between_runs: 1
 :proxy_uri:
 :max_revisions: 5
   CONFIG
 
-  InstanceAgent::Config.config[:config_file] = "#{@working_directory}/codedeployagent.yml"
+  InstanceAgent::Config.config[:config_file] = "#{working_directory}/codedeployagent.yml"
   File.open(InstanceAgent::Config.config[:config_file], 'w') { |file| file.write(configuration_contents) }
 
   InstanceAgent::Config.load_config
@@ -94,10 +88,10 @@ def configure_windows_certificate
 end
 
 After("@codedeploy-agent") do
-  @thread.kill
+  @thread.kill unless @thread.nil?
   @codedeploy_client.delete_application({:application_name => @application_name}) unless @application_name.nil?
   @codedeploy_client.deregister_on_premises_instance({:instance_name => instance_name})
-  FileUtils.rm_rf(@working_directory)
+  FileUtils.rm_rf(@working_directory) unless @working_directory.nil?
 end
 
 Given(/^I have a CodeDeploy application$/) do
@@ -116,12 +110,11 @@ end
 def configure_agent_for_on_premise(iam_session_arn)
   on_premise_configuration_content = <<-CONFIG
 ---
-region: #{REGION}
+region: #{StepConstants::REGION}
 aws_credentials_file: #{create_aws_credentials_file}
 iam_session_arn: #{iam_session_arn}
   CONFIG
 
-  InstanceAgent::Config.config[:on_premises_config_file] = "#{@working_directory}/codedeploy.onpremises.yml"
   File.open(InstanceAgent::Config.config[:on_premises_config_file], 'w') { |file| file.write(on_premise_configuration_content) }
   InstanceAgent::Plugins::CodeDeployPlugin::OnPremisesConfig.configure
 end
@@ -155,64 +148,13 @@ Given(/^I have a deployment group containing my host$/) do
   create_deployment_group
 end
 
-Given(/^I have a sample bundle uploaded to s3$/) do
-  s3 = Aws::S3::Client.new
-
-  begin
-    s3.create_bucket({
-      bucket: APP_BUNDLE_BUCKET, # required
-      create_bucket_configuration: {
-        location_constraint: REGION,
-      }
-    })
-  rescue Aws::S3::Errors::BucketAlreadyOwnedByYou
-    #Already created the bucket
-  end
-
-  File.open(zip_app_bundle, 'rb') do |file|
-    s3.put_object(bucket: APP_BUNDLE_BUCKET, key: APP_BUNDLE_KEY, body: file)
-  end
-end
-
-def zip_app_bundle
-  zip_file_name = "#{@working_directory}/#{APP_BUNDLE_KEY}"
-  zip_directory("#{Dir.pwd}/features/resources/#{SAMPLE_APP_BUNDLE_DIRECTORY}", zip_file_name)
-  zip_file_name
-end
-
-def zip_directory(input_dir, output_file)
-  entries = directories_and_files_inside(input_dir)
-  zip_io = Zip::File.open(output_file, Zip::File::CREATE)
-
-  write_zip_entries(entries, '', input_dir, zip_io)
-  zip_io.close()
-end
-
-def write_zip_entries(entries, path, input_dir, zip_io)
-  entries.each do |entry|
-    zipFilePath = path == "" ? entry : File.join(path, entry)
-    diskFilePath = File.join(input_dir, zipFilePath)
-    if File.directory?(diskFilePath)
-      zip_io.mkdir(zipFilePath)
-      folder_entries = directories_and_files_inside(diskFilePath)
-      write_zip_entries(folder_entries, zipFilePath, input_dir, zip_io)
-    else
-      zip_io.get_output_stream(zipFilePath){ |f| f.write(File.open(diskFilePath, "rb").read())}
-    end
-  end
-end
-
-def directories_and_files_inside(dir)
-  Dir.entries(dir) - %w(.. .)
-end
-
 When(/^I create a deployment for the application and deployment group with the test S(\d+) revision$/) do |arg1|
   @deployment_id = @codedeploy_client.create_deployment({:application_name => @application_name,
                             :deployment_group_name => @deployment_group_name,
                             :revision => { :revision_type => "S3",
                                            :s3_location => {
-                                             :bucket => APP_BUNDLE_BUCKET,
-                                             :key => APP_BUNDLE_KEY,
+                                             :bucket => StepConstants::APP_BUNDLE_BUCKET,
+                                             :key => StepConstants::APP_BUNDLE_KEY,
                                              :bundle_type => "zip"
                                            }
                                          },
@@ -236,38 +178,12 @@ Then(/^the overall deployment should eventually succeed$/) do
 end
 
 Then(/^the expected files should have have been deployed to my host$/) do
-  directories_in_deployment_root_folder = directories_and_files_inside(InstanceAgent::Config.config[:root_dir])
-  expect(directories_in_deployment_root_folder.size).to eq(3)
-
   deployment_group_id = @codedeploy_client.get_deployment_group({
     application_name: @application_name,
     deployment_group_name: @deployment_group_name,
   }).deployment_group_info.deployment_group_id
 
-  #ordering of the directories depends on the deployment group id, so using include instead of eq
-  expect(directories_in_deployment_root_folder).to include(*%W(deployment-instructions deployment-logs #{deployment_group_id}))
-
-  files_in_deployment_logs_folder = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/deployment-logs")
-  expect(files_in_deployment_logs_folder.size).to eq(1)
-  expect(files_in_deployment_logs_folder).to eq(%w(codedeploy-agent-deployments.log))
-
-  directories_in_deployment_group_id_folder = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}")
-  expect(directories_in_deployment_group_id_folder.size).to eq(1)
-  expect(directories_in_deployment_group_id_folder).to eq([@deployment_id])
-
-  files_and_directories_in_deployment_id_folder = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{@deployment_id}")
-  expect(files_and_directories_in_deployment_id_folder.size).to eq(3)
-  expect(files_and_directories_in_deployment_id_folder).to include(*%w(bundle.tar logs deployment-archive))
-
-  files_and_directories_in_deployment_archive_folder = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{@deployment_id}/deployment-archive")
-  expect(files_and_directories_in_deployment_archive_folder.size).to eq(2)
-  expect(files_and_directories_in_deployment_archive_folder).to include(*%w(appspec.yml scripts))
-
-  files_in_scripts_folder = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{@deployment_id}/deployment-archive/scripts")
-  expect(files_in_scripts_folder.size).to eq(9)
-
-  sample_app_bundle_script_files = directories_and_files_inside("#{Dir.pwd}/features/resources/#{SAMPLE_APP_BUNDLE_DIRECTORY}/scripts")
-  expect(files_in_scripts_folder).to eq(sample_app_bundle_script_files)
+  step "the expected files should have have been deployed to my host during deployment with deployment group id #{deployment_group_id} and deployment id #{@deployment_id}"
 end
 
 Then(/^the scripts should have been executed$/) do
@@ -277,9 +193,7 @@ Then(/^the scripts should have been executed$/) do
   #
   #Interestingly I discovered that these are the only executed steps. So codedeploy does not run ApplicationStop for example if there's no previous revision.
   expected_executed_lifecycle_events = %w(BeforeInstall AfterInstall ApplicationStart ValidateService)
-  file_lines = File.read("#{@working_directory}/executed_proof_file").split("\n")
-  expect(file_lines.size).to eq(expected_executed_lifecycle_events.size)
-  expect(file_lines).to eq(expected_executed_lifecycle_events)
+  step "the scripts for events #{expected_executed_lifecycle_events.join(' ')} should have been executed and written to executed_proof_file in directory #{@working_directory}"
 end
 
 def create_deployment_group

@@ -34,16 +34,36 @@ describe AWS::CodeDeploy::Local::Deployer do
 
   before do
     FileUtils.mkdir "#{test_working_directory}/conf"
-    config_file_location = "#{test_working_directory}#{AWS::CodeDeploy::Local::Deployer::CONF_REPO_LOCATION_SUFFIX}"
-    FileUtils.cp("#{Dir.pwd}#{AWS::CodeDeploy::Local::Deployer::CONF_REPO_LOCATION_SUFFIX}", config_file_location)
+    @config_file_location = create_config_file(test_working_directory)
     allow(Dir).to receive(:pwd).and_return test_working_directory
     ProcessManager::Config.config[:root_dir] = test_working_directory
     allow(AWS::CodeDeploy::Local::Deployer).to receive(:random_deployment_id).and_return(TEST_DEPLOYMENT_ID)
-    allow(File).to receive(:exists?).with(config_file_location).and_return(true)
-    allow(File).to receive(:readable?).with(config_file_location).and_return(true)
+    allow(File).to receive(:exists?).with(@config_file_location).and_return(true)
+    allow(File).to receive(:readable?).with(@config_file_location).and_return(true)
     allow(File).to receive(:exists?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(false)
     allow(File).to receive(:readable?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(false)
     allow(File).to receive(:readable?).with(InstanceAgent::Config.config[:on_premises_config_file]).and_return(false)
+  end
+
+  def create_config_file(working_directory)
+    configuration_contents = <<-CONFIG
+---
+:log_aws_wire: false
+:log_dir: #{working_directory}
+:pid_dir: #{working_directory}
+:program_name: codedeploy-agent
+:root_dir: #{working_directory}/deployment-root
+:on_premises_config_file: #{InstanceAgent::Config.config[:on_premises_config_file]}
+:verbose: true
+:wait_between_runs: 1
+:proxy_uri:
+:max_revisions: 5
+    CONFIG
+
+    InstanceAgent::Config.config[:log_dir] = working_directory
+    InstanceAgent::Config.config[:config_file] = "#{working_directory}/codedeployagent.yml"
+    File.open(InstanceAgent::Config.config[:config_file], 'w') { |file| file.write(configuration_contents) }
+    InstanceAgent::Config.config[:config_file]
   end
 
   after do
@@ -53,7 +73,12 @@ describe AWS::CodeDeploy::Local::Deployer do
   describe 'initialize' do
     it 'tries to load configuration' do
       expect(InstanceAgent::Config).to receive(:load_config)
-      AWS::CodeDeploy::Local::Deployer.new
+      AWS::CodeDeploy::Local::Deployer.new(@config_file_location)
+    end
+
+    it 'tries to load configuration if the configuration file location provided is nil' do
+      expect(InstanceAgent::Config).to receive(:load_config)
+      AWS::CodeDeploy::Local::Deployer.new(nil)
     end
 
     it 'tries to load on-premise-configuration from on_premises_config_file if it exists' do
@@ -97,7 +122,7 @@ describe AWS::CodeDeploy::Local::Deployer do
             deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File', 'tgz',
                             AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
         end
-        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+        AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
       end
     end
 
@@ -138,7 +163,7 @@ describe AWS::CodeDeploy::Local::Deployer do
             deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File', 'tar',
                             all_possible_lifecycle_events)).once.ordered
         end
-        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+        AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
       end
     end
 
@@ -172,7 +197,7 @@ describe AWS::CodeDeploy::Local::Deployer do
             deployment_spec(SAMPLE_DIRECTORY_BUNDLE, 'Local Directory', 'directory',
                             AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
         end
-        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+        AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
       end
     end
 
@@ -206,7 +231,7 @@ describe AWS::CodeDeploy::Local::Deployer do
             deployment_spec(SAMPLE_GIT_LOCATION_TARBALL, 'GitHub', 'tar',
                             AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
         end
-        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+        AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
       end
     end
 
@@ -239,7 +264,7 @@ describe AWS::CodeDeploy::Local::Deployer do
             deployment_spec(SAMPLE_GIT_LOCATION_ZIPBALL, 'GitHub', 'zip',
                             AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
         end
-        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+        AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
       end
     end
 
@@ -272,7 +297,7 @@ describe AWS::CodeDeploy::Local::Deployer do
             deployment_spec(SAMPLE_S3_LOCATION, 'S3', 'zip',
                             AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
         end
-        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+        AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
       end
     end
 
@@ -306,7 +331,7 @@ describe AWS::CodeDeploy::Local::Deployer do
                             AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS,
                             true, true)).once.ordered
         end
-        AWS::CodeDeploy::Local::Deployer.new.execute_events(args)
+        AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
       end
     end
 

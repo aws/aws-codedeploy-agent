@@ -32,21 +32,22 @@ module AWS
 
         REQUIRED_LIFECYCLE_EVENTS = %w(DownloadBundle Install)
 
-        def initialize
+        def initialize(configuration_file_location = CONF_DEFAULT_LOCATION)
+          configuration_file_location ||= CONF_DEFAULT_LOCATION # Default gets set this way even if the input is nil
           current_directory = Dir.pwd
-          InstanceAgent::Log.init(File.join(current_directory, 'codedeploy-local.log'))
           if IS_WINDOWS then self.class.configure_windows_certificate end
 
-          if File.file?(CONF_DEFAULT_LOCATION) && File.readable?(CONF_DEFAULT_LOCATION)
-            InstanceAgent::Config.config[:config_file] = CONF_DEFAULT_LOCATION
+          if File.file?(configuration_file_location) && File.readable?(configuration_file_location)
+            InstanceAgent::Config.config[:config_file] = configuration_file_location
           else
             InstanceAgent::Config.config[:config_file] = "#{current_directory}#{CONF_REPO_LOCATION_SUFFIX}"
           end
 
           InstanceAgent::Config.load_config
+
+          InstanceAgent::Log.init(File.join(InstanceAgent::Config.config[:log_dir], 'codedeploy-local.log'))
           InstanceAgent::Platform.util = IS_WINDOWS ? InstanceAgent::WindowsUtil : InstanceAgent::LinuxUtil
 
-          if IS_WINDOWS then InstanceAgent::Config.config[:on_premises_config_file] = "#{WINDOWS_DEFAULT_DIRECTORY}/conf.onpremises.yml" end
           if File.file?(InstanceAgent::Config.config[:on_premises_config_file]) && File.readable?(InstanceAgent::Config.config[:on_premises_config_file])
             InstanceAgent::Plugins::CodeDeployPlugin::OnPremisesConfig.configure
           end

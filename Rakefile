@@ -46,7 +46,7 @@ def getAgentTrackingInfo
   begin
     commit_id = `git rev-parse HEAD`.chop!
     tracking = "COMMIT_#{commit_id}"
-  rescue 
+  rescue
     tracking = "UNKNOWN_VERSION"
   end
 end
