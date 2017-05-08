@@ -6,7 +6,12 @@ require 'docopt'
 require 'aws/codedeploy/local/deployer'
 
 # Initialize the deployer first to initialize the configuration values so they can be used as part of the help message
-deployer = AWS::CodeDeploy::Local::Deployer.new
+begin
+  AWS::CodeDeploy::Local::Deployer.new
+rescue
+  # If we fail to initialize all the configuration values correctly just grab the default location for the config for the help message
+  InstanceAgent::Config.config[:root_dir] = AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION
+end
 
 doc = <<DOCOPT
 CodeDeploy Local Deployments.
