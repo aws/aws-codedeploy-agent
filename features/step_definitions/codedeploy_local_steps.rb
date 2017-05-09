@@ -65,7 +65,7 @@ def tgz_app_bundle(temp_directory_to_create_bundle)
 end
 
 When(/^I create a local deployment with my bundle$/) do
-  @local_deployment_succeeded = system "bin/codedeploy-local deploy --bundle-location #{@bundle_location} --type #{@bundle_type} --deployment-group-id #{LOCAL_DEPLOYMENT_GROUP_ID} --configuration-file #{InstanceAgent::Config.config[:config_file]}"
+  @local_deployment_succeeded = system "bin/codedeploy-local --bundle-location #{@bundle_location} --type #{@bundle_type} --deployment-group-id #{LOCAL_DEPLOYMENT_GROUP_ID} --configuration-file #{InstanceAgent::Config.config[:config_file]}"
 end
 
 Then(/^the local deployment command should succeed$/) do

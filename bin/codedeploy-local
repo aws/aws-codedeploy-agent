@@ -17,9 +17,9 @@ doc = <<DOCOPT
 CodeDeploy Local Deployments.
 
 Usage:
-  #{__FILE__} deploy --bundle-location <location> --type (tgz|tar|zip|directory) --deployment-group-id <deployment-group-id> [--configuration-file <configuration-file>]
-  #{__FILE__} deploy --bundle-location <location> --type (tgz|tar|zip|directory) --deployment-group-id <deployment-group-id> [--event <event>...|(--event <event>)...]
-  #{__FILE__} deploy --bundle-location <location> --type (tgz|tar|zip|directory) --deployment-group-id <deployment-group-id> [--configuration-file <configuration-file>] [--event <event>...|(--event <event>)...]
+  #{__FILE__} --bundle-location <location> --type (tgz|tar|zip|directory) --deployment-group-id <deployment-group-id> [--configuration-file <configuration-file>]
+  #{__FILE__} --bundle-location <location> --type (tgz|tar|zip|directory) --deployment-group-id <deployment-group-id> [--event <event>...|(--event <event>)...]
+  #{__FILE__} --bundle-location <location> --type (tgz|tar|zip|directory) --deployment-group-id <deployment-group-id> [--configuration-file <configuration-file>] [--event <event>...|(--event <event>)...]
   #{__FILE__} -h | --help
   #{__FILE__} -v | --version
 
@@ -33,13 +33,13 @@ Options:
   -v, --version              Show version.
 
 Examples:
-  #{__FILE__} deploy --bundle-location /path/to/local/bundle.tgz --type tgz --deployment-group-id local-deployments
-  #{__FILE__} deploy --bundle-location /path/to/local/bundle.zip --type zip --deployment-group-id 217ba5c8-5dd1-4774-89c6-30b107ac5dca
-  #{__FILE__} deploy --bundle-location /path/to/local/bundle/dir --type directory --deployment-group-id local-deployments
-  #{__FILE__} deploy --bundle-location s3://mybucket/bundle.tgz --type tgz --deployment-group-id local-deployments
-  #{__FILE__} deploy --bundle-location s3://mybucket/bundle.zip?versionId=1234&etag=47e8 --type tgz --deployment-group-id local-deployments
-  #{__FILE__} deploy --bundle-location https://api.github.com/repos/awslabs/aws-codedeploy-sample-tomcat/zipball/master --type zip --deployment-group-id local-deployments
-  #{__FILE__} deploy --bundle-location /path/to/local/bundle.tgz  --deployment-group-id local-deployments--event ApplicationStop DownloadBundle Install ApplicationStart HealthCheck CustomHook
+  #{__FILE__} --bundle-location /path/to/local/bundle.tgz --type tgz --deployment-group-id local-deployments
+  #{__FILE__} --bundle-location /path/to/local/bundle.zip --type zip --deployment-group-id 217ba5c8-5dd1-4774-89c6-30b107ac5dca
+  #{__FILE__} --bundle-location /path/to/local/bundle/dir --type directory --deployment-group-id local-deployments
+  #{__FILE__} --bundle-location s3://mybucket/bundle.tgz --type tgz --deployment-group-id local-deployments
+  #{__FILE__} --bundle-location s3://mybucket/bundle.zip?versionId=1234&etag=47e8 --type tgz --deployment-group-id local-deployments
+  #{__FILE__} --bundle-location https://api.github.com/repos/awslabs/aws-codedeploy-sample-tomcat/zipball/master --type zip --deployment-group-id local-deployments
+  #{__FILE__} --bundle-location /path/to/local/bundle.tgz  --deployment-group-id local-deployments--event ApplicationStop DownloadBundle Install ApplicationStart HealthCheck CustomHook
 
 Specifying AWS Credentials:
   #{__FILE__} allows you to provide your aws access key, secret key, and region in multiple ways. It uses the AWS SDK.
