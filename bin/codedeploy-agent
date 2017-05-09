@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 
+$:.unshift File.join(File.dirname(File.expand_path('..', __FILE__)), 'lib')
+
 ruby_versions = ["2.4", "2.3", "2.2", "2.1", "2.0"]
 actual_ruby_version = RUBY_VERSION.split('.').map{|s|s.to_i}
 left_bound = '2.0.0'.split('.').map{|s|s.to_i}

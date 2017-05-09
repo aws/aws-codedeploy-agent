@@ -14,8 +14,14 @@ end
 # This is required so that the agent can run without requiring an init script
 # if installed as a gem
 
-agent_dir = "/opt/codedeploy-agent" 
+agent_dir = "/opt/codedeploy-agent"
 $:.unshift "#{agent_dir}/lib"
+Gem.use_paths(nil, Gem.path << "/opt/codedeploy-agent/vendor")
+ENV['BUNDLE_GEMFILE'] ||= "/opt/codedeploy-agent/Gemfile"
+
+require 'bundler'
+require 'bundler/setup'
+Bundler.require
 
 require 'instance_agent'
 require 'gli'
