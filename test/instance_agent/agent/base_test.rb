@@ -32,21 +32,21 @@ class InstanceAgentBaseTest < InstanceAgentTestCase
         @base.stubs(:perform).raises Aws::Errors::MissingCredentialsError
         @base.expects(:sleep).with(any_of(9, 10))
         @base.expects(:log).with(:error, "Missing credentials - please check if this instance was started with an IAM instance profile")
-        assert_nothing_raised(Aws::Errors::MissingCredentialsError) { @base.run }
+        assert_nothing_raised { @base.run }
       end
 
       should 'rescue Aws::Errors::ServiceError' do
         @base.stubs(:perform).raises Aws::Errors::ServiceError.new(nil, "http error")
         @base.expects(:sleep).with(any_of(9, 10))
         @base.expects(:log).with { |v1, v2| v1.eql?(:error) && v2 =~ /Cannot reach InstanceService/ }
-        assert_nothing_raised(Aws::Errors::ServiceError) { @base.run }
+        assert_nothing_raised { @base.run }
       end
 
       should 'rescue all other types of exception' do
         @base.stubs(:perform).raises Exception
         @base.expects(:sleep).with(any_of(9, 10))
         @base.expects(:log).with { |v1, v2| v1.eql?(:error) && v2 =~ /Error during perform/ }
-        assert_nothing_raised(Exception) { @base.run }
+        assert_nothing_raised { @base.run }
       end
       
       should 'back off on repeated exceptions' do
@@ -54,8 +54,8 @@ class InstanceAgentBaseTest < InstanceAgentTestCase
         @base.expects(:sleep).with(any_of(9, 10))
         @base.expects(:sleep).with(any_of(12, 13))
         @base.expects(:log).twice.with { |v1, v2| v1.eql?(:error) && v2 =~ /Error during perform/ }
-        assert_nothing_raised(Exception) { @base.run }
-        assert_nothing_raised(Exception) { @base.run }
+        assert_nothing_raised { @base.run }
+        assert_nothing_raised { @base.run }
       end
     end
   end
