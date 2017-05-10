@@ -45,17 +45,7 @@ Specifying AWS Credentials:
   #{__FILE__} allows you to provide your aws access key, secret key, and region in multiple ways. It uses the AWS SDK.
   This means that if you're using an ec2 host with proper roles configured for the host with proper permissions you don't need to do anything else
   to give permission for this host to download your bundle from S3. See https://docs.aws.amazon.com/codedeploy/latest/userguide/getting-started-create-iam-instance-profile.html
-
-  The AWS SDK also provides a few other ways to provide credentials. Its documentation contains the following:
-
-  The SDK searches the following locations for credentials:
-    *ENV['AWS_ACCESS_KEY_ID'] and ENV['AWS_SECRET_ACCESS_KEY']
-    *The shared credentials ini file at ~/.aws/credentials (for more information see https://aws.amazon.com/blogs/security/a-new-and-standardized-way-to-manage-credentials-in-the-aws-sdks/ )
-    *From an instance profile when running on EC2, or from the ECS credential provider when running in an ECS container with that feature enabled.
-
-  The SDK searches the following locations for a region:
-    *ENV['AWS_REGION']
-  See https://docs.aws.amazon.com/sdkforruby/api/index.html
+  The AWS SDK also provides a few other ways to provide credentials. See https://docs.aws.amazon.com/sdkforruby/api/index.html
 
 DOCOPT
 
