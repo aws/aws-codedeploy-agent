@@ -9,6 +9,8 @@ module InstanceAgent
   module Plugins
     module CodeDeployPlugin
       class ScriptLog
+        SCRIPT_LOG_FILE_RELATIVE_LOCATION = 'logs/scripts.log'
+
         attr_reader :log
         def append_to_log(log_entry)
           log_entry ||= ""
@@ -175,7 +177,7 @@ module InstanceAgent
 
         private
         def create_script_log_file_if_needed
-          script_log_file_location = File.join(@current_deployment_root_dir, 'logs/scripts.log')
+          script_log_file_location = File.join(@current_deployment_root_dir, ScriptLog::SCRIPT_LOG_FILE_RELATIVE_LOCATION)
           if(!File.exists?(script_log_file_location))
             unless File.directory?(File.dirname(script_log_file_location))
               FileUtils.mkdir_p(File.dirname(script_log_file_location))

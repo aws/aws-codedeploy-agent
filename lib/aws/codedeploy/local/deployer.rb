@@ -67,8 +67,14 @@ module AWS
 
           command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => hook_mapping(args['<event>']))
           all_lifecycle_events_to_execute = add_download_bundle_and_install_events(ordered_lifecycle_events(args['<event>']))
-          all_lifecycle_events_to_execute.each do |name|
-            command_executor.execute_command(OpenStruct.new(:command_name => name), spec.clone)
+
+          begin
+            all_lifecycle_events_to_execute.each do |name|
+              command_executor.execute_command(OpenStruct.new(:command_name => name), spec.clone)
+            end
+          rescue InstanceAgent::Plugins::CodeDeployPlugin::ScriptError => e
+            handle_script_error(e, args['<deployment-group-id>'], @deployment_id)
+            exit
           end
         end
 
@@ -97,8 +103,8 @@ module AWS
         def build_spec(location, bundle_type, deployment_group_id, all_possible_lifecycle_events)
           raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("Unknown bundle type #{bundle_type} of #{location}") unless %w(tar zip tgz directory).include? bundle_type
 
-          deployment_id = self.class.random_deployment_id
-          puts "Starting to execute deployment from within folder #{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{deployment_id}"
+          @deployment_id = self.class.random_deployment_id
+          puts "Starting to execute deployment from within folder #{deployment_folder(deployment_group_id, @deployment_id)}"
           OpenStruct.new({
             :format => "TEXT/JSON",
             :payload => {
@@ -106,7 +112,7 @@ module AWS
               "ApplicationName" => location,
               "DeploymentGroupId" => deployment_group_id,
               "DeploymentGroupName" => "LocalFleet",
-              "DeploymentId" => deployment_id,
+              "DeploymentId" => @deployment_id,
               "Revision" => revision(location, bundle_type),
               "AllPossibleLifecycleEvents" => all_possible_lifecycle_events
             }.to_json.to_s
@@ -123,6 +129,10 @@ module AWS
 
         def bundle_type(args)
           args.select{|k,v| ['tar','tgz','zip','directory'].include?(k) && v}.keys.first
+        end
+
+        def deployment_folder(deployment_group_id, deployment_id)
+          "#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{deployment_id}"
         end
 
         def revision(location, bundle_type)
@@ -189,6 +199,11 @@ module AWS
           { 'RevisionType' => revision_type, 'LocalRevision' => 
             {'Location' => location, 
              'BundleType' => bundle_type}}
+        end
+
+        def handle_script_error(script_error, deployment_group_id, deployment_id)
+          puts "Your local deployment failed while trying to execute your script at #{deployment_folder(deployment_group_id, deployment_id)}/deployment-archive/#{script_error.script_name}"
+          puts "See the deployment log at #{deployment_folder(deployment_group_id, deployment_id)}/#{InstanceAgent::Plugins::CodeDeployPlugin::ScriptLog::SCRIPT_LOG_FILE_RELATIVE_LOCATION} for the exact error message"
         end
       end
     end

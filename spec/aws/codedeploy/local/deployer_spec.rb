@@ -124,6 +124,29 @@ describe AWS::CodeDeploy::Local::Deployer do
         end
         AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
       end
+
+      context 'when script fails with script error' do
+        it 'prints the correct error message to the screen and exits' do
+          allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+          executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
+
+          expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
+            with(:hook_mapping => EXPECTED_HOOK_MAPPING).
+            and_return(executor)
+
+          expect(executor).to receive(:execute_command).with(
+            OpenStruct.new(:command_name => AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.first),
+            deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File', 'tgz',
+                            AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).and_raise(
+                              InstanceAgent::Plugins::CodeDeployPlugin::ScriptError.new(InstanceAgent::Plugins::CodeDeployPlugin::ScriptError::SCRIPT_FAILED_CODE, 'script-location', nil), 'scripterror')
+
+          deployment_folder = "#{test_working_directory}/deployment-root/deployment-group-id/123"
+          STDOUT.should_receive(:puts).with("Starting to execute deployment from within folder #{deployment_folder}").once.ordered
+          STDOUT.should_receive(:puts).with("Your local deployment failed while trying to execute your script at #{deployment_folder}/deployment-archive/script-location").once.ordered
+          STDOUT.should_receive(:puts).with("See the deployment log at #{deployment_folder}/logs/scripts.log for the exact error message").once.ordered
+          AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
+        end
+      end
     end
 
     context 'when non-default events specified' do
