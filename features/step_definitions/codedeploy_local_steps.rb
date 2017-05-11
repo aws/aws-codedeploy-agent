@@ -1,5 +1,6 @@
 require 'archive/tar/minitar'
 require 'zlib'
+require 'pathname'
 include Archive::Tar
 
 $:.unshift File.join(File.dirname(File.expand_path('../../..', __FILE__)), 'lib')
@@ -18,13 +19,16 @@ After("@codedeploy-local") do
   FileUtils.rm_rf(@test_directory) unless @test_directory.nil?
 end
 
-Given(/^I have a sample local (tgz|tar|zip|directory) bundle$/) do |bundle_type|
+Given(/^I have a sample local (tgz|tar|zip|directory|relative_directory) bundle$/) do |bundle_type|
   expect(File.directory?(StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH)).to be true
   @bundle_type = bundle_type
 
   case bundle_type
   when 'directory'
     @bundle_location = StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH
+  when 'relative_directory'
+    @bundle_location = Pathname.new(StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH).relative_path_from Pathname.getwd
+    @bundle_type = 'directory'
   when 'zip'
     @bundle_location = zip_app_bundle(@test_directory)
   when 'tar'
@@ -33,7 +37,7 @@ Given(/^I have a sample local (tgz|tar|zip|directory) bundle$/) do |bundle_type|
     @bundle_location = tgz_app_bundle(@test_directory)
   end
 
-  expect(File.file?(@bundle_location)).to be true unless bundle_type == 'directory'
+  expect(File.file?(@bundle_location)).to be true unless bundle_type.include? 'directory'
 end
 
 def tar_app_bundle(temp_directory_to_create_bundle)

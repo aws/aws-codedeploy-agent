@@ -197,7 +197,7 @@ module AWS
             revision_type = 'Local File'
           end
           { 'RevisionType' => revision_type, 'LocalRevision' => 
-            {'Location' => location, 
+            {'Location' => File.expand_path(location),
              'BundleType' => bundle_type}}
         end
 
