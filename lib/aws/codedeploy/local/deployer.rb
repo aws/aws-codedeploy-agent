@@ -74,7 +74,7 @@ module AWS
             end
           rescue InstanceAgent::Plugins::CodeDeployPlugin::ScriptError => e
             handle_script_error(e, args['<deployment-group-id>'], @deployment_id)
-            exit
+            exit(false)
           end
         end
 

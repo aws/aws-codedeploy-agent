@@ -1,0 +1,15 @@
+version: 0.0
+os: windows
+hooks:
+    ApplicationStop:
+        - location: scripts/application_stop.bat
+    BeforeInstall:
+        - location: scripts/before_install.bat
+    AfterInstall:
+        - location: scripts/after_install.bat
+    ApplicationStart:
+        - location: scripts/application_start.bat
+    ValidateService:
+        - location: scripts/validate_service.bat
+    CustomEvent:
+        - location: scripts/custom_event.bat

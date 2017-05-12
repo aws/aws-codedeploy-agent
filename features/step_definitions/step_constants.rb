@@ -6,5 +6,7 @@ class StepConstants
   APP_BUNDLE_KEY = 'app_bundle.zip' unless defined?(APP_BUNDLE_KEY)
   SAMPLE_APP_BUNDLE_DIRECTORY = IS_WINDOWS ? 'sample_app_bundle_windows' : 'sample_app_bundle_linux' unless defined?(SAMPLE_APP_BUNDLE_DIRECTORY)
   SAMPLE_APP_BUNDLE_FULL_PATH = "#{Dir.pwd}/features/resources/#{StepConstants::SAMPLE_APP_BUNDLE_DIRECTORY}" unless defined? SAMPLE_APP_BUNDLE_FULL_PATH
+  SAMPLE_CUSTOM_EVENT_APP_BUNDLE_DIRECTORY = IS_WINDOWS ? 'sample_custom_event_app_bundle_windows' : 'sample_custom_event_app_bundle_linux' unless defined? SAMPLE_CUSTOM_EVENT_APP_BUNDLE_DIRECTORY
+  SAMPLE_CUSTOM_EVENT_APP_BUNDLE_FULL_PATH = "#{Dir.pwd}/features/resources/#{StepConstants::SAMPLE_CUSTOM_EVENT_APP_BUNDLE_DIRECTORY}" unless defined? SAMPLE_CUSTOM_EVENT_APP_BUNDLE_FULL_PATH
   REGION = 'us-west-2' unless defined?(REGION)
 end

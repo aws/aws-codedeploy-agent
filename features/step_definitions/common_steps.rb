@@ -70,7 +70,7 @@ def directories_and_files_inside(directory)
   Dir.entries(directory) - %w(.. .)
 end
 
-Then(/^the expected files should have have been deployed to my host during deployment with deployment group id (\S+) and deployment id (\S+)$/) do |deployment_group_id, deployment_id|
+Then(/^the expected files in directory (\S+) should have have been deployed to my host during deployment with deployment group id (\S+) and deployment id (\S+)$/) do |expected_scripts_directory, deployment_group_id, deployment_id|
   directories_in_deployment_root_folder = directories_and_files_inside(InstanceAgent::Config.config[:root_dir])
   expect(directories_in_deployment_root_folder.size).to eq(3)
 
@@ -93,26 +93,16 @@ Then(/^the expected files should have have been deployed to my host during deplo
   expect(files_and_directories_in_deployment_archive_folder).to include(*%w(appspec.yml scripts))
 
   files_in_scripts_folder = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{deployment_id}/deployment-archive/scripts")
-  sample_app_bundle_script_files = directories_and_files_inside("#{Dir.pwd}/features/resources/#{StepConstants::SAMPLE_APP_BUNDLE_DIRECTORY}/scripts")
+  sample_app_bundle_script_files = directories_and_files_inside(expected_scripts_directory)
   expect(files_in_scripts_folder.size).to eq(sample_app_bundle_script_files.size)
   expect(files_in_scripts_folder).to include(*sample_app_bundle_script_files)
 end
 
 Then(/^the scripts for events (.+) should have been executed and written to executed_proof_file in directory (\S+)$/) do |expected_executed_lifecycle_events_as_string, temp_test_directory|
   executed_proof_file_destination = "#{temp_test_directory}/executed_proof_file"
-  move_executed_proof_file_directory_if_necessary(executed_proof_file_destination)
 
   file_lines = File.read(executed_proof_file_destination).split("\n")
   expected_executed_lifecycle_events = expected_executed_lifecycle_events_as_string.split(' ')
 
-  expect(file_lines.size).to eq(expected_executed_lifecycle_events.size)
   expect(file_lines).to eq(expected_executed_lifecycle_events)
-end
-
-def move_executed_proof_file_directory_if_necessary(executed_proof_file_destination)
-  # For directory bundle the symlinked script files write the executed_proof_file relative to
-  # their actual location, not the symlinked bundle location so we have to move the file
-  if File.file?('../executed_proof_file')
-    FileUtils.mv('../executed_proof_file', executed_proof_file_destination)
-  end
 end

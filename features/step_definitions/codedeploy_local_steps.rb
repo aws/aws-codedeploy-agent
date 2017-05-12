@@ -19,16 +19,22 @@ After("@codedeploy-local") do
   FileUtils.rm_rf(@test_directory) unless @test_directory.nil?
 end
 
-Given(/^I have a sample local (tgz|tar|zip|directory|relative_directory) bundle$/) do |bundle_type|
-  expect(File.directory?(StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH)).to be true
-  @bundle_type = bundle_type
+Given(/^I have a sample local (tgz|tar|zip|directory|relative_directory|custom_event_directory) bundle$/) do |bundle_type|
+  case bundle_type
+  when 'custom_event_directory'
+    @bundle_original_directory_location = StepConstants::SAMPLE_CUSTOM_EVENT_APP_BUNDLE_FULL_PATH
+  else
+    @bundle_original_directory_location = StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH
+  end
+
+  expect(File.directory?(@bundle_original_directory_location)).to be true
+  @bundle_type = bundle_type.include?('directory') ? 'directory' : bundle_type
 
   case bundle_type
-  when 'directory'
-    @bundle_location = StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH
+  when 'directory', 'custom_event_directory'
+    @bundle_location = @bundle_original_directory_location
   when 'relative_directory'
-    @bundle_location = Pathname.new(StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH).relative_path_from Pathname.getwd
-    @bundle_type = 'directory'
+    @bundle_location = Pathname.new(@bundle_original_directory_location).relative_path_from Pathname.getwd
   when 'zip'
     @bundle_location = zip_app_bundle(@test_directory)
   when 'tar'
@@ -44,9 +50,9 @@ def tar_app_bundle(temp_directory_to_create_bundle)
   tar_file_name = "#{temp_directory_to_create_bundle}/app_bundle.tar"
   old_direcory = Dir.pwd
   #Unfortunately Minitar will keep pack all the file paths as given, so unless you change directories into the location where you want to pack the files the bundle won't have the correct files and folders
-  Dir.chdir StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH
+  Dir.chdir @bundle_original_directory_location
 
-  File.open(tar_file_name, 'wb') { |tar| Minitar.pack(directories_and_files_inside(StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH), tar) }
+  File.open(tar_file_name, 'wb') { |tar| Minitar.pack(directories_and_files_inside(@bundle_original_directory_location), tar) }
 
   Dir.chdir old_direcory
   tar_file_name
@@ -56,11 +62,11 @@ def tgz_app_bundle(temp_directory_to_create_bundle)
   tgz_file_name = "#{temp_directory_to_create_bundle}/app_bundle.tgz"
   old_direcory = Dir.pwd
   #Unfortunately Minitar will keep pack all the file paths as given, so unless you change directories into the location where you want to pack the files the bundle won't have the correct files and folders
-  Dir.chdir StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH
+  Dir.chdir @bundle_original_directory_location
 
   File.open(tgz_file_name, 'wb') do |file|
     Zlib::GzipWriter.wrap(file) do |gz|
-      Minitar.pack(directories_and_files_inside(StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH), gz)
+      Minitar.pack(directories_and_files_inside(@bundle_original_directory_location), gz)
     end
   end
 
@@ -68,8 +74,20 @@ def tgz_app_bundle(temp_directory_to_create_bundle)
   tgz_file_name
 end
 
+When(/^I create a local deployment with my bundle with only (.+)$/) do |custom_events|
+  @local_deployment_succeeded = create_local_deployment(custom_events.split(' '))
+end
+
 When(/^I create a local deployment with my bundle$/) do
-  @local_deployment_succeeded = system "bin/codedeploy-local --bundle-location #{@bundle_location} --type #{@bundle_type} --deployment-group-id #{LOCAL_DEPLOYMENT_GROUP_ID} --configuration-file #{InstanceAgent::Config.config[:config_file]}"
+  @local_deployment_succeeded = create_local_deployment
+end
+
+def create_local_deployment(custom_events = nil)
+  if (custom_events)
+    codeedeploy_command_suffix = " -e #{custom_events.join(' -e ')}"
+  end
+
+  system "bin/codedeploy-local --bundle-location #{@bundle_location} --type #{@bundle_type} --deployment-group-id #{LOCAL_DEPLOYMENT_GROUP_ID} --configuration-file #{InstanceAgent::Config.config[:config_file]}#{codeedeploy_command_suffix}"
 end
 
 Then(/^the local deployment command should succeed$/) do
@@ -78,7 +96,13 @@ end
 
 Then(/^the expected files should have have been locally deployed to my host$/) do
   deployment_id = most_recent_directory_or_file("#{InstanceAgent::Config.config[:root_dir]}/#{LOCAL_DEPLOYMENT_GROUP_ID}")
-  step "the expected files should have have been deployed to my host during deployment with deployment group id #{LOCAL_DEPLOYMENT_GROUP_ID} and deployment id #{deployment_id}"
+  step "the expected files in directory #{bundle_original_directory_location}/scripts should have have been deployed to my host during deployment with deployment group id #{LOCAL_DEPLOYMENT_GROUP_ID} and deployment id #{deployment_id}"
+end
+
+def bundle_original_directory_location
+  #Sets default value if the original location was never set, such as with an s3 uploaded bundle
+  @bundle_original_directory_location ||= StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH
+  @bundle_original_directory_location
 end
 
 def most_recent_directory_or_file(directory)
@@ -88,5 +112,10 @@ end
 Then(/^the scripts should have been executed during local deployment$/) do
   # We need to remove lifecycle events that act on the previous revision since there's no previous revision they're alwyays skipped as part of these tests (TODO: create a test which runs 2 local deployments and verifies that those events get run)
   expected_executed_lifecycle_events = AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS - AWS::CodeDeploy::Local::Deployer::REQUIRED_LIFECYCLE_EVENTS - %w(BeforeBlockTraffic AfterBlockTraffic ApplicationStop)
+  step "the scripts for events #{expected_executed_lifecycle_events.join(' ')} should have been executed and written to executed_proof_file in directory #{@test_directory}"
+end
+
+Then(/^the scripts should have been executed during local deployment with only (.+)$/) do |custom_events|
+  expected_executed_lifecycle_events = custom_events.split(' ') - %w(BeforeBlockTraffic AfterBlockTraffic ApplicationStop)
   step "the scripts for events #{expected_executed_lifecycle_events.join(' ')} should have been executed and written to executed_proof_file in directory #{@test_directory}"
 end
