@@ -183,7 +183,7 @@ Then(/^the expected files should have have been deployed to my host$/) do
     deployment_group_name: @deployment_group_name,
   }).deployment_group_info.deployment_group_id
 
-  step "the expected files in directory #{Dir.pwd}/features/resources/#{StepConstants::SAMPLE_APP_BUNDLE_DIRECTORY}/scripts should have have been deployed to my host during deployment with deployment group id #{deployment_group_id} and deployment id #{@deployment_id}"
+  step "the expected files in directory #{Dir.pwd}/features/resources/#{StepConstants::SAMPLE_APP_BUNDLE_DIRECTORY}/scripts should have have been deployed to my host during deployment with deployment group id #{deployment_group_id} and deployment ids #{@deployment_id}"
 end
 
 Then(/^the scripts should have been executed$/) do

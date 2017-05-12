@@ -94,9 +94,9 @@ Then(/^the local deployment command should succeed$/) do
   expect(@local_deployment_succeeded).to be true
 end
 
-Then(/^the expected files should have have been locally deployed to my host$/) do
-  deployment_id = most_recent_directory_or_file("#{InstanceAgent::Config.config[:root_dir]}/#{LOCAL_DEPLOYMENT_GROUP_ID}")
-  step "the expected files in directory #{bundle_original_directory_location}/scripts should have have been deployed to my host during deployment with deployment group id #{LOCAL_DEPLOYMENT_GROUP_ID} and deployment id #{deployment_id}"
+Then(/^the expected files should have have been locally deployed to my host(| twice)$/) do |maybe_twice|
+  deployment_ids = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{LOCAL_DEPLOYMENT_GROUP_ID}")
+  step "the expected files in directory #{bundle_original_directory_location}/scripts should have have been deployed#{maybe_twice} to my host during deployment with deployment group id #{LOCAL_DEPLOYMENT_GROUP_ID} and deployment ids #{deployment_ids.join(' ')}"
 end
 
 def bundle_original_directory_location
@@ -105,13 +105,17 @@ def bundle_original_directory_location
   @bundle_original_directory_location
 end
 
-def most_recent_directory_or_file(directory)
-  File.basename Dir.glob("#{directory}/*").max_by {|f| File.mtime(f)}
+Then(/^the scripts should have been executed during local deployment$/) do
+  expected_executed_lifecycle_events = expected_executed_lifecycle_events_from_first_time_revision_is_deployed
+  step "the scripts for events #{expected_executed_lifecycle_events.join(' ')} should have been executed and written to executed_proof_file in directory #{@test_directory}"
 end
 
-Then(/^the scripts should have been executed during local deployment$/) do
-  # We need to remove lifecycle events that act on the previous revision since there's no previous revision they're alwyays skipped as part of these tests (TODO: create a test which runs 2 local deployments and verifies that those events get run)
-  expected_executed_lifecycle_events = AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS - AWS::CodeDeploy::Local::Deployer::REQUIRED_LIFECYCLE_EVENTS - %w(BeforeBlockTraffic AfterBlockTraffic ApplicationStop)
+def expected_executed_lifecycle_events_from_first_time_revision_is_deployed
+  AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS - AWS::CodeDeploy::Local::Deployer::REQUIRED_LIFECYCLE_EVENTS - %w(BeforeBlockTraffic AfterBlockTraffic ApplicationStop)
+end
+
+Then(/^the scripts should have been executed during two local deployments$/) do
+  expected_executed_lifecycle_events = expected_executed_lifecycle_events_from_first_time_revision_is_deployed + (AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS - AWS::CodeDeploy::Local::Deployer::REQUIRED_LIFECYCLE_EVENTS)
   step "the scripts for events #{expected_executed_lifecycle_events.join(' ')} should have been executed and written to executed_proof_file in directory #{@test_directory}"
 end
 

@@ -70,7 +70,8 @@ def directories_and_files_inside(directory)
   Dir.entries(directory) - %w(.. .)
 end
 
-Then(/^the expected files in directory (\S+) should have have been deployed to my host during deployment with deployment group id (\S+) and deployment id (\S+)$/) do |expected_scripts_directory, deployment_group_id, deployment_id|
+Then(/^the expected files in directory (\S+) should have have been deployed(| twice) to my host during deployment with deployment group id (\S+) and deployment ids (.+)$/) do |expected_scripts_directory, maybe_twice, deployment_group_id, deployment_ids_space_separated|
+  deployment_ids = deployment_ids_space_separated.split(' ')
   directories_in_deployment_root_folder = directories_and_files_inside(InstanceAgent::Config.config[:root_dir])
   expect(directories_in_deployment_root_folder.size).to eq(3)
 
@@ -82,9 +83,10 @@ Then(/^the expected files in directory (\S+) should have have been deployed to m
   expect(files_in_deployment_logs_folder).to eq(%w(codedeploy-agent-deployments.log))
 
   directories_in_deployment_group_id_folder = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}")
-  expect(directories_in_deployment_group_id_folder.size).to eq(1)
-  expect(directories_in_deployment_group_id_folder).to eq([deployment_id])
+  expect(directories_in_deployment_group_id_folder.size).to eq(maybe_twice.empty? ? 1 : 2)
+  expect(directories_in_deployment_group_id_folder).to eq(deployment_ids)
 
+  deployment_id = deployment_ids.first
   files_and_directories_in_deployment_id_folder = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{deployment_id}")
   expect(files_and_directories_in_deployment_id_folder).to include(*%w(logs deployment-archive))
 

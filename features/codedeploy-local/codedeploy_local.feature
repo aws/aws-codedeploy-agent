@@ -9,6 +9,14 @@ Feature: Local Deploy using AWS CodeDeploy Local CLI
     And the expected files should have have been locally deployed to my host
     And the scripts should have been executed during local deployment
 
+  Scenario: Doing two sample local deployment using a directory bundle runs correct previous revision scripts
+    Given I have a sample local directory bundle
+    When I create a local deployment with my bundle
+    And I create a local deployment with my bundle
+    Then the local deployment command should succeed
+    And the expected files should have have been locally deployed to my host twice
+    And the scripts should have been executed during two local deployments
+
   Scenario: Doing a sample local deployment using a relative directory bundle
     Given I have a sample local relative_directory bundle
     When I create a local deployment with my bundle
