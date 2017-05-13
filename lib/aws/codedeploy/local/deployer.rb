@@ -73,8 +73,7 @@ module AWS
               command_executor.execute_command(OpenStruct.new(:command_name => name), spec.clone)
             end
           rescue InstanceAgent::Plugins::CodeDeployPlugin::ScriptError => e
-            handle_script_error(e, args['<deployment-group-id>'], @deployment_id)
-            exit(false)
+            print_script_error_message(e, args['<deployment-group-id>'], @deployment_id)
           end
         end
 
@@ -201,7 +200,7 @@ module AWS
              'BundleType' => bundle_type}}
         end
 
-        def handle_script_error(script_error, deployment_group_id, deployment_id)
+        def print_script_error_message(script_error, deployment_group_id, deployment_id)
           puts "Your local deployment failed while trying to execute your script at #{deployment_folder(deployment_group_id, deployment_id)}/deployment-archive/#{script_error.script_name}"
           puts "See the deployment log at #{deployment_folder(deployment_group_id, deployment_id)}/#{InstanceAgent::Plugins::CodeDeployPlugin::ScriptLog::SCRIPT_LOG_FILE_RELATIVE_LOCATION} for the exact error message"
         end

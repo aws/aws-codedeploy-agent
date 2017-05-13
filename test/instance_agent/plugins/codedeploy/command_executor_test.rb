@@ -407,11 +407,11 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           end
         end
 
-        context "handle bundle from local directory directory" do
+        context "handle bundle from local directory" do
           setup do
             @command.command_name = "DownloadBundle"
             @mock_directory_location = '/mock/directory/location/'
-            File.stubs(:symlink)
+            FileUtils.stubs(:cp_r)
             Dir.stubs(:entries).returns []
             @mock_file.stubs(:close)
 
@@ -430,8 +430,8 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             })
           end
 
-          should 'symlink the file to the bundle location' do
-            File.expects(:symlink).with(@mock_directory_location, @archive_root_dir)
+          should 'copy recursively the directory to the bundle location' do
+            FileUtils.expects(:cp_r).with(@mock_directory_location, @archive_root_dir)
             @command_executor.execute_command(@command, @deployment_spec)
           end
         end
