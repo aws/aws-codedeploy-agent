@@ -17,14 +17,14 @@ doc = <<DOCOPT
 CodeDeploy Local Deployments.
 
 Usage:
-  #{__FILE__} --bundle-location <location> --type (tgz|tar|zip|directory) --deployment-group-id <deployment-group-id> [(--configuration-file <configuration-file>)] [(--event <event>)]...
+  #{__FILE__} --bundle-location <location> --type (tgz|tar|zip|directory) [(--deployment-group-id <deployment-group-id>)] [(--configuration-file <configuration-file>)] [(--event <event>)]...
   #{__FILE__} -h | --help
   #{__FILE__} -v | --version
 
 Options:
   -l, --bundle-location      Bundle Location. The prefix and suffix determine whether this location is locally accessible or online (s3 or github).
   -t, --type                 Choose bundle type from tgz, zip, or directory
-  -g, --deployment-group-id  The Deployment Group Id specifies the folder in which the local deployments will be executed.
+  -g, --deployment-group-id  The Deployment Group Id specifies the folder in which the local deployments will be executed [default: #{AWS::CodeDeploy::Local::Deployer::DEFAULT_DEPLOYMENT_GROUP_ID}].
                              Your configuration shows it would be placed in #{InstanceAgent::Config.config[:root_dir]}/<deployment-group-id>.
                              For details on how to configure a different deployment-root folder if necessary see https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-agent-configuration.html
   -e, --event                Optional set of override lifecycle events to run. Any number of lifecycle events can be provided one after another (order matters).

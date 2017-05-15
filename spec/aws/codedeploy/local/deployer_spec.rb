@@ -141,9 +141,9 @@ describe AWS::CodeDeploy::Local::Deployer do
                               InstanceAgent::Plugins::CodeDeployPlugin::ScriptError.new(InstanceAgent::Plugins::CodeDeployPlugin::ScriptError::SCRIPT_FAILED_CODE, 'script-location', nil), 'scripterror')
 
           deployment_folder = "#{test_working_directory}/deployment-root/deployment-group-id/123"
-          STDOUT.should_receive(:puts).with("Starting to execute deployment from within folder #{deployment_folder}").once.ordered
-          STDOUT.should_receive(:puts).with("Your local deployment failed while trying to execute your script at #{deployment_folder}/deployment-archive/script-location").once.ordered
-          STDOUT.should_receive(:puts).with("See the deployment log at #{deployment_folder}/logs/scripts.log for the exact error message").once.ordered
+          expect(STDOUT).to receive(:puts).with("Starting to execute deployment from within folder #{deployment_folder}").once.ordered
+          expect(STDOUT).to receive(:puts).with("Your local deployment failed while trying to execute your script at #{deployment_folder}/deployment-archive/script-location").once.ordered
+          expect(STDOUT).to receive(:puts).with("See the deployment log at #{deployment_folder}/logs/scripts.log for the exact error message").once.ordered
           AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
         end
       end
@@ -219,6 +219,41 @@ describe AWS::CodeDeploy::Local::Deployer do
             OpenStruct.new(:command_name => name),
             deployment_spec(SAMPLE_DIRECTORY_BUNDLE, 'Local Directory', 'directory',
                             AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
+        end
+        AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
+      end
+    end
+
+    context 'when deployment-group-id is not specified' do
+      let(:args) do
+        {"deploy"=>true,
+         "--location"=>true,
+         "<location>"=>SAMPLE_DIRECTORY_BUNDLE,
+         "--type"=>true,
+         "tgz"=>false,
+         "zip"=>false,
+         "directory"=>true,
+         "--event"=>0,
+         "<event>"=>[],
+         "--help"=>false,
+         "--version"=>false}
+      end
+
+      it 'deploys the local directory to the default application folder and calls the executor to execute all commands' do
+        allow(File).to receive(:exists?).with(SAMPLE_DIRECTORY_BUNDLE).and_return(true)
+        executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
+
+        expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
+          with(:hook_mapping => EXPECTED_HOOK_MAPPING).
+          and_return(executor)
+
+        AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
+          expect(executor).to receive(:execute_command).with(
+            OpenStruct.new(:command_name => name),
+            deployment_spec(SAMPLE_DIRECTORY_BUNDLE, 'Local Directory', 'directory',
+                            AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS,
+                            false, false,
+                            AWS::CodeDeploy::Local::Deployer::DEFAULT_DEPLOYMENT_GROUP_ID)).once.ordered
         end
         AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
       end
@@ -358,7 +393,7 @@ describe AWS::CodeDeploy::Local::Deployer do
       end
     end
 
-    def deployment_spec(location, revision_type, bundle_type, all_possible_lifecycle_events, s3revision_includes_version=false, s3revision_includes_etag= false)
+    def deployment_spec(location, revision_type, bundle_type, all_possible_lifecycle_events, s3revision_includes_version=false, s3revision_includes_etag=false, deployment_group_id=DEPLOYMENT_GROUP_ID)
       revision_data_key = revision_data(revision_type, location, bundle_type, s3revision_includes_version, s3revision_includes_etag).keys.first
       revision_data_value = revision_data(revision_type, location, bundle_type, s3revision_includes_version, s3revision_includes_etag).values.first
       OpenStruct.new({
@@ -366,7 +401,7 @@ describe AWS::CodeDeploy::Local::Deployer do
         :payload => {
           "ApplicationId" =>  location,
           "ApplicationName" => location,
-          "DeploymentGroupId" => DEPLOYMENT_GROUP_ID,
+          "DeploymentGroupId" => deployment_group_id,
           "DeploymentGroupName" => "LocalFleet",
           "DeploymentId" => TEST_DEPLOYMENT_ID,
           "Revision" => {"RevisionType" => revision_type, 

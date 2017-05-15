@@ -17,6 +17,7 @@ module AWS
         WINDOWS_DEFAULT_DIRECTORY = File.join(ENV['PROGRAMDATA'] || '/', 'Amazon/CodeDeploy')
         CONF_DEFAULT_LOCATION = IS_WINDOWS ? "#{WINDOWS_DEFAULT_DIRECTORY}/conf.yml" : '/etc/codedeploy-agent/conf/codedeployagent.yml'
         CONF_REPO_LOCATION_SUFFIX = '/conf/codedeployagent.yml'
+        DEFAULT_DEPLOYMENT_GROUP_ID = 'default-local-deployment-application-folder'
 
         DEFAULT_ORDERED_LIFECYCLE_EVENTS = %w(BeforeBlockTraffic
                                               AfterBlockTraffic
@@ -62,8 +63,10 @@ module AWS
 
         def execute_events(args)
           args = AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
+          # Sets default value of deployment_group_id if it's missing
+          deployment_group_id = args['<deployment-group-id>'] || DEFAULT_DEPLOYMENT_GROUP_ID
 
-          spec = build_spec(args['<location>'], bundle_type(args), args['<deployment-group-id>'], all_possible_lifecycle_events(args['<event>']))
+          spec = build_spec(args['<location>'], bundle_type(args), deployment_group_id, all_possible_lifecycle_events(args['<event>']))
 
           command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => hook_mapping(args['<event>']))
           all_lifecycle_events_to_execute = add_download_bundle_and_install_events(ordered_lifecycle_events(args['<event>']))
@@ -73,7 +76,7 @@ module AWS
               command_executor.execute_command(OpenStruct.new(:command_name => name), spec.clone)
             end
           rescue InstanceAgent::Plugins::CodeDeployPlugin::ScriptError => e
-            print_script_error_message(e, args['<deployment-group-id>'], @deployment_id)
+            print_script_error_message(e, deployment_group_id, @deployment_id)
           end
         end
 
