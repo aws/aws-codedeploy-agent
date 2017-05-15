@@ -56,6 +56,9 @@ rescue Docopt::Exit => e
 rescue AWS::CodeDeploy::Local::CLIValidator::ValidationError,InstanceAgent::Plugins::CodeDeployPlugin::ScriptError,InstanceMetadata::InstanceMetadataError => e
   puts "ERROR: #{e.message}"
   exit(false)
+rescue Aws::Errors::MissingCredentialsError => e
+  puts "ERROR: Unable to download from S3 without AWS Credentials set. Please see help message for how to set AWS Credentials (#{__FILE__} --help)"
+  exit(false)
 end
 
 puts "Successfully deployed your bundle locally"
