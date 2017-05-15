@@ -340,7 +340,7 @@ module InstanceAgent
         private
         def handle_local_directory(deployment_spec, local_location)
           # Copy local directory to the location where a file would have been extracted
-          # We copy instead of symlinking in order to preserve provision history
+          # We copy instead of symlinking in order to preserve revision history
           FileUtils.cp_r local_location, archive_root_dir(deployment_spec)
         end
 

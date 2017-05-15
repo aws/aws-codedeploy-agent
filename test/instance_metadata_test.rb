@@ -42,7 +42,7 @@ class InstanceMetadataTest < InstanceAgentTestCase
       end
 
       should 'connect to the right host' do
-        Net::HTTP.expects(:start).with('169.254.169.254', 80).yields(@http)
+        Net::HTTP.expects(:start).with('169.254.169.254', 80, :read_timeout => InstanceMetadata::HTTP_TIMEOUT/2, :open_timeout => InstanceMetadata::HTTP_TIMEOUT/2).yields(@http)
         InstanceMetadata.host_identifier
       end
 
@@ -73,7 +73,7 @@ class InstanceMetadataTest < InstanceAgentTestCase
       end
 
       should 'connect to the right host' do
-        Net::HTTP.expects(:start).with('169.254.169.254', 80).yields(@http)
+        Net::HTTP.expects(:start).with('169.254.169.254', 80, :read_timeout => InstanceMetadata::HTTP_TIMEOUT/2, :open_timeout => InstanceMetadata::HTTP_TIMEOUT/2).yields(@http)
         InstanceMetadata.region
       end
 
@@ -87,6 +87,15 @@ class InstanceMetadataTest < InstanceAgentTestCase
       should 'return the region part of the AZ' do
         @response.stubs(:body).returns("us-east-1a")
         assert_equal("us-east-1", InstanceMetadata.region)
+      end
+
+      should 'raise InstanceMetadataError if http times out' do
+        @http.expects(:get).
+          with("/latest/meta-data/placement/availability-zone").
+          raises(Net::ReadTimeout)
+        assert_raised_with_message('Not an EC2 instance and region not provided in the environment variable AWS_REGION. Please specify your region using environment variable AWS_REGION.', InstanceMetadata::InstanceMetadataError) do
+          InstanceMetadata.region
+        end
       end
 
       should 'raise an error if the response is not an AZ' do
