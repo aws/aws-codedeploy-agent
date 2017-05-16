@@ -12,13 +12,13 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>VALID_FILE,
+         "--bundle-location"=>VALID_FILE,
          "--type"=>true,
          "tgz"=>true,
          "zip"=>false,
          "directory"=>false,
          "--event"=>1,
-         "<event>"=>["stop", "start"],
+         "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -33,13 +33,13 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>"https://example.com/file",
+         "--bundle-location"=>"https://example.com/file",
          "--type"=>true,
          "tgz"=>true,
          "zip"=>false,
          "directory"=>false,
          "--event"=>1,
-         "<event>"=>["stop", "start"],
+         "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -55,13 +55,13 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>INVALID_URI,
+         "--bundle-location"=>INVALID_URI,
          "--type"=>true,
          "tgz"=>true,
          "zip"=>false,
          "directory"=>false,
          "--event"=>1,
-         "<event>"=>["stop", "start"],
+         "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -77,13 +77,13 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>HTTP_URL,
+         "--bundle-location"=>HTTP_URL,
          "--type"=>true,
          "tgz"=>true,
          "zip"=>false,
          "directory"=>false,
          "--event"=>1,
-         "<event>"=>["stop", "start"],
+         "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -99,13 +99,13 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>FAKE_FILE_WHICH_DOES_NOT_EXIST,
+         "--bundle-location"=>FAKE_FILE_WHICH_DOES_NOT_EXIST,
          "--type"=>true,
          "tgz"=>false,
          "zip"=>true,
          "directory"=>false,
          "--event"=>1,
-         "<event>"=>["stop", "start"],
+         "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -122,13 +122,13 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>FAKE_FILE,
+         "--bundle-location"=>FAKE_FILE,
          "--type"=>true,
          "tgz"=>false,
          "zip"=>false,
          "directory"=>true,
          "--event"=>1,
-         "<event>"=>["stop", "start"],
+         "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -146,13 +146,13 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       let(:argszip) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>FAKE_DIRECTORY,
+         "--bundle-location"=>FAKE_DIRECTORY,
          "--type"=>true,
          "tgz"=>false,
          "zip"=>true,
          "directory"=>false,
          "--event"=>1,
-         "<event>"=>["stop", "start"],
+         "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -160,13 +160,13 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       let(:argstgz) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>FAKE_DIRECTORY,
+         "--bundle-location"=>FAKE_DIRECTORY,
          "--type"=>true,
          "tgz"=>true,
          "zip"=>false,
          "directory"=>false,
          "--event"=>1,
-         "<event>"=>["stop", "start"],
+         "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end

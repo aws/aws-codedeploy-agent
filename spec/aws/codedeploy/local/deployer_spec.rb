@@ -96,14 +96,14 @@ describe AWS::CodeDeploy::Local::Deployer do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>SAMPLE_FILE_BUNDLE,
+         "--bundle-location"=>SAMPLE_FILE_BUNDLE,
          "--type"=>true,
          "tgz"=>true,
          "zip"=>false,
          "directory"=>false,
          "--event"=>0,
-         "<event>"=>[],
-         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
+         "--event"=>[],
+         '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -156,15 +156,15 @@ describe AWS::CodeDeploy::Local::Deployer do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>SAMPLE_FILE_BUNDLE,
+         "--bundle-location"=>SAMPLE_FILE_BUNDLE,
          "--type"=>true,
          "tgz"=>false,
          "tar"=>true,
          "zip"=>false,
          "directory"=>false,
          "--event"=>0,
-         "<event>"=>NON_DEFAULT_LIFECYCLE_EVENTS,
-         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
+         "--event"=>NON_DEFAULT_LIFECYCLE_EVENTS,
+         '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -194,14 +194,14 @@ describe AWS::CodeDeploy::Local::Deployer do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>SAMPLE_DIRECTORY_BUNDLE,
+         "--bundle-location"=>SAMPLE_DIRECTORY_BUNDLE,
          "--type"=>true,
          "tgz"=>false,
          "zip"=>false,
          "directory"=>true,
          "--event"=>0,
-         "<event>"=>[],
-         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
+         "--event"=>[],
+         '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -228,13 +228,13 @@ describe AWS::CodeDeploy::Local::Deployer do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>SAMPLE_DIRECTORY_BUNDLE,
+         "--bundle-location"=>SAMPLE_DIRECTORY_BUNDLE,
          "--type"=>true,
          "tgz"=>false,
          "zip"=>false,
          "directory"=>true,
          "--event"=>0,
-         "<event>"=>[],
+         "--event"=>[],
          "--help"=>false,
          "--version"=>false}
       end
@@ -263,15 +263,15 @@ describe AWS::CodeDeploy::Local::Deployer do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>SAMPLE_GIT_LOCATION_TARBALL,
+         "--bundle-location"=>SAMPLE_GIT_LOCATION_TARBALL,
          "--type"=>true,
          "tgz"=>false,
          "tar"=>true,
          "zip"=>false,
          "directory"=>false,
          "--event"=>0,
-         "<event>"=>[],
-         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
+         "--event"=>[],
+         '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -297,14 +297,14 @@ describe AWS::CodeDeploy::Local::Deployer do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>SAMPLE_GIT_LOCATION_ZIPBALL,
+         "--bundle-location"=>SAMPLE_GIT_LOCATION_ZIPBALL,
          "--type"=>true,
          "tgz"=>false,
          "zip"=>true,
          "directory"=>false,
          "--event"=>0,
-         "<event>"=>[],
-         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
+         "--event"=>[],
+         '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -330,14 +330,14 @@ describe AWS::CodeDeploy::Local::Deployer do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>SAMPLE_S3_LOCATION,
+         "--bundle-location"=>SAMPLE_S3_LOCATION,
          "--type"=>true,
          "tgz"=>false,
          "zip"=>true,
          "directory"=>false,
          "--event"=>0,
-         "<event>"=>[],
-         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
+         "--event"=>[],
+         '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -363,14 +363,14 @@ describe AWS::CodeDeploy::Local::Deployer do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
-         "<location>"=>SAMPLE_S3_LOCATION_WITH_VERSION_AND_ETAG,
+         "--bundle-location"=>SAMPLE_S3_LOCATION_WITH_VERSION_AND_ETAG,
          "--type"=>true,
          "tgz"=>false,
          "zip"=>true,
          "directory"=>false,
          "--event"=>0,
-         "<event>"=>[],
-         '<deployment-group-id>'=>DEPLOYMENT_GROUP_ID,
+         "--event"=>[],
+         '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end

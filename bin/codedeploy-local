@@ -22,13 +22,13 @@ Usage:
   #{__FILE__} -v | --version
 
 Options:
-  -l, --bundle-location      Bundle Location. The prefix and suffix determine whether this location is locally accessible or online (s3 or github).
-  -t, --type                 Choose bundle type from tgz, zip, or directory
-  -g, --deployment-group-id  Optional Deployment Group Id specifies the folder in which the local deployments will be executed [default: #{AWS::CodeDeploy::Local::Deployer::DEFAULT_DEPLOYMENT_GROUP_ID}]. Your configuration shows it would be placed in #{InstanceAgent::Config.config[:root_dir]}/<deployment-group-id>. To configure a custom deployment-root folder see https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-agent-configuration.html. If you want to target a previously deployed revision make sure to use the correct deployment group id by looking it up using the AWS CLI: https://docs.aws.amazon.com/cli/latest/reference/deploy/get-deployment-group.html
-  -e, --event                Optional set of override lifecycle events to run. Any number of lifecycle events can be provided one after another (order matters). If none specificed runs only default events found in the Appspec file using CodeDeploy's ordering. Please note if you don't specify DownloadBundle and Install events they will always precede all your custom events. Those events extract your local bundle / download it as well as install the revision in the correct location. The only events that can run before them are the ones that do so today. See https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html
-  -c, --configuration-file   Optional agent configuration file location which is by default set to /etc/codedeploy-agent/conf/codedeployagent.yml for linux hosts and C:/ProgramData/Amazon/CodeDeploy/conf.yml for Windows. See https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-agent-configuration.html
-  -h, --help                 Show this message.
-  -v, --version              Show version.
+  -l, --bundle-location <location>                 Bundle Location. The prefix and suffix determine whether this location is locally accessible or online (s3 or github).
+  -t, --type                                       Choose bundle type from tgz, tar, zip, or directory
+  -g, --deployment-group-id <deployment-group-id>  Optional Deployment Group Id specifies the folder in which the local deployments will be executed [default: #{AWS::CodeDeploy::Local::Deployer::DEFAULT_DEPLOYMENT_GROUP_ID}]. Your configuration shows it would be placed in #{InstanceAgent::Config.config[:root_dir]}/<deployment-group-id>. To configure a custom deployment-root folder see https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-agent-configuration.html. If you want to target a previously deployed revision make sure to use the correct deployment group id by looking it up using the AWS CLI: https://docs.aws.amazon.com/cli/latest/reference/deploy/get-deployment-group.html
+  -e, --event <event>                              Optional set of override lifecycle events to run. Any number of lifecycle events can be provided one after another (order matters). If none specificed runs only default events found in the Appspec file using CodeDeploy's ordering. Please note if you don't specify DownloadBundle and Install events they will always precede all your custom events. Those events extract your local bundle / download it as well as install the revision in the correct location. The only events that can run before them are the ones that do so today. See https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html
+  -c, --configuration-file <configuration-file>    Optional agent configuration file location which is by default set to /etc/codedeploy-agent/conf/codedeployagent.yml for linux hosts and C:/ProgramData/Amazon/CodeDeploy/conf.yml for Windows. See https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-agent-configuration.html
+  -h, --help                                       Show this message.
+  -v, --version                                    Show version.
 
 Examples:
   #{__FILE__} --bundle-location /path/to/local/bundle.tgz --type tgz --deployment-group-id local-deployments
@@ -53,7 +53,7 @@ DOCOPT
 
 begin
   args = Docopt::docopt(doc, version: '1.0')
-  AWS::CodeDeploy::Local::Deployer.new(args['<configuration-file>']).execute_events(args)
+  AWS::CodeDeploy::Local::Deployer.new(args['--configuration-file']).execute_events(args)
 rescue Docopt::Exit => e
   puts e.message
   exit(false)

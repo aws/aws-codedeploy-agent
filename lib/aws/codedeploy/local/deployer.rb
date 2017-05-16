@@ -64,12 +64,12 @@ module AWS
         def execute_events(args)
           args = AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
           # Sets default value of deployment_group_id if it's missing
-          deployment_group_id = args['<deployment-group-id>'] || DEFAULT_DEPLOYMENT_GROUP_ID
+          deployment_group_id = args['--deployment-group-id'] || DEFAULT_DEPLOYMENT_GROUP_ID
 
-          spec = build_spec(args['<location>'], bundle_type(args), deployment_group_id, all_possible_lifecycle_events(args['<event>']))
+          spec = build_spec(args['--bundle-location'], bundle_type(args), deployment_group_id, all_possible_lifecycle_events(args['--event']))
 
-          command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => hook_mapping(args['<event>']))
-          all_lifecycle_events_to_execute = add_download_bundle_and_install_events(ordered_lifecycle_events(args['<event>']))
+          command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => hook_mapping(args['--event']))
+          all_lifecycle_events_to_execute = add_download_bundle_and_install_events(ordered_lifecycle_events(args['--event']))
 
           begin
             all_lifecycle_events_to_execute.each do |name|
@@ -81,7 +81,7 @@ module AWS
         end
 
         def ordered_lifecycle_events(events)
-          if (events.empty?)
+          if (events.nil? || events.empty?)
             DEFAULT_ORDERED_LIFECYCLE_EVENTS
           else
             events

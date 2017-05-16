@@ -7,7 +7,7 @@ module AWS
       #acts as a way to validate the inputted arguments.
       class CLIValidator
         def validate(args)
-          location = args['<location>']
+          location = args['--bundle-location']
 
           begin
             uri = URI.parse(location)
