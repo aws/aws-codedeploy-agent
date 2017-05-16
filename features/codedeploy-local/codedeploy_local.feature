@@ -52,16 +52,23 @@ Feature: Local Deploy using AWS CodeDeploy Local CLI
     And the expected files should have have been locally deployed to my host
     And the scripts should have been executed during local deployment
 
+  Scenario: Doing a sample local deployment using a directory bundle with application-folder parameter
+    Given I have a sample local directory bundle
+    When I create a local deployment with my bundle with parameter --application-folder
+    Then the local deployment command should succeed
+    And the expected files should have have been locally deployed to my host
+    And the scripts should have been executed during local deployment
+
   Scenario: Doing a sample local deployment using a directory bundle with custom event
     Given I have a sample local custom_event_directory bundle
-    When I create a local deployment with my bundle with only ApplicationStart CustomEvent
+    When I create a local deployment with my bundle with only events ApplicationStart CustomEvent
     Then the local deployment command should succeed
     And the expected files should have have been locally deployed to my host
     And the scripts should have been executed during local deployment with only ApplicationStart CustomEvent
 
   Scenario: Doing a sample local deployment using a directory bundle with subset of default events
     Given I have a sample local directory bundle
-    When I create a local deployment with my bundle with only BeforeInstall ApplicationStart
+    When I create a local deployment with my bundle with only events BeforeInstall ApplicationStart
     Then the local deployment command should succeed
     And the expected files should have have been locally deployed to my host
     And the scripts should have been executed during local deployment with only BeforeInstall ApplicationStart

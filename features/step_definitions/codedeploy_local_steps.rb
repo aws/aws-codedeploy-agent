@@ -74,7 +74,11 @@ def tgz_app_bundle(temp_directory_to_create_bundle)
   tgz_file_name
 end
 
-When(/^I create a local deployment with my bundle with only (.+)$/) do |custom_events|
+When(/^I create a local deployment with my bundle with parameter (\S+)$/) do |deployment_group_id_parameter|
+  @local_deployment_succeeded = create_local_deployment(nil, deployment_group_id_parameter)
+end
+
+When(/^I create a local deployment with my bundle with only events (.+)$/) do |custom_events|
   @local_deployment_succeeded = create_local_deployment(custom_events.split(' '))
 end
 
@@ -82,12 +86,14 @@ When(/^I create a local deployment with my bundle$/) do
   @local_deployment_succeeded = create_local_deployment
 end
 
-def create_local_deployment(custom_events = nil)
+def create_local_deployment(custom_events = nil, deployment_group_id_parameter = nil)
   if (custom_events)
     codeedeploy_command_suffix = " -e #{custom_events.join(' -e ')}"
   end
 
-  system "bin/codedeploy-local --bundle-location #{@bundle_location} --type #{@bundle_type} --deployment-group-id #{LOCAL_DEPLOYMENT_GROUP_ID} --configuration-file #{InstanceAgent::Config.config[:config_file]}#{codeedeploy_command_suffix}"
+  deployment_group_id_parameter ||= '--deployment-group-id'
+
+  system "bin/codedeploy-local --bundle-location #{@bundle_location} --type #{@bundle_type} #{deployment_group_id_parameter} #{LOCAL_DEPLOYMENT_GROUP_ID} --configuration-file #{InstanceAgent::Config.config[:config_file]}#{codeedeploy_command_suffix}"
 end
 
 Then(/^the local deployment command should succeed$/) do

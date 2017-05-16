@@ -63,7 +63,7 @@ module AWS
         def execute_events(args)
           args = AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
           # Sets default value of deployment_group_id if it's missing
-          deployment_group_id = args['--deployment-group-id']
+          deployment_group_id = args['--deployment-group-id'] || args['--application-folder']
 
           spec = build_spec(args['--bundle-location'], args['--type'], deployment_group_id, all_possible_lifecycle_events(args['--event']))
 
