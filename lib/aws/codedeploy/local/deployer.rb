@@ -16,7 +16,6 @@ module AWS
         IS_WINDOWS = (RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/)
         WINDOWS_DEFAULT_DIRECTORY = File.join(ENV['PROGRAMDATA'] || '/', 'Amazon/CodeDeploy')
         CONF_DEFAULT_LOCATION = IS_WINDOWS ? "#{WINDOWS_DEFAULT_DIRECTORY}/conf.yml" : '/etc/codedeploy-agent/conf/codedeployagent.yml'
-        CONF_REPO_LOCATION_SUFFIX = '/conf/codedeployagent.yml'
         DEFAULT_DEPLOYMENT_GROUP_ID = 'default-local-deployment-application'
 
         DEFAULT_ORDERED_LIFECYCLE_EVENTS = %w(BeforeBlockTraffic
@@ -39,7 +38,7 @@ module AWS
 
           if File.file?(configuration_file_location) && File.readable?(configuration_file_location)
             InstanceAgent::Config.config[:config_file] = configuration_file_location
-          elsif configuration_file_location != CONF_DEFAULT_LOCATION
+          else
             raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("configuration file #{configuration_file_location} does not exist or is not readable")
           end
 

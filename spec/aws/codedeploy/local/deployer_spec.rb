@@ -77,12 +77,16 @@ describe AWS::CodeDeploy::Local::Deployer do
     end
 
     it 'tries to load configuration if the configuration file location provided is nil' do
+      expect(File).to receive(:file?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(true)
+      expect(File).to receive(:readable?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(true)
+      expect(File).to receive(:file?).with(InstanceAgent::Config.config[:on_premises_config_file]).and_return(false)
       expect(InstanceAgent::Config).to receive(:load_config)
       AWS::CodeDeploy::Local::Deployer.new(nil)
     end
 
     it 'tries to load on-premise-configuration from on_premises_config_file if it exists' do
-      allow(File).to receive(:file?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(false)
+      expect(File).to receive(:file?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(true)
+      expect(File).to receive(:readable?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(true)
       expect(File).to receive(:file?).with(InstanceAgent::Config.config[:on_premises_config_file]).and_return(true)
       expect(File).to receive(:readable?).with(InstanceAgent::Config.config[:on_premises_config_file]).and_return(true)
       expect(InstanceAgent::Plugins::CodeDeployPlugin::OnPremisesConfig).to receive(:configure)
