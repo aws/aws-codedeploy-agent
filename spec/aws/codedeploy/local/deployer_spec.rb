@@ -97,11 +97,7 @@ describe AWS::CodeDeploy::Local::Deployer do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>SAMPLE_FILE_BUNDLE,
-         "--type"=>true,
-         "tgz"=>true,
-         "zip"=>false,
-         "directory"=>false,
-         "--event"=>0,
+         "--type"=>'tgz',
          "--event"=>[],
          '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
@@ -157,12 +153,7 @@ describe AWS::CodeDeploy::Local::Deployer do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>SAMPLE_FILE_BUNDLE,
-         "--type"=>true,
-         "tgz"=>false,
-         "tar"=>true,
-         "zip"=>false,
-         "directory"=>false,
-         "--event"=>0,
+         "--type"=>'tar',
          "--event"=>NON_DEFAULT_LIFECYCLE_EVENTS,
          '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
@@ -195,11 +186,7 @@ describe AWS::CodeDeploy::Local::Deployer do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>SAMPLE_DIRECTORY_BUNDLE,
-         "--type"=>true,
-         "tgz"=>false,
-         "zip"=>false,
-         "directory"=>true,
-         "--event"=>0,
+         "--type"=>'directory',
          "--event"=>[],
          '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
@@ -224,51 +211,12 @@ describe AWS::CodeDeploy::Local::Deployer do
       end
     end
 
-    context 'when deployment-group-id is not specified' do
-      let(:args) do
-        {"deploy"=>true,
-         "--location"=>true,
-         "--bundle-location"=>SAMPLE_DIRECTORY_BUNDLE,
-         "--type"=>true,
-         "tgz"=>false,
-         "zip"=>false,
-         "directory"=>true,
-         "--event"=>0,
-         "--event"=>[],
-         "--help"=>false,
-         "--version"=>false}
-      end
-
-      it 'deploys the local directory to the default application folder and calls the executor to execute all commands' do
-        allow(File).to receive(:exists?).with(SAMPLE_DIRECTORY_BUNDLE).and_return(true)
-        executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
-
-        expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
-          with(:hook_mapping => EXPECTED_HOOK_MAPPING).
-          and_return(executor)
-
-        AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
-          expect(executor).to receive(:execute_command).with(
-            OpenStruct.new(:command_name => name),
-            deployment_spec(SAMPLE_DIRECTORY_BUNDLE, 'Local Directory', 'directory',
-                            AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS,
-                            false, false,
-                            AWS::CodeDeploy::Local::Deployer::DEFAULT_DEPLOYMENT_GROUP_ID)).once.ordered
-        end
-        AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
-      end
-    end
-
     context 'when anonymous github tarball endpoint is specified' do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>SAMPLE_GIT_LOCATION_TARBALL,
-         "--type"=>true,
-         "tgz"=>false,
-         "tar"=>true,
-         "zip"=>false,
-         "directory"=>false,
+         "--type"=>'tar',
          "--event"=>0,
          "--event"=>[],
          '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
@@ -298,11 +246,7 @@ describe AWS::CodeDeploy::Local::Deployer do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>SAMPLE_GIT_LOCATION_ZIPBALL,
-         "--type"=>true,
-         "tgz"=>false,
-         "zip"=>true,
-         "directory"=>false,
-         "--event"=>0,
+         "--type"=>'zip',
          "--event"=>[],
          '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
@@ -331,11 +275,7 @@ describe AWS::CodeDeploy::Local::Deployer do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>SAMPLE_S3_LOCATION,
-         "--type"=>true,
-         "tgz"=>false,
-         "zip"=>true,
-         "directory"=>false,
-         "--event"=>0,
+         "--type"=>'zip',
          "--event"=>[],
          '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
@@ -364,11 +304,7 @@ describe AWS::CodeDeploy::Local::Deployer do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>SAMPLE_S3_LOCATION_WITH_VERSION_AND_ETAG,
-         "--type"=>true,
-         "tgz"=>false,
-         "zip"=>true,
-         "directory"=>false,
-         "--event"=>0,
+         "--type"=>'zip',
          "--event"=>[],
          '--deployment-group-id'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,

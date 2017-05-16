@@ -6,6 +6,18 @@ describe AWS::CodeDeploy::Local::CLIValidator do
   let(:validator) { AWS::CodeDeploy::Local::CLIValidator.new }
 
   describe 'validate' do
+    context 'when type is invalid' do
+      INVALID_TYPE = 'invalid-type'
+
+      let(:args) do
+        {"--type"=>INVALID_TYPE}
+      end
+
+      it 'throws a ValidationError' do
+        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "type #{INVALID_TYPE} is not a valid type. Must be one of #{AWS::CodeDeploy::Local::CLIValidator::VALID_TYPES.join(',')}")
+      end
+    end
+
     context 'when location is valid file' do
       VALID_FILE = "/path/test"
 
@@ -13,11 +25,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>VALID_FILE,
-         "--type"=>true,
-         "tgz"=>true,
-         "zip"=>false,
-         "directory"=>false,
-         "--event"=>1,
+         "--type"=>'tgz',
          "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
@@ -34,11 +42,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>"https://example.com/file",
-         "--type"=>true,
-         "tgz"=>true,
-         "zip"=>false,
-         "directory"=>false,
-         "--event"=>1,
+         "--type"=>'tgz',
          "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
@@ -56,11 +60,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>INVALID_URI,
-         "--type"=>true,
-         "tgz"=>true,
-         "zip"=>false,
-         "directory"=>false,
-         "--event"=>1,
+         "--type"=>'tgz',
          "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
@@ -78,11 +78,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>HTTP_URL,
-         "--type"=>true,
-         "tgz"=>true,
-         "zip"=>false,
-         "directory"=>false,
-         "--event"=>1,
+         "--type"=>'tgz',
          "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
@@ -100,11 +96,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>FAKE_FILE_WHICH_DOES_NOT_EXIST,
-         "--type"=>true,
-         "tgz"=>false,
-         "zip"=>true,
-         "directory"=>false,
-         "--event"=>1,
+         "--type"=>'zip',
          "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
@@ -123,11 +115,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>FAKE_FILE,
-         "--type"=>true,
-         "tgz"=>false,
-         "zip"=>false,
-         "directory"=>true,
-         "--event"=>1,
+         "--type"=>'directory',
          "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
@@ -147,11 +135,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>FAKE_DIRECTORY,
-         "--type"=>true,
-         "tgz"=>false,
-         "zip"=>true,
-         "directory"=>false,
-         "--event"=>1,
+         "--type"=>'zip',
          "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
@@ -161,11 +145,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>FAKE_DIRECTORY,
-         "--type"=>true,
-         "tgz"=>true,
-         "zip"=>false,
-         "directory"=>false,
-         "--event"=>1,
+         "--type"=>'tgz',
          "--event"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}

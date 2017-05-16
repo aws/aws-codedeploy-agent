@@ -17,7 +17,7 @@ module AWS
         WINDOWS_DEFAULT_DIRECTORY = File.join(ENV['PROGRAMDATA'] || '/', 'Amazon/CodeDeploy')
         CONF_DEFAULT_LOCATION = IS_WINDOWS ? "#{WINDOWS_DEFAULT_DIRECTORY}/conf.yml" : '/etc/codedeploy-agent/conf/codedeployagent.yml'
         CONF_REPO_LOCATION_SUFFIX = '/conf/codedeployagent.yml'
-        DEFAULT_DEPLOYMENT_GROUP_ID = 'default-local-deployment-application-folder'
+        DEFAULT_DEPLOYMENT_GROUP_ID = 'default-local-deployment-application'
 
         DEFAULT_ORDERED_LIFECYCLE_EVENTS = %w(BeforeBlockTraffic
                                               AfterBlockTraffic
@@ -64,9 +64,9 @@ module AWS
         def execute_events(args)
           args = AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
           # Sets default value of deployment_group_id if it's missing
-          deployment_group_id = args['--deployment-group-id'] || DEFAULT_DEPLOYMENT_GROUP_ID
+          deployment_group_id = args['--deployment-group-id']
 
-          spec = build_spec(args['--bundle-location'], bundle_type(args), deployment_group_id, all_possible_lifecycle_events(args['--event']))
+          spec = build_spec(args['--bundle-location'], args['--type'], deployment_group_id, all_possible_lifecycle_events(args['--event']))
 
           command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => hook_mapping(args['--event']))
           all_lifecycle_events_to_execute = add_download_bundle_and_install_events(ordered_lifecycle_events(args['--event']))
@@ -103,8 +103,6 @@ module AWS
         end
 
         def build_spec(location, bundle_type, deployment_group_id, all_possible_lifecycle_events)
-          raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("Unknown bundle type #{bundle_type} of #{location}") unless %w(tar zip tgz directory).include? bundle_type
-
           @deployment_id = self.class.random_deployment_id
           puts "Starting to execute deployment from within folder #{deployment_folder(deployment_group_id, @deployment_id)}"
           OpenStruct.new({
@@ -127,10 +125,6 @@ module AWS
 
         def self.random_alphanumeric(length)
           Array.new(length){[*"A".."Z", *"0".."9"].sample}.join
-        end
-
-        def bundle_type(args)
-          args.select{|k,v| ['tar','tgz','zip','directory'].include?(k) && v}.keys.first
         end
 
         def deployment_folder(deployment_group_id, deployment_id)
