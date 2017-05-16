@@ -89,6 +89,12 @@ describe AWS::CodeDeploy::Local::Deployer do
       expect(InstanceAgent::Config).to receive(:load_config)
       AWS::CodeDeploy::Local::Deployer.new
     end
+
+    it 'throws ValidationError if configuration file location does not exist' do
+      invalid_config_file_location = '/does/not/exist/path'
+      expect(File).to receive(:file?).with(invalid_config_file_location).and_return(false)
+      expect{AWS::CodeDeploy::Local::Deployer.new(invalid_config_file_location)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "configuration file #{invalid_config_file_location} does not exist or is not readable")
+    end
   end
 
   describe 'execute_events' do

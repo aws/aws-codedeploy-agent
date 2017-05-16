@@ -35,13 +35,12 @@ module AWS
 
         def initialize(configuration_file_location = CONF_DEFAULT_LOCATION)
           configuration_file_location ||= CONF_DEFAULT_LOCATION # Default gets set this way even if the input is nil
-          current_directory = Dir.pwd
           if IS_WINDOWS then self.class.configure_windows_certificate end
 
           if File.file?(configuration_file_location) && File.readable?(configuration_file_location)
             InstanceAgent::Config.config[:config_file] = configuration_file_location
-          else
-            InstanceAgent::Config.config[:config_file] = "#{current_directory}#{CONF_REPO_LOCATION_SUFFIX}"
+          elsif configuration_file_location != CONF_DEFAULT_LOCATION
+            raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("configuration file #{configuration_file_location} does not exist or is not readable")
           end
 
           InstanceAgent::Config.load_config
