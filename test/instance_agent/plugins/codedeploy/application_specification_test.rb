@@ -19,6 +19,30 @@ module InstanceAgent
 
             private
 
+            context "With empty AppSpec" do
+              setup do
+                @app_spec_string = ""
+              end
+
+              should "raise an exception" do
+                assert_raised_with_message("The deployment failed because the application specification file was empty. Make sure your AppSpec file defines at minimum the 'version' and 'os' properties.", AppSpecValidationException) do
+                  make_app_spec()
+                end
+              end
+            end
+
+            context "With whitespace-only AppSpec" do
+              setup do
+                @app_spec_string = " \n"
+              end
+
+              should "raise an exception" do
+                assert_raised_with_message("The deployment failed because the application specification file was empty. Make sure your AppSpec file defines at minimum the 'version' and 'os' properties.", AppSpecValidationException) do
+                  make_app_spec()
+                end
+              end
+            end
+
             context "With missing version" do
               setup do
                 @app_spec_string = <<-END

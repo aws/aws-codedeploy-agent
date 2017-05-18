@@ -200,6 +200,14 @@ module InstanceAgent
         def parse_app_spec
           app_spec_location = File.join(@deployment_archive_dir, @app_spec_path)
           log(:debug, "Checking for app spec in #{app_spec_location}")
+          unless File.exists?(app_spec_location)
+            raise <<-MESSAGE.gsub(/^[\s\t]*/, '').gsub(/\s*\n/, ' ').strip
+                The CodeDeploy agent did not find an AppSpec file within the unpacked revision directory at revision-relative path "#{@app_spec_path}".
+                The revision was unpacked to directory "#{@deployment_archive_dir}", and the AppSpec file was expected but not found at path
+                "#{app_spec_location}". Consult the AWS CodeDeploy Appspec documentation for more information at
+                http://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file.html
+            MESSAGE
+          end
           @app_spec =  InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::ApplicationSpecification.parse(File.read(app_spec_location))
         end
 

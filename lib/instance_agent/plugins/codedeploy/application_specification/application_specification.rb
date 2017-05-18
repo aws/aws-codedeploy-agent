@@ -11,6 +11,9 @@ module InstanceAgent
 
           attr_reader :version, :os, :hooks, :files, :permissions
           def initialize(yaml_hash, opts = {})
+            unless yaml_hash
+                raise AppSpecValidationException, "The deployment failed because the application specification file was empty. Make sure your AppSpec file defines at minimum the 'version' and 'os' properties."
+            end
             @version = parse_version(yaml_hash['version'])
             @os = parse_os(yaml_hash['os'])
             @hooks = parse_hooks(yaml_hash['hooks'] || {})

@@ -38,6 +38,8 @@ class HookExecutorTest < InstanceAgentTestCase
       logger = mock
       logger.stubs(:log)
       InstanceAgent::DeploymentLog.stubs(:instance).returns(logger)
+      File.stubs(:exists?).returns(false)
+      File.stubs(:exists?).with(){|value| value.is_a?(String) && value.end_with?("/app_spec")}.returns(true)
     end
 
     context "when creating a hook command" do
@@ -84,6 +86,13 @@ class HookExecutorTest < InstanceAgentTestCase
         setup do
           @lifecycle_event = "ValidateService"
           ApplicationSpecification.stubs(:parse)
+        end
+
+        should "fail if app spec not found" do 
+            File.stubs(:exists?).with(){|value| value.is_a?(String) && value.end_with?("/app_spec")}.returns(false)
+            assert_raised_with_message("The CodeDeploy agent did not find an AppSpec file within the unpacked revision directory at revision-relative path \"app_spec\". The revision was unpacked to directory \"deployment/root/dir/deployment-archive\", and the AppSpec file was expected but not found at path \"deployment/root/dir/deployment-archive/app_spec\". Consult the AWS CodeDeploy Appspec documentation for more information at http://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file.html", RuntimeError)do
+              @hook_executor =  create_full_hook_executor
+            end
         end
 
         should "parse an app spec from the current deployments directory" do
