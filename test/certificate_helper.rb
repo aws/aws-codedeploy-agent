@@ -24,8 +24,8 @@ class CertificateHelper
     ]
     @root_cert.issuer = @root_cert.subject
     @root_cert.public_key = @root_key.public_key
-    @root_cert.not_before = Time.now
-    @root_cert.not_after = Time.now + 60
+    @root_cert.not_before = Time.now - 10000
+    @root_cert.not_after = Time.now + 10000
     ef = OpenSSL::X509::ExtensionFactory.new
 
     ef.subject_certificate = @root_cert
@@ -52,8 +52,8 @@ class CertificateHelper
     ]
     @intermediate_cert.issuer = @root_cert.subject
     @intermediate_cert.public_key = @intermediate_key.public_key
-    @intermediate_cert.not_before = Time.now
-    @intermediate_cert.not_after = Time.now + 60
+    @intermediate_cert.not_before = Time.now - 10000
+    @intermediate_cert.not_after = Time.now + 10000
 
     ef = OpenSSL::X509::ExtensionFactory.new
     ef.subject_certificate = @intermediate_cert
@@ -80,8 +80,8 @@ class CertificateHelper
     ]
     @signer_cert.issuer = @intermediate_cert.subject
     @signer_cert.public_key = @signer_key.public_key
-    @signer_cert.not_before = Time.now
-    @signer_cert.not_after = Time.now + 60
+    @signer_cert.not_before = Time.now - 10000
+    @signer_cert.not_after = Time.now + 10000
 
     ef = OpenSSL::X509::ExtensionFactory.new
     ef.subject_certificate = @signer_cert
