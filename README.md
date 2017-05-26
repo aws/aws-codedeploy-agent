@@ -13,6 +13,14 @@ bundle install
 rake clean && rake
 ```
 
+## Starting up the CodeDeploy Agent Locally for manual testing
+
+`bin/codedeploy-agent start`
+
+To stop it:
+
+`bin/codedeploy-agent stop`
+
 ## Integration Test
   
 Please do the build steps mentioned above before running the integration test.
