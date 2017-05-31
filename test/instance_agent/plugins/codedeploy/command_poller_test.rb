@@ -27,6 +27,7 @@ class CommandPollerTest < InstanceAgentTestCase
       InstanceMetadata.stubs(:region).returns(@aws_region)
       InstanceMetadata.stubs(:host_identifier).returns(@host_identifier)
 
+      InstanceAgent::Plugins::CodeDeployPlugin::OnPremisesConfig.stubs(:configure)
       InstanceAgent::Plugins::CodeDeployPlugin::CodeDeployControl.stubs(:new).
         returns(@deploy_control_api)
       @deploy_control_api.stubs(:get_client).
