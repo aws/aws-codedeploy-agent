@@ -18,6 +18,8 @@ require 'aws/codedeploy/local/deployer'
 require 'step_definitions/step_constants'
 
 DEPLOYMENT_ROLE_NAME = "#{StepConstants::CODEDEPLOY_TEST_PREFIX}deployment-role"
+INSTANCE_ROLE_NAME = "#{StepConstants::CODEDEPLOY_TEST_PREFIX}instance-role"
+DEPLOYMENT_ROLE_POLICY = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":[\"codedeploy.amazonaws.com\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
 
 def instance_name
   @instance_name ||= SecureRandom.uuid
@@ -49,6 +51,7 @@ Before("@codedeploy-agent") do
   #instantiate these clients first so they use user's aws creds instead of assumed role creds
   @codedeploy_client = Aws::CodeDeploy::Client.new
   @iam_client = Aws::IAM::Client.new
+  @sts = Aws::STS::Client.new
 end
 
 def configure_local_agent(working_directory)
@@ -206,7 +209,7 @@ end
 def create_deployment_role
   begin
     @iam_client.create_role({:role_name => DEPLOYMENT_ROLE_NAME,
-                             :assume_role_policy_document => deployment_role_policy}).role.arn
+                             :assume_role_policy_document => DEPLOYMENT_ROLE_POLICY}).role.arn
     @iam_client.attach_role_policy({:role_name => DEPLOYMENT_ROLE_NAME,
                                     :policy_arn => "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"})
   rescue Aws::IAM::Errors::EntityAlreadyExists
@@ -219,23 +222,48 @@ def create_deployment_role
   end
 end
 
+def create_instance_role
+  begin
+    @iam_client.create_role({:role_name => INSTANCE_ROLE_NAME,
+                             :assume_role_policy_document => instance_role_policy}).role.arn
+    @iam_client.attach_role_policy({:role_name => INSTANCE_ROLE_NAME,
+                                    :policy_arn => "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"})
+    @iam_client.attach_role_policy({:role_name => INSTANCE_ROLE_NAME,
+                                    :policy_arn => "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"})
+  rescue Aws::IAM::Errors::EntityAlreadyExists
+    #Using the existing role
+  end
+  eventually do
+    instance_role = @iam_client.get_role({:role_name => INSTANCE_ROLE_NAME}).role
+    expect(instance_role).not_to be_nil
+    expect(instance_role.assume_role_policy_document).not_to be_nil
+    instance_role.arn
+  end
+end
+
+def instance_role_policy
+  "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":[\"codedeploy.amazonaws.com\"]},\"Action\":[\"sts:AssumeRole\"]},{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"#{current_user_or_role_arn}\"},\"Action\":[\"sts:AssumeRole\"]}]}"
+end
+
+def current_user_or_role_arn
+  @sts.get_caller_identity.arn
+end
+
 def create_iam_assume_role_session
-  sts = Aws::STS::Client.new
-  assume_role_response = sts.assume_role({
-    duration_seconds: 3600,
-    role_arn: 'arn:aws:iam::910828814654:role/CodeDeployOnPremInstanceRole',
-    role_session_name: instance_name,
-  })
+  # The assume role policy takes some time to propagate so wrapping assume role call in eventually clause
+  assume_role_response = eventually do
+    @sts.assume_role({
+      duration_seconds: 3600,
+      role_arn: create_instance_role,
+      role_session_name: instance_name,
+    })
+  end
 
   @iam_session_access_key_id = assume_role_response.to_h[:credentials][:access_key_id]
   @iam_session_secret_access_key = assume_role_response.to_h[:credentials][:secret_access_key]
   @iam_session_token = assume_role_response.to_h[:credentials][:session_token]
 
   assume_role_response.to_h[:assumed_role_user][:arn]
-end
-
-def deployment_role_policy
-  "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":[\"codedeploy.amazonaws.com\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
 end
 
 def assert_deployment_status(expected_status, wait_sec)
