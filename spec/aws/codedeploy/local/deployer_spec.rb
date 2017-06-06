@@ -108,7 +108,6 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_FILE_BUNDLE,
          "--type"=>'tgz',
-         "--event"=>[],
          '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
@@ -164,7 +163,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_FILE_BUNDLE,
          "--type"=>'tar',
-         "--event"=>NON_DEFAULT_LIFECYCLE_EVENTS,
+         "--events"=>NON_DEFAULT_LIFECYCLE_EVENTS.join(','),
          '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
@@ -197,7 +196,6 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_DIRECTORY_BUNDLE,
          "--type"=>'directory',
-         "--event"=>[],
          '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
@@ -227,7 +225,6 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_DIRECTORY_BUNDLE,
          "--type"=>'directory',
-         "--event"=>[],
          '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
@@ -257,7 +254,6 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_GIT_LOCATION_TARBALL,
          "--type"=>'tar',
-         "--event"=>[],
          '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
@@ -286,7 +282,6 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_GIT_LOCATION_ZIPBALL,
          "--type"=>'zip',
-         "--event"=>[],
          '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
@@ -315,7 +310,6 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_S3_LOCATION,
          "--type"=>'zip',
-         "--event"=>[],
          '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
@@ -344,7 +338,6 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_S3_LOCATION_WITH_VERSION_AND_ETAG,
          "--type"=>'zip',
-         "--event"=>[],
          '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}

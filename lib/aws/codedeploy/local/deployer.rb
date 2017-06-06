@@ -63,11 +63,12 @@ module AWS
           args = AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
           # Sets default value of deployment_group_id if it's missing
           deployment_group_id = args['--agent-application-folder']
+          events = events_from_comma_separated_list(args['--events'])
 
-          spec = build_spec(args['--bundle-location'], args['--type'], deployment_group_id, all_possible_lifecycle_events(args['--event']))
+          spec = build_spec(args['--bundle-location'], args['--type'], deployment_group_id, all_possible_lifecycle_events(events))
 
-          command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => hook_mapping(args['--event']))
-          all_lifecycle_events_to_execute = add_download_bundle_and_install_events(ordered_lifecycle_events(args['--event']))
+          command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => hook_mapping(events))
+          all_lifecycle_events_to_execute = add_download_bundle_and_install_events(ordered_lifecycle_events(events))
 
           begin
             all_lifecycle_events_to_execute.each do |name|
@@ -115,6 +116,14 @@ module AWS
               "AllPossibleLifecycleEvents" => all_possible_lifecycle_events
             }.to_json.to_s
           })
+        end
+
+        def events_from_comma_separated_list(comma_separated_events)
+          if (comma_separated_events.nil?)
+            comma_separated_events
+          else
+            comma_separated_events.split(',')
+          end
         end
 
         def self.random_deployment_id

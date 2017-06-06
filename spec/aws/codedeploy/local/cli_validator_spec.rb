@@ -26,7 +26,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>VALID_FILE,
          "--type"=>'tgz',
-         "--event"=>["stop", "start"],
+         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -43,7 +43,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>"https://example.com/file",
          "--type"=>'tgz',
-         "--event"=>["stop", "start"],
+         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -61,7 +61,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>INVALID_URI,
          "--type"=>'tgz',
-         "--event"=>["stop", "start"],
+         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -79,7 +79,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>HTTP_URL,
          "--type"=>'tgz',
-         "--event"=>["stop", "start"],
+         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -97,7 +97,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>FAKE_FILE_WHICH_DOES_NOT_EXIST,
          "--type"=>'zip',
-         "--event"=>["stop", "start"],
+         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -116,7 +116,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>FAKE_FILE,
          "--type"=>'directory',
-         "--event"=>["stop", "start"],
+         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -136,7 +136,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>FAKE_DIRECTORY,
          "--type"=>'zip',
-         "--event"=>["stop", "start"],
+         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -146,7 +146,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>FAKE_DIRECTORY,
          "--type"=>'tgz',
-         "--event"=>["stop", "start"],
+         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
