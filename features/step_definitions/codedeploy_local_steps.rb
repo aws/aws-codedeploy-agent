@@ -87,7 +87,7 @@ def create_local_deployment(custom_events = nil)
     codeedeploy_command_suffix = " -e #{custom_events.join(' -e ')}"
   end
 
-  system "bin/codedeploy-local --bundle-location #{@bundle_location} --type #{@bundle_type} --application-folder #{LOCAL_DEPLOYMENT_GROUP_ID} --configuration-file #{InstanceAgent::Config.config[:config_file]}#{codeedeploy_command_suffix}"
+  system "bin/codedeploy-local --bundle-location #{@bundle_location} --type #{@bundle_type} --agent-application-folder #{LOCAL_DEPLOYMENT_GROUP_ID} --configuration-file #{InstanceAgent::Config.config[:config_file]}#{codeedeploy_command_suffix}"
 end
 
 Then(/^the local deployment command should succeed$/) do

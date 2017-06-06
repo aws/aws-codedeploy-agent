@@ -109,7 +109,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--bundle-location"=>SAMPLE_FILE_BUNDLE,
          "--type"=>'tgz',
          "--event"=>[],
-         '--application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -165,7 +165,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--bundle-location"=>SAMPLE_FILE_BUNDLE,
          "--type"=>'tar',
          "--event"=>NON_DEFAULT_LIFECYCLE_EVENTS,
-         '--application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -198,7 +198,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--bundle-location"=>SAMPLE_DIRECTORY_BUNDLE,
          "--type"=>'directory',
          "--event"=>[],
-         '--application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -228,7 +228,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--bundle-location"=>SAMPLE_DIRECTORY_BUNDLE,
          "--type"=>'directory',
          "--event"=>[],
-         '--application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -258,7 +258,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--bundle-location"=>SAMPLE_GIT_LOCATION_TARBALL,
          "--type"=>'tar',
          "--event"=>[],
-         '--application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -287,7 +287,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--bundle-location"=>SAMPLE_GIT_LOCATION_ZIPBALL,
          "--type"=>'zip',
          "--event"=>[],
-         '--application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -316,7 +316,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--bundle-location"=>SAMPLE_S3_LOCATION,
          "--type"=>'zip',
          "--event"=>[],
-         '--application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -345,7 +345,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--bundle-location"=>SAMPLE_S3_LOCATION_WITH_VERSION_AND_ETAG,
          "--type"=>'zip',
          "--event"=>[],
-         '--application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
