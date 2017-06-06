@@ -6,6 +6,8 @@ module InstanceAgent
   module Plugins
     module CodeDeployPlugin
       class DeploymentSpecification
+        DEFAULT_FILE_EXISTS_BEHAVIOR = 'DISALLOW'
+
         attr_accessor :deployment_id, :deployment_group_id, :deployment_group_name, :revision, :revision_source, :application_name, :deployment_type, :deployment_creator
         attr_accessor :bucket, :key, :bundle_type, :version, :etag
         attr_accessor :external_account, :repository, :commit_id, :anonymous, :external_auth_token
@@ -49,7 +51,7 @@ module InstanceAgent
           @revision_source = data["Revision"]["RevisionType"]
           raise 'Must specify a revision source' unless @revision_source
 
-          @file_exists_behavior = 'DISALLOW'
+          @file_exists_behavior = DEFAULT_FILE_EXISTS_BEHAVIOR
           if property_set?(data, "AgentActionOverrides")
             agentActionsOverrides = data["AgentActionOverrides"]
             if property_set?(agentActionsOverrides,  "AgentOverrides")

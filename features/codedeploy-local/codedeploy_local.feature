@@ -65,3 +65,23 @@ Feature: Local Deploy using AWS CodeDeploy Local CLI
     Then the local deployment command should succeed
     And the expected files should have have been locally deployed to my host
     And the scripts should have been executed during local deployment with only BeforeInstall ApplicationStart
+
+  Scenario: Doing a sample local deployment using a directory bundle without file-exists-behavior and existing file
+    Given I have a sample local directory_with_destination_files bundle
+    And I have existing file in destination
+    When I create a local deployment with my bundle with file-exists-behavior MISSING
+    Then the local deployment command should fail
+
+  Scenario: Doing a sample local deployment using a directory bundle with file-exists-behavior OVERWRITE
+    Given I have a sample local directory_with_destination_files bundle
+    And I have existing file in destination
+    When I create a local deployment with my bundle with file-exists-behavior OVERWRITE
+    Then the local deployment command should succeed
+    And the expected existing file should end up like file-exists-behavior OVERWRITE specifies
+
+  Scenario: Doing a sample local deployment using a directory bundle with file-exists-behavior RETAIN
+    Given I have a sample local directory_with_destination_files bundle
+    And I have existing file in destination
+    When I create a local deployment with my bundle with file-exists-behavior RETAIN
+    Then the local deployment command should succeed
+    And the expected existing file should end up like file-exists-behavior RETAIN specifies

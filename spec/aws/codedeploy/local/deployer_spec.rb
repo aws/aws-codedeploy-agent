@@ -30,6 +30,7 @@ describe AWS::CodeDeploy::Local::Deployer do
                             "BeforeAllowTraffic"=>["BeforeAllowTraffic"],
                             "AfterAllowTraffic"=>["AfterAllowTraffic"]}
   DEPLOYMENT_GROUP_ID = 'deployment-group-id'
+  NON_DEFAULT_FILE_EXISTS_BEHAVIOR = 'OVERWRITE'
   let(:test_working_directory) { Dir.mktmpdir }
 
   before do
@@ -105,6 +106,7 @@ describe AWS::CodeDeploy::Local::Deployer do
     context 'when local file is specified' do
       let(:args) do
         {"deploy"=>true,
+         '--file-exists-behavior'=>InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR,
          "--location"=>true,
          "--bundle-location"=>SAMPLE_FILE_BUNDLE,
          "--type"=>'tgz',
@@ -160,6 +162,7 @@ describe AWS::CodeDeploy::Local::Deployer do
 
       let(:args) do
         {"deploy"=>true,
+         '--file-exists-behavior'=>InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR,
          "--location"=>true,
          "--bundle-location"=>SAMPLE_FILE_BUNDLE,
          "--type"=>'tar',
@@ -193,6 +196,7 @@ describe AWS::CodeDeploy::Local::Deployer do
     context 'when local directory is specified' do
       let(:args) do
         {"deploy"=>true,
+         '--file-exists-behavior'=>InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR,
          "--location"=>true,
          "--bundle-location"=>SAMPLE_DIRECTORY_BUNDLE,
          "--type"=>'directory',
@@ -219,10 +223,38 @@ describe AWS::CodeDeploy::Local::Deployer do
       end
     end
 
+    context 'when file-exists-behavior is specified' do
+      let(:args) do
+        {'--bundle-location'=>SAMPLE_DIRECTORY_BUNDLE,
+         '--type'=>'directory',
+         '--deployment-group'=>DEPLOYMENT_GROUP_ID,
+         '--file-exists-behavior'=>NON_DEFAULT_FILE_EXISTS_BEHAVIOR}
+      end
+
+      it 'deploys the local directory and calls the executor to execute all commands' do
+        allow(File).to receive(:exists?).with(SAMPLE_DIRECTORY_BUNDLE).and_return(true)
+        executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
+
+        expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
+          with(:hook_mapping => EXPECTED_HOOK_MAPPING).
+          and_return(executor)
+
+        AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
+          expect(executor).to receive(:execute_command).with(
+            OpenStruct.new(:command_name => name),
+            deployment_spec(SAMPLE_DIRECTORY_BUNDLE, 'Local Directory', 'directory',
+                            AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS,
+                            false, false, DEPLOYMENT_GROUP_ID, NON_DEFAULT_FILE_EXISTS_BEHAVIOR)).once.ordered
+        end
+        AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
+      end
+    end
+
     context 'when anonymous github tarball endpoint is specified' do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
+         '--file-exists-behavior'=>InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR,
          "--bundle-location"=>SAMPLE_GIT_LOCATION_TARBALL,
          "--type"=>'tar',
          '--deployment-group'=>DEPLOYMENT_GROUP_ID,
@@ -251,6 +283,7 @@ describe AWS::CodeDeploy::Local::Deployer do
       let(:args) do
         {"deploy"=>true,
          "--location"=>true,
+         '--file-exists-behavior'=>InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR,
          "--bundle-location"=>SAMPLE_GIT_LOCATION_ZIPBALL,
          "--type"=>'zip',
          '--deployment-group'=>DEPLOYMENT_GROUP_ID,
@@ -278,6 +311,7 @@ describe AWS::CodeDeploy::Local::Deployer do
     context 'when s3 endpoint is specified' do
       let(:args) do
         {"deploy"=>true,
+         '--file-exists-behavior'=>InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR,
          "--location"=>true,
          "--bundle-location"=>SAMPLE_S3_LOCATION,
          "--type"=>'zip',
@@ -306,6 +340,7 @@ describe AWS::CodeDeploy::Local::Deployer do
     context 'when s3 endpoint with version and etag is specified' do
       let(:args) do
         {"deploy"=>true,
+         '--file-exists-behavior'=>InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR,
          "--location"=>true,
          "--bundle-location"=>SAMPLE_S3_LOCATION_WITH_VERSION_AND_ETAG,
          "--type"=>'zip',
@@ -332,7 +367,7 @@ describe AWS::CodeDeploy::Local::Deployer do
       end
     end
 
-    def deployment_spec(location, revision_type, bundle_type, all_possible_lifecycle_events, s3revision_includes_version=false, s3revision_includes_etag=false, deployment_group_id=DEPLOYMENT_GROUP_ID)
+    def deployment_spec(location, revision_type, bundle_type, all_possible_lifecycle_events, s3revision_includes_version=false, s3revision_includes_etag=false, deployment_group_id=DEPLOYMENT_GROUP_ID, file_exists_behavior=InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR)
       revision_data_key = revision_data(revision_type, location, bundle_type, s3revision_includes_version, s3revision_includes_etag).keys.first
       revision_data_value = revision_data(revision_type, location, bundle_type, s3revision_includes_version, s3revision_includes_etag).values.first
       OpenStruct.new({
@@ -343,9 +378,11 @@ describe AWS::CodeDeploy::Local::Deployer do
           "DeploymentGroupId" => deployment_group_id,
           "DeploymentGroupName" => "LocalFleet",
           "DeploymentId" => TEST_DEPLOYMENT_ID,
+          "AgentActionOverrides" => {"AgentOverrides" => {"FileExistsBehavior" => file_exists_behavior}},
           "Revision" => {"RevisionType" => revision_type, 
                          revision_data_key => revision_data_value},
           "AllPossibleLifecycleEvents" => all_possible_lifecycle_events
+
         }.to_json.to_s
       })
     end
