@@ -16,7 +16,7 @@ module AWS
         IS_WINDOWS = (RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/)
         WINDOWS_DEFAULT_DIRECTORY = File.join(ENV['PROGRAMDATA'] || '/', 'Amazon/CodeDeploy')
         CONF_DEFAULT_LOCATION = IS_WINDOWS ? "#{WINDOWS_DEFAULT_DIRECTORY}/conf.yml" : '/etc/codedeploy-agent/conf/codedeployagent.yml'
-        DEFAULT_DEPLOYMENT_GROUP_ID = 'default-local-deployment-application'
+        DEFAULT_DEPLOYMENT_GROUP_ID = 'default-local-deployment-group'
 
         DEFAULT_ORDERED_LIFECYCLE_EVENTS = %w(BeforeBlockTraffic
                                               AfterBlockTraffic
@@ -62,7 +62,7 @@ module AWS
         def execute_events(args)
           args = AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
           # Sets default value of deployment_group_id if it's missing
-          deployment_group_id = args['--agent-application-folder']
+          deployment_group_id = args['--deployment-group']
           events = events_from_comma_separated_list(args['--events'])
 
           spec = build_spec(args['--bundle-location'], args['--type'], deployment_group_id, all_possible_lifecycle_events(events))

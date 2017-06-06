@@ -108,7 +108,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_FILE_BUNDLE,
          "--type"=>'tgz',
-         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--deployment-group'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -164,7 +164,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--bundle-location"=>SAMPLE_FILE_BUNDLE,
          "--type"=>'tar',
          "--events"=>NON_DEFAULT_LIFECYCLE_EVENTS.join(','),
-         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--deployment-group'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -196,36 +196,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_DIRECTORY_BUNDLE,
          "--type"=>'directory',
-         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
-         "--help"=>false,
-         "--version"=>false}
-      end
-
-      it 'deploys the local directory and calls the executor to execute all commands' do
-        allow(File).to receive(:exists?).with(SAMPLE_DIRECTORY_BUNDLE).and_return(true)
-        executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
-
-        expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
-          with(:hook_mapping => EXPECTED_HOOK_MAPPING).
-          and_return(executor)
-
-        AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
-          expect(executor).to receive(:execute_command).with(
-            OpenStruct.new(:command_name => name),
-            deployment_spec(SAMPLE_DIRECTORY_BUNDLE, 'Local Directory', 'directory',
-                            AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
-        end
-        AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
-      end
-    end
-
-    context 'when local directory is specified with application-folder instead of deployment-group-id' do
-      let(:args) do
-        {"deploy"=>true,
-         "--location"=>true,
-         "--bundle-location"=>SAMPLE_DIRECTORY_BUNDLE,
-         "--type"=>'directory',
-         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--deployment-group'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -254,7 +225,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_GIT_LOCATION_TARBALL,
          "--type"=>'tar',
-         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--deployment-group'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -282,7 +253,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_GIT_LOCATION_ZIPBALL,
          "--type"=>'zip',
-         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--deployment-group'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -310,7 +281,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_S3_LOCATION,
          "--type"=>'zip',
-         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--deployment-group'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
@@ -338,7 +309,7 @@ describe AWS::CodeDeploy::Local::Deployer do
          "--location"=>true,
          "--bundle-location"=>SAMPLE_S3_LOCATION_WITH_VERSION_AND_ETAG,
          "--type"=>'zip',
-         '--agent-application-folder'=>DEPLOYMENT_GROUP_ID,
+         '--deployment-group'=>DEPLOYMENT_GROUP_ID,
          "--help"=>false,
          "--version"=>false}
       end
