@@ -17,7 +17,7 @@ doc = <<DOCOPT
 CodeDeploy Local Deployments.
 
 Usage:
-  #{__FILE__} [--bundle-location <location>] [--type <type>] [--deployment-group <deployment-group>] [--agent-configuration-file <configuration-file>] [--events <comma-separated-events>]
+  #{__FILE__} [--bundle-location <location>] [--type <type>] [--deployment-group <deployment-group>] [--events <comma-separated-events>] [--agent-configuration-file <configuration-file>]
   #{__FILE__} -h | --help
   #{__FILE__} -v | --version
 
