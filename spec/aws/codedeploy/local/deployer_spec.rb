@@ -151,7 +151,7 @@ describe AWS::CodeDeploy::Local::Deployer do
           expect(STDOUT).to receive(:puts).with("Starting to execute deployment from within folder #{deployment_folder}").once.ordered
           expect(STDOUT).to receive(:puts).with("Your local deployment failed while trying to execute your script at #{deployment_folder}/deployment-archive/script-location").once.ordered
           expect(STDOUT).to receive(:puts).with("See the deployment log at #{deployment_folder}/logs/scripts.log for the exact error message").once.ordered
-          AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
+          expect{AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)}.to raise_error(InstanceAgent::Plugins::CodeDeployPlugin::ScriptError)
         end
       end
     end
