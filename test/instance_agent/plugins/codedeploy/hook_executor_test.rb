@@ -173,7 +173,7 @@ class HookExecutorTest < InstanceAgentTestCase
             File.stubs(:exist?).with(@script_location).returns(false)
           end
 
-          should "raise and exception" do
+          should "raise an exception" do
             assert_raised_with_message("Script does not exist at specified location: #{File.expand_path(@deployment_root_dir)}/deployment-archive/test", ScriptError)do
               @hook_executor.execute
             end
@@ -224,6 +224,9 @@ class HookExecutorTest < InstanceAgentTestCase
               @value = mock
               @wait_thr.stubs(:value).returns(@value)
               @wait_thr.stubs(:join).returns(1000)
+              @thread_joiner = mock('thread_joiner')
+              @thread_joiner.stubs(:joinOrFail)
+              InstanceAgent::ThreadJoiner.stubs(:new).returns(@thread_joiner)
             end
 
             context 'scripts fail for unknown reason' do
@@ -248,9 +251,9 @@ class HookExecutorTest < InstanceAgentTestCase
                 @app_spec =  { "version" => 0.0, "os" => "linux", "hooks" => {'ValidateService'=> [{"location"=>"test", "timeout"=>"30"}]}}
                 YAML.stubs(:load).returns(@app_spec)
                 @hook_executor = create_full_hook_executor
-                @wait_thr.stubs(:join).with(30).returns(nil)
+                @thread_joiner.expects(:joinOrFail).with(@wait_thr).yields
+                InstanceAgent::ThreadJoiner.expects(:new).with(30).returns(@thread_joiner)
                 @wait_thr.stubs(:pid).returns(1234)
-                mock_pipe = mock
               end
 
               context "with process group support" do
@@ -281,7 +284,47 @@ class HookExecutorTest < InstanceAgentTestCase
                 end
               end
             end
-            
+
+            context "scripts fail to close outputs" do
+              setup do
+                timeout = 144
+                InstanceAgent::ThreadJoiner.expects(:new).with(timeout).returns(@thread_joiner)
+                @stdout_thread = mock('stdout_thread')
+                @stderr_thread = mock('stderr_thread')
+                Thread.stubs(:new).returns(@stdout_thread, @stderr_thread)
+                Open3.stubs(:popen3).with(@child_env, @script_location, :pgroup => true).yields([@mock_pipe,@mock_pipe,@mock_pipe,@wait_thr])
+                @app_spec = {"version" => 0.0, "os" => "linux", "hooks" => {'ValidateService'=>[{'location'=>'test', 'timeout'=>"#{timeout}"}]}}
+                YAML.stubs(:load).returns(@app_spec)
+                @hook_executor = create_full_hook_executor
+              end
+
+              context "STDOUT left open" do
+                setup do
+                  @thread_joiner.expects(:joinOrFail).with(@stdout_thread).yields
+                  InstanceAgent::Log.expects(:send).with(:error, "InstanceAgent::Plugins::CodeDeployPlugin::HookExecutor: Script at specified location: test failed to close STDOUT")
+                end
+
+                should "raise an exception" do
+                  assert_raised_with_message("Script at specified location: test failed to close STDOUT", ScriptError) do
+                    @hook_executor.execute
+                  end
+                end
+              end
+
+              context "STDERR left open" do
+                setup do
+                  @thread_joiner.expects(:joinOrFail).with(@stderr_thread).yields
+                  InstanceAgent::Log.expects(:send).with(:error, "InstanceAgent::Plugins::CodeDeployPlugin::HookExecutor: Script at specified location: test failed to close STDERR")
+                end
+
+                should "raise an exception" do
+                  assert_raised_with_message("Script at specified location: test failed to close STDERR", ScriptError) do
+                    @hook_executor.execute
+                  end
+                end
+              end
+            end
+
             context "Scripts run with a runas" do
               setup do
                 @app_spec =  { "version" => 0.0, "os" => "linux", "hooks" => {'ValidateService'=> [{"location"=>"test", "runas"=>"user"}]}}
