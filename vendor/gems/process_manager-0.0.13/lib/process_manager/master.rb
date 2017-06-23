@@ -170,16 +170,15 @@ module ProcessManager
         File.read("/proc/#{pid}/cmdline").include?("codedeploy-agent: master") rescue false
       end
 
-      def handle_pid_file       
+      def handle_pid_file
         @file_lock ||= File.open(pid_lock_file, File::RDWR|File::CREAT, 0644)
         lock_acquired = @file_lock.flock(File::LOCK_EX | File::LOCK_NB)
-        
+
         if lock_acquired == false
           ProcessManager::Log.info("Could not acquire lock on #{pid_lock_file} - aborting start!")
           self.class.abort
         elsif File.exists?(pid_file)
-          pid = self.class.find_pid
-          if ProcessManager.process_running?(pid) and process_matcher(pid)
+          if pid = self.class.find_pid && ProcessManager.process_running?(pid) && process_matcher(pid)
             puts "Pidfile #{pid_file} exists and process #{pid} is running - aborting start!"
             ProcessManager::Log.info("Pidfile #{pid_file} exists and process #{pid} is running - aborting start!")
             @file_lock.close
