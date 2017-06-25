@@ -78,6 +78,8 @@ module AWS
           rescue InstanceAgent::Plugins::CodeDeployPlugin::ScriptError => e
             print_script_error_message(e, deployment_group_id, @deployment_id)
             raise
+          ensure
+            print_deployment_log_location(deployment_group_id, @deployment_id)
           end
         end
 
@@ -209,7 +211,10 @@ module AWS
 
         def print_script_error_message(script_error, deployment_group_id, deployment_id)
           puts "Your local deployment failed while trying to execute your script at #{deployment_folder(deployment_group_id, deployment_id)}/deployment-archive/#{script_error.script_name}"
-          puts "See the deployment log at #{deployment_folder(deployment_group_id, deployment_id)}/#{InstanceAgent::Plugins::CodeDeployPlugin::ScriptLog::SCRIPT_LOG_FILE_RELATIVE_LOCATION} for the exact error message"
+        end
+
+        def print_deployment_log_location(deployment_group_id, deployment_id)
+          puts "See the deployment log at #{deployment_folder(deployment_group_id, deployment_id)}/#{InstanceAgent::Plugins::CodeDeployPlugin::ScriptLog::SCRIPT_LOG_FILE_RELATIVE_LOCATION} for more details"
         end
       end
     end
