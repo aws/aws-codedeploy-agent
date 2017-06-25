@@ -13,6 +13,7 @@ describe AWS::CodeDeploy::Local::Deployer do
   GIT_BRANCH_OR_TAG = 'branchOrTag'
   SAMPLE_GIT_LOCATION_TARBALL = "https://api.github.com/repos/#{GIT_OWNER}/#{GIT_REPO}/tarball/#{GIT_BRANCH_OR_TAG}"
   SAMPLE_GIT_LOCATION_ZIPBALL = "https://api.github.com/repos/#{GIT_OWNER}/#{GIT_REPO}/zipball/#{GIT_BRANCH_OR_TAG}"
+  SAMPLE_GIT_LOCATION_DEFAULT_GIT_FORMAT = "https://github.com/#{GIT_OWNER}/#{GIT_REPO}"
   TEST_DEPLOYMENT_ID = 123
   S3_BUCKET = 'bucket'
   S3_KEY = 'key'
@@ -161,7 +162,7 @@ describe AWS::CodeDeploy::Local::Deployer do
           deployment_folder = "#{test_working_directory}/deployment-root/deployment-group-id/123"
           expect(STDOUT).to receive(:puts).with("Starting to execute deployment from within folder #{deployment_folder}").once.ordered
           expect(STDOUT).to receive(:puts).with("Your local deployment failed while trying to execute your script at #{deployment_folder}/deployment-archive/script-location").once.ordered
-          expect(STDOUT).to receive(:puts).with("See the deployment log at #{deployment_folder}/logs/scripts.log for the exact error message").once.ordered
+          expect(STDOUT).to receive(:puts).with("See the deployment log at #{deployment_folder}/logs/scripts.log for more details").once.ordered
           expect{AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)}.to raise_error(InstanceAgent::Plugins::CodeDeployPlugin::ScriptError)
         end
       end
@@ -319,6 +320,35 @@ describe AWS::CodeDeploy::Local::Deployer do
       end
     end
 
+    context 'when anonymous github endpoint is specified with default github url format' do
+      let(:args) do
+        {"deploy"=>true,
+         "--location"=>true,
+         '--file-exists-behavior'=>InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR,
+         "--bundle-location"=>SAMPLE_GIT_LOCATION_DEFAULT_GIT_FORMAT,
+         "--type"=>'zip',
+         '--deployment-group'=>DEPLOYMENT_GROUP_ID,
+         "--help"=>false,
+         "--version"=>false}
+      end
+
+      it 'extracts the endpoint parameters, deploys the downloaded file, and calls the executor to execute all commands' do
+        executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
+
+        expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
+          with(:hook_mapping => EXPECTED_HOOK_MAPPING).
+          and_return(executor)
+
+        AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
+          expect(executor).to receive(:execute_command).with(
+            OpenStruct.new(:command_name => name),
+            deployment_spec(SAMPLE_GIT_LOCATION_DEFAULT_GIT_FORMAT, 'GitHub', 'zip',
+                            AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS)).once.ordered
+        end
+        AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
+      end
+    end
+
     context 'when s3 endpoint is specified' do
       let(:args) do
         {"deploy"=>true,
@@ -390,7 +420,7 @@ describe AWS::CodeDeploy::Local::Deployer do
           "DeploymentGroupName" => "LocalFleet",
           "DeploymentId" => TEST_DEPLOYMENT_ID,
           "AgentActionOverrides" => {"AgentOverrides" => {"FileExistsBehavior" => file_exists_behavior}},
-          "Revision" => {"RevisionType" => revision_type, 
+          "Revision" => {"RevisionType" => revision_type,
                          revision_data_key => revision_data_value},
           "AllPossibleLifecycleEvents" => all_possible_lifecycle_events
 
@@ -417,12 +447,12 @@ describe AWS::CodeDeploy::Local::Deployer do
         s3_revision
       when 'GitHub'
         {'GitHubRevision' => {
-          'Account' => GIT_OWNER, 
-          'Repository' => GIT_REPO, 
-          'CommitId' => GIT_BRANCH_OR_TAG}}
+          'Account' => GIT_OWNER,
+          'Repository' => GIT_REPO,
+          'CommitId' => location.include?(GIT_BRANCH_OR_TAG) ? GIT_BRANCH_OR_TAG : 'HEAD'}}
       when 'Local File', 'Local Directory'
         {'LocalRevision' => {
-          'Location' => location, 
+          'Location' => location,
           'BundleType' => bundle_type}}
       end
     end

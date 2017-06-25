@@ -28,13 +28,9 @@ If you deploy content that is stored on the same local instance, you also do not
 
 You can also use the tool to deploy content that is stored in a supported remote repository type (Amazon S3 bucket or GitHub repository).
 
-
-
 Prerequisites and Complete Documentation
 ****************************************
 See "Tagging Instances" in the AWS CodeDeploy User Guide
-
-
 
 Usage:
   #{__FILE__} [options]
@@ -66,13 +62,29 @@ Examples
 #{__FILE__}
 #{__FILE__} --bundle-location /path/to/local/bundle/directory
 #{__FILE__} --bundle-location /path/to/local/bundle.tgz --type tgz --deployment-group my-deployment-group
-#{__FILE__} --bundle-location C:/path/to/local/bundle.zip --type zip --deployment-group 1234abcd-5dd1-4774-89c6-30b107ac5dca
 #{__FILE__} --bundle-location /path/to/local/bundle/directory --type directory --deployment-group my-deployment-group
-#{__FILE__} --bundle-location C:/path/to/local/bundle/directory --type directory --deployment-group 1234abcd-5dd1-4774-89c6-30b107ac5dca
-#{__FILE__} --bundle-location s3://mybucket/bundle.zip?versionId=1234&etag=47e8 --type zip --deployment-group 1234abcd-5dd1-4774-89c6-30b107ac5dca
-#{__FILE__} --bundle-location https://api.github.com/repos/awslabs/aws-codedeploy-sample-tomcat/zipball/master --type zip --deployment-group my-deployment-group
-#{__FILE__} --bundle-location /path/to/local/bundle.tgz --type tgz --deployment-group 1234abcd-5dd1-4774-89c6-30b107ac5dcas --events ApplicationStop
-#{__FILE__} --bundle-location /path/to/local/bundle.tar --type tar --deployment-group my-deployment-group --events ApplicationStop,DownloadBundle,Install,ApplicationStart
+
+  Deploying A Bundle From S3
+  **************************
+  #{__FILE__} --bundle-location s3://mybucket/bundle.zip?versionId=1234&etag=47e8 --type zip
+
+  Deploying A Bundle From A Public Github Repository
+  **************************************************
+  #{__FILE__} --bundle-location https://github.com/awslabs/aws-codedeploy-sample-tomcat --type zip
+  #{__FILE__} --bundle-location https://api.github.com/repos/awslabs/aws-codedeploy-sample-tomcat/zipball/master --type zip
+
+  Deploying A Bundle Specifying Only Specific Lifecycle Events
+  ************************************************************
+  #{__FILE__} --bundle-location /path/to/local/bundle.tar --type tar --deployment-group my-deployment-group --events ApplicationStop,DownloadBundle,Install,ApplicationStart
+
+  Stopping Previously Deployed Application
+  ****************************************
+  #{__FILE__} --bundle-location /path/to/local/bundle.tgz --type tgz --deployment-group 1234abcd-5dd1-4774-89c6-30b107ac5dcas --events ApplicationStop
+
+  Deploying With A Specific Deployment Group Id Obtained Using The AWS CLI
+  ************************************************************************
+  #{__FILE__} --bundle-location C:/path/to/local/bundle/directory --deployment-group 1234abcd-5dd1-4774-89c6-30b107ac5dca
+  #{__FILE__} --bundle-location C:/path/to/local/bundle.zip --type zip --deployment-group 1234abcd-5dd1-4774-89c6-30b107ac5dca
 DOCOPT
 
 begin

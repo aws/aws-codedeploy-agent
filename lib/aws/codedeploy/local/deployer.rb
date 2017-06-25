@@ -187,14 +187,17 @@ module AWS
         end
 
         def github_revision(location, uri)
-          if match = uri.path.match(/\/repos\/([^\/]*)\/([^\/]*)\/.*\/(.*)$/i)
+          if uri.host == 'github.com' && match = uri.path.match(/\/([^\/]*)\/(.*)$/i)
+            owner, repository_name = match.captures
+            commit = 'HEAD'
+          elsif match = uri.path.match(/\/repos\/([^\/]*)\/([^\/]*)\/.*\/(.*)$/i)
             owner, repository_name, commit = match.captures
           else
-            raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("github location #{location} not in the expected format of 'https://api.github.com/repos/owner/repository_name/tarorzipball/commit'")
+              raise AWS::CodeDeploy::Local::CLIValidator::ValidationError.new("github location #{location} not in the expected format of 'https://github.com/<owner>/<repository_name>'(assumes HEAD commit) or 'https://api.github.com/repos/<owner>/<repository_name>/tarball/<commit>' or 'https://api.github.com/repos/<owner>/<repository_name>/zipball/<commit>'")
           end
-          { 'RevisionType' => 'GitHub', 'GitHubRevision' => 
-            {'Account' => owner, 
-             'Repository' => repository_name, 
+          { 'RevisionType' => 'GitHub', 'GitHubRevision' =>
+            {'Account' => owner,
+             'Repository' => repository_name,
              'CommitId' => commit}}
         end
 
@@ -204,7 +207,7 @@ module AWS
           else
             revision_type = 'Local File'
           end
-          { 'RevisionType' => revision_type, 'LocalRevision' => 
+          { 'RevisionType' => revision_type, 'LocalRevision' =>
             {'Location' => File.expand_path(location),
              'BundleType' => bundle_type}}
         end
