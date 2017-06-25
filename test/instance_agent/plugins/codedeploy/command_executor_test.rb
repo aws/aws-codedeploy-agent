@@ -223,6 +223,42 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           Aws::S3::Client.stubs(:new).returns(@s3)
         end
 
+        context "when GitHub revision specified" do
+          setup do
+            File.stubs(:directory?).with(@archive_root_dir).returns(true)
+            FileUtils.stubs(:mv)
+            FileUtils.stubs(:rmdir)
+            @mock_file.stubs(:write)
+            @deployment_spec = generate_signed_message_for({
+              "DeploymentId" => @deployment_id.to_s,
+              "DeploymentGroupId" => @deployment_group_id.to_s,
+              "ApplicationName" => @application_name,
+              "DeploymentGroupName" => @deployment_group_name,
+              "Revision" => {
+                "RevisionType" => "GitHub",
+                "GitHubRevision" => {
+                  'Account' => 'account',
+                  'Repository' => 'repository',
+                  'CommitId' => 'commitid',
+                }
+              }
+            })
+
+            ENV['AWS_SSL_CA_DIRECTORY'] = 'aws_ssl_ca_directory'
+            @mock_uri = mock
+            uri_options = {:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :ssl_ca_cert => ENV['AWS_SSL_CA_DIRECTORY']}
+            @mock_buffer = mock
+            @mock_github_response = mock
+            @mock_github_response.stubs(:read).returns(@mock_buffer)
+            @mock_uri.stubs(:open).with(uri_options).yields(@mock_github_response)
+          end
+
+          should 'download file from github' do
+            URI.expects(:parse).with("https://api.github.com/repos/account/repository/tarball/commitid").returns(@mock_uri)
+            @command_executor.execute_command(@command, @deployment_spec)
+          end
+        end
+
         context "downloading bundle from S3" do
           setup do
             File.expects(:open).with(File.join(@deployment_root_dir, 'bundle.tar'), 'wb').yields(@mock_file)
