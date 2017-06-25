@@ -44,6 +44,7 @@ module AWS
 
           InstanceAgent::Config.load_config
 
+          FileUtils.mkdir_p(InstanceAgent::Config.config[:log_dir])
           InstanceAgent::Log.init(File.join(InstanceAgent::Config.config[:log_dir], 'codedeploy-local.log'))
           InstanceAgent::Platform.util = IS_WINDOWS ? InstanceAgent::WindowsUtil : InstanceAgent::LinuxUtil
 

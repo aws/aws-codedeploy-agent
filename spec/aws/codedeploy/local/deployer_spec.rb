@@ -46,11 +46,11 @@ describe AWS::CodeDeploy::Local::Deployer do
     allow(File).to receive(:readable?).with(InstanceAgent::Config.config[:on_premises_config_file]).and_return(false)
   end
 
-  def create_config_file(working_directory)
+  def create_config_file(working_directory, log_dir = nil)
     configuration_contents = <<-CONFIG
 ---
 :log_aws_wire: false
-:log_dir: #{working_directory}
+:log_dir: #{log_dir || working_directory}
 :pid_dir: #{working_directory}
 :program_name: codedeploy-agent
 :root_dir: #{working_directory}/deployment-root
@@ -61,7 +61,7 @@ describe AWS::CodeDeploy::Local::Deployer do
 :max_revisions: 5
     CONFIG
 
-    InstanceAgent::Config.config[:log_dir] = working_directory
+    InstanceAgent::Config.config[:log_dir] = log_dir || working_directory
     InstanceAgent::Config.config[:config_file] = "#{working_directory}/codedeployagent.yml"
     File.open(InstanceAgent::Config.config[:config_file], 'w') { |file| file.write(configuration_contents) }
     InstanceAgent::Config.config[:config_file]
@@ -99,6 +99,17 @@ describe AWS::CodeDeploy::Local::Deployer do
       invalid_config_file_location = '/does/not/exist/path'
       expect(File).to receive(:file?).with(invalid_config_file_location).and_return(false)
       expect{AWS::CodeDeploy::Local::Deployer.new(invalid_config_file_location)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "configuration file #{invalid_config_file_location} does not exist or is not readable")
+    end
+
+    it 'creates the log directory if it does not exist' do
+      new_test_working_directory = "#{test_working_directory}/new_dir"
+      FileUtils.mkdir_p new_test_working_directory
+      not_yet_existing_directory = "#{new_test_working_directory}/notyetexistsdirectory"
+      config_file_location = create_config_file(new_test_working_directory, not_yet_existing_directory)
+      expect(FileUtils).to receive(:mkdir_p).with(not_yet_existing_directory).and_call_original
+      allow(File).to receive(:readable?).with(config_file_location).and_return(true)
+      allow(File).to receive(:exists?).with(config_file_location).and_return(true)
+      AWS::CodeDeploy::Local::Deployer.new(config_file_location)
     end
   end
 
