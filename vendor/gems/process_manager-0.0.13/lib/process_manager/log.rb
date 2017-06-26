@@ -38,7 +38,7 @@ module ProcessManager
       end
 
       def level=(level)
-        if level.is_a?(Fixnum)
+        if level.is_a?(Integer)
           @logger.level = level
         else
           @logger.level = ::Logger.const_get(level.to_s.upcase)
