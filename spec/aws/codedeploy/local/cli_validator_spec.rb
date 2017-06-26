@@ -89,6 +89,22 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
     end
 
+    context 'when loction is directory but appspec is missing' do
+      FAKE_DIRECTORY = "/path/directory"
+
+      let(:args) do
+        {"--bundle-location"=>FAKE_DIRECTORY,
+         "--type"=>'directory'}
+      end
+
+      it 'throws a ValidationError' do
+        allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
+        allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
+        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(false)
+        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "Expecting appspec file at location #{FAKE_DIRECTORY}/appspec.yml but it is not found there. Please either run the CLI from within a directory containing the appspec.yml file or specify a bundle location containing an appspec.yml file in its root directory")
+      end
+    end
+
     context 'when location is a file which does not exists' do
       FAKE_FILE_WHICH_DOES_NOT_EXIST = "/path/directory/file-does-not-exist.zip"
 
@@ -124,7 +140,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       it 'throws a ValidationError' do
         allow(File).to receive(:exists?).with(FAKE_FILE).and_return(true)
         allow(File).to receive(:file?).with(FAKE_FILE).and_return(true)
-        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "location #{FAKE_FILE} is specified as an directory local directory but it is a file")
+        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "location #{FAKE_FILE} is specified with type directory but it is a file")
       end
     end
 

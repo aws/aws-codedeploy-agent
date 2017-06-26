@@ -31,11 +31,17 @@ module AWS
           end
 
           if (type == 'directory' && (uri.scheme != 'https' && uri.scheme != 's3' && File.file?(location)))
-              raise ValidationError.new("location #{location} is specified as an directory local directory but it is a file")
+              raise ValidationError.new("location #{location} is specified with type directory but it is a file")
           end
 
           if (type != 'directory' && (uri.scheme != 'https' && uri.scheme != 's3' && File.directory?(location)))
               raise ValidationError.new("location #{location} is specified as a compressed local file but it is a directory")
+          end
+
+          if (type == 'directory' && (uri.scheme != 'https' && uri.scheme != 's3' && File.directory?(location)))
+            unless File.exists? "#{location}/appspec.yml"
+              raise ValidationError.new("Expecting appspec file at location #{location}/appspec.yml but it is not found there. Please either run the CLI from within a directory containing the appspec.yml file or specify a bundle location containing an appspec.yml file in its root directory")
+            end
           end
 
           args
