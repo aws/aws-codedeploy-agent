@@ -89,10 +89,19 @@ class InstanceMetadataTest < InstanceAgentTestCase
         assert_equal("us-east-1", InstanceMetadata.region)
       end
 
-      should 'raise InstanceMetadataError if http times out' do
+      should 'raise InstanceMetadataError if http read times out' do
         @http.expects(:get).
           with("/latest/meta-data/placement/availability-zone").
           raises(Net::ReadTimeout)
+        assert_raised_with_message('Not an EC2 instance and region not provided in the environment variable AWS_REGION. Please specify your region using environment variable AWS_REGION.', InstanceMetadata::InstanceMetadataError) do
+          InstanceMetadata.region
+        end
+      end
+
+      should 'raise InstanceMetadataError if http open times out' do
+        @http.expects(:get).
+          with("/latest/meta-data/placement/availability-zone").
+          raises(Net::OpenTimeout)
         assert_raised_with_message('Not an EC2 instance and region not provided in the environment variable AWS_REGION. Please specify your region using environment variable AWS_REGION.', InstanceMetadata::InstanceMetadataError) do
           InstanceMetadata.region
         end

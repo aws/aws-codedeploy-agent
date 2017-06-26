@@ -20,7 +20,7 @@ class InstanceMetadata
   def self.region
     begin 
       az = http_get('/latest/meta-data/placement/availability-zone').strip
-    rescue Net::ReadTimeout
+    rescue Net::ReadTimeout, Net::OpenTimeout
       raise InstanceMetadata::InstanceMetadataError.new('Not an EC2 instance and region not provided in the environment variable AWS_REGION. Please specify your region using environment variable AWS_REGION.')
     end
 
