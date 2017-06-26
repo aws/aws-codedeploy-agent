@@ -50,7 +50,7 @@ Synopsis
 Options
 *******
   -l, --bundle-location <value>           The location of the application revision bundle. If you do not specify a location, the tool uses the directory you are currently working in by default. [default: #{Dir.pwd}]
-  -t, --type <value>                      The format of the application revision bundle. Supported types include tgz, tar, zip, and directory. If you do not specify a type, the tool uses directory by default. If you specify --type, you probably should also specify --bundle-location. [default: directory]
+  -t, --type <value>                      The format of the application revision bundle. Supported types include tgz, tar, zip, and directory. If you do not specify a type, the tool uses directory by default. If you specify --type, you must also specify --bundle-location. [default: directory]
   -b, --file-exists-behavior <value>      Optional file exists behavior choice between DISALLOW, OVERWRITE, RETAIN [default: #{InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR}]. Information about how AWS CodeDeploy handles files that already exist in a deployment target location but weren't part of the previous successful deployment. See our create-deployment documentation for more details about this flag, https://docs.aws.amazon.com/cli/latest/reference/deploy/create-deployment.html
   -g, --deployment-group <value>          The path to the folder that is the target location for the content to be deployed. If you do not specify a folder, the tool creates one named #{AWS::CodeDeploy::Local::Deployer::DEFAULT_DEPLOYMENT_GROUP_ID} inside your deployment root directory. For each local deployment you create, the tool creates a subdirectory inside this folder with names like d-98761234-local. Your configuration shows it would be placed in #{InstanceAgent::Config.config[:root_dir]}/<deployment-group>. You can use the :root_dir: variable in your agent configuration file to configure a custom deployment root folder. If you want to deploy to a location used in a previous deployment make sure to use the correct deployment group id by looking it up using the AWS CLI: https://docs.aws.amazon.com/cli/latest/reference/deploy/get-deployment-group.html. [default: #{AWS::CodeDeploy::Local::Deployer::DEFAULT_DEPLOYMENT_GROUP_ID}].
   -e, --events <comma-separated-values>   A set of override lifecycle event hooks you want to run, in order, instead of the events you listed in the AppSpec file. Each hook name must be separated by a comma. If you don't specify DownloadBundle and Install events in the override list, they will run before all the event hooks you do specify. If you include DownloadBundle and Install in the list of --event options, they must be preceded only by events that normally run before them in AWS CodeDeploy deployments.
@@ -83,7 +83,7 @@ Examples
   ****************************************
   #{__FILE__} --bundle-location /path/to/local/bundle.tgz --type tgz --deployment-group 1234abcd-5dd1-4774-89c6-30b107ac5dcas --events ApplicationStop
 
-  Deploying With A Specific Deployment Group Id Obtained Using The AWS CLI
+  Deploying with a specific Deployment Group Id obtained using the AWS CLI
   ************************************************************************
   #{__FILE__} --bundle-location C:/path/to/local/bundle/directory --deployment-group 1234abcd-5dd1-4774-89c6-30b107ac5dca
   #{__FILE__} --bundle-location C:/path/to/local/bundle.zip --type zip --deployment-group 1234abcd-5dd1-4774-89c6-30b107ac5dca
