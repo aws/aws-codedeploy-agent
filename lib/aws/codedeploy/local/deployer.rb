@@ -5,6 +5,9 @@ require 'rbconfig'
 require 'aws/codedeploy/local/cli_validator'
 require 'instance_agent'
 require 'instance_agent/log'
+require 'instance_agent/config'
+require 'instance_agent/platform'
+require 'instance_agent/platform/linux_util'
 require 'instance_agent/platform/windows_util'
 require 'instance_agent/plugins/codedeploy/command_executor'
 require 'instance_agent/plugins/codedeploy/onpremise_config'
@@ -64,7 +67,7 @@ module AWS
           args = AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
           # Sets default value of deployment_group_id if it's missing
           deployment_group_id = args['--deployment-group']
-          events = events_from_comma_separated_list(args['--events'])
+          events = self.class.events_from_comma_separated_list(args['--events'])
 
           spec = build_spec(args['--bundle-location'], args['--type'], deployment_group_id, args['--file-exists-behavior'], all_possible_lifecycle_events(events))
 
@@ -93,7 +96,18 @@ module AWS
 
         private
         def add_download_bundle_and_install_events(events)
-          REQUIRED_LIFECYCLE_EVENTS.select{|hook| !events.include?(hook)} + events
+          events_with_download_bundle_and_install_events = REQUIRED_LIFECYCLE_EVENTS.select{|hook| !events.include?(hook)} + events
+          ensure_correct_order_of_download_bundle_and_install_events(events_with_download_bundle_and_install_events)
+        end
+
+        def ensure_correct_order_of_download_bundle_and_install_events(events)
+          if events.take_while{|e| e != 'DownloadBundle'}.include? 'Install'
+            download_bundle_index = events.index('DownloadBundle')
+            install_index = events.index('Install')
+            # swap them if they're out of order
+            events[download_bundle_index], events[install_index] = events[install_index], events[download_bundle_index]
+          end
+          events
         end
 
         def all_possible_lifecycle_events(events)
@@ -123,7 +137,7 @@ module AWS
           })
         end
 
-        def events_from_comma_separated_list(comma_separated_events)
+        def self.events_from_comma_separated_list(comma_separated_events)
           if (comma_separated_events.nil?)
             comma_separated_events
           else

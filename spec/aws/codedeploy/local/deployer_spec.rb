@@ -1,6 +1,8 @@
 require 'spec_helper'
 
 require 'aws/codedeploy/local/deployer'
+require 'instance_agent'
+require 'instance_agent/config'
 require 'instance_agent/plugins/codedeploy/onpremise_config'
 
 describe AWS::CodeDeploy::Local::Deployer do
@@ -171,6 +173,8 @@ describe AWS::CodeDeploy::Local::Deployer do
     context 'when non-default events specified' do
       NON_DEFAULT_LIFECYCLE_EVENTS = ['Stop','Start','HealthCheck']
       NON_DEFAULT_LIFECYCLE_EVENTS_AFTER_DOWNLOAD_BUNDLE_AND_INSTALL = ['DownloadBundle', 'Install', 'Stop','Start','HealthCheck']
+      DOWNLOAD_BUNDLE_AND_APPLICATION_START = ['DownloadBundle','ApplicationStart']
+      DOWNLOAD_BUNDLE_AND_INSTALL_AND_APPLICATION_START = ['DownloadBundle','Install','ApplicationStart']
 
       let(:args) do
         {"deploy"=>true,
@@ -202,6 +206,35 @@ describe AWS::CodeDeploy::Local::Deployer do
                             all_possible_lifecycle_events)).once.ordered
         end
         AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
+      end
+
+      let(:wrong_event_order_args) do
+        {'--file-exists-behavior'=>InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR,
+         "--bundle-location"=>SAMPLE_FILE_BUNDLE,
+         "--type"=>'tar',
+         "--events"=>DOWNLOAD_BUNDLE_AND_APPLICATION_START.join(','),
+         '--deployment-group'=>DEPLOYMENT_GROUP_ID,
+         }
+      end
+
+      it 'corrects the order of download bundle followed by install' do
+        allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+        executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
+
+        all_possible_lifecycle_events = AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS
+        all_expected_hooks = all_possible_lifecycle_events - AWS::CodeDeploy::Local::Deployer::REQUIRED_LIFECYCLE_EVENTS
+        expected_hook_mapping = Hash[all_expected_hooks.map{|h|[h,[h]]}]
+        expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
+          with(:hook_mapping => expected_hook_mapping).
+          and_return(executor)
+
+        DOWNLOAD_BUNDLE_AND_INSTALL_AND_APPLICATION_START.each do |name|
+          expect(executor).to receive(:execute_command).with(
+            OpenStruct.new(:command_name => name),
+            deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File', 'tar',
+                            all_possible_lifecycle_events)).once.ordered
+        end
+        AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(wrong_event_order_args)
       end
     end
 

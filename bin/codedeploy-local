@@ -4,6 +4,8 @@ $:.unshift File.join(File.dirname(File.expand_path('..', __FILE__)), 'lib')
 require 'docopt'
 
 require 'aws/codedeploy/local/deployer'
+require 'instance_agent'
+require 'instance_agent/config'
 
 # Initialize the deployer first to initialize the configuration values so they can be used as part of the help message
 begin

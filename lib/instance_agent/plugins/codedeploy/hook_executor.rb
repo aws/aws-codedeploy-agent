@@ -62,10 +62,19 @@ module InstanceAgent
       end
 
       class HookExecutor
-
         LAST_SUCCESSFUL_DEPLOYMENT = "LastSuccessfulOrIgnore"
         MOST_RECENT_DEPLOYMENT = "MostRecentOrIgnore"
         CURRENT = "New"
+        MAPPING_BETWEEN_HOOKS_AND_DEPLOYMENTS = { "BeforeBlockTraffic"=>LAST_SUCCESSFUL_DEPLOYMENT,
+            "AfterBlockTraffic"=>LAST_SUCCESSFUL_DEPLOYMENT,
+            "ApplicationStop"=>LAST_SUCCESSFUL_DEPLOYMENT,
+            "BeforeInstall"=>CURRENT,
+            "AfterInstall"=>CURRENT,
+            "ApplicationStart"=>CURRENT,
+            "BeforeAllowTraffic"=>CURRENT,
+            "AfterAllowTraffic"=>CURRENT,
+            "ValidateService"=>CURRENT}
+
         def initialize(arguments = {})
           #check arguments
           raise "Lifecycle Event Required " if arguments[:lifecycle_event].nil?
@@ -233,15 +242,7 @@ module InstanceAgent
 
         private
         def mapping_between_hooks_and_deployments
-          { "BeforeBlockTraffic"=>LAST_SUCCESSFUL_DEPLOYMENT,
-            "AfterBlockTraffic"=>LAST_SUCCESSFUL_DEPLOYMENT,
-            "ApplicationStop"=>LAST_SUCCESSFUL_DEPLOYMENT,
-            "BeforeInstall"=>CURRENT,
-            "AfterInstall"=>CURRENT,
-            "ApplicationStart"=>CURRENT,
-            "BeforeAllowTraffic"=>CURRENT,
-            "AfterAllowTraffic"=>CURRENT,
-            "ValidateService"=>CURRENT}
+          MAPPING_BETWEEN_HOOKS_AND_DEPLOYMENTS
         end
 
         private 

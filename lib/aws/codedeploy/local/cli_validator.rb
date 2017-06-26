@@ -1,4 +1,5 @@
 require 'uri'
+require 'instance_agent/plugins/codedeploy/hook_executor'
 
 module AWS
   module CodeDeploy
@@ -44,7 +45,42 @@ module AWS
             end
           end
 
+          events = AWS::CodeDeploy::Local::Deployer.events_from_comma_separated_list(args['--events'])
+          if events
+            if events.include?('DownloadBundle') && any_new_revision_event_or_install_before_download_bundle(events)
+              raise ValidationError.new("The only events that can be specified before DownloadBundle are #{events_using_previous_successfuly_deployment_revision.join(',')}. Please fix the order of your specified events: #{args['--events']}")
+            end
+
+            if events.include?('Install') && any_new_revision_event_before_install(events)
+              raise ValidationError.new("The only events that can be specified before Install are #{events_using_previous_successfuly_deployment_revision.push('DownloadBundle').join(',')}. Please fix the order of your specified events: #{args['--events']}")
+            end
+          end
+
           args
+        end
+
+        def any_new_revision_event_or_install_before_download_bundle(events)
+          events_using_new_revision.push('Install').any? do |event_not_allowed_before_download_bundle| 
+            events.take_while{|e| e != 'DownloadBundle'}.include? event_not_allowed_before_download_bundle
+          end
+        end
+
+        def any_new_revision_event_before_install(events)
+          events_using_new_revision.any? do |event_not_allowed_before_install|
+            events.take_while{|e| e != 'Install'}.include? event_not_allowed_before_install
+          end
+        end
+
+        def events_using_previous_successfuly_deployment_revision
+          InstanceAgent::Plugins::CodeDeployPlugin::HookExecutor::MAPPING_BETWEEN_HOOKS_AND_DEPLOYMENTS.select do |key,value|
+            value == InstanceAgent::Plugins::CodeDeployPlugin::HookExecutor::LAST_SUCCESSFUL_DEPLOYMENT
+          end.keys
+        end
+
+        def events_using_new_revision
+          InstanceAgent::Plugins::CodeDeployPlugin::HookExecutor::MAPPING_BETWEEN_HOOKS_AND_DEPLOYMENTS.select do |key,value|
+            value != InstanceAgent::Plugins::CodeDeployPlugin::HookExecutor::LAST_SUCCESSFUL_DEPLOYMENT
+          end.keys
         end
 
         class ValidationError < StandardError

@@ -3,6 +3,7 @@ require 'spec_helper'
 require 'aws/codedeploy/local/cli_validator'
 
 describe AWS::CodeDeploy::Local::CLIValidator do
+  FAKE_DIRECTORY = "/path/directory"
   let(:validator) { AWS::CodeDeploy::Local::CLIValidator.new }
 
   describe 'validate' do
@@ -26,7 +27,6 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>VALID_FILE,
          "--type"=>'tgz',
-         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -43,7 +43,6 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>"https://example.com/file",
          "--type"=>'tgz',
-         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -61,7 +60,6 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>INVALID_URI,
          "--type"=>'tgz',
-         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -79,7 +77,6 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>HTTP_URL,
          "--type"=>'tgz',
-         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -90,8 +87,6 @@ describe AWS::CodeDeploy::Local::CLIValidator do
     end
 
     context 'when loction is directory but appspec is missing' do
-      FAKE_DIRECTORY = "/path/directory"
-
       let(:args) do
         {"--bundle-location"=>FAKE_DIRECTORY,
          "--type"=>'directory'}
@@ -113,7 +108,6 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>FAKE_FILE_WHICH_DOES_NOT_EXIST,
          "--type"=>'zip',
-         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -132,7 +126,6 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>FAKE_FILE,
          "--type"=>'directory',
-         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -145,14 +138,11 @@ describe AWS::CodeDeploy::Local::CLIValidator do
     end
 
     context 'when type is zip or tgz and location is a directory' do
-      FAKE_DIRECTORY = "/path/directory"
-
       let(:argszip) do
         {"deploy"=>true,
          "--location"=>true,
          "--bundle-location"=>FAKE_DIRECTORY,
          "--type"=>'zip',
-         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -162,7 +152,6 @@ describe AWS::CodeDeploy::Local::CLIValidator do
          "--location"=>true,
          "--bundle-location"=>FAKE_DIRECTORY,
          "--type"=>'tgz',
-         "--events"=>["stop", "start"],
          "--help"=>false,
          "--version"=>false}
       end
@@ -172,6 +161,54 @@ describe AWS::CodeDeploy::Local::CLIValidator do
         allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
         expect{validator.validate(argszip)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "location #{FAKE_DIRECTORY} is specified as a compressed local file but it is a directory")
         expect{validator.validate(argstgz)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "location #{FAKE_DIRECTORY} is specified as a compressed local file but it is a directory")
+      end
+    end
+
+    context 'when previous revision event specified before DownloadBundle' do
+      let(:args) do
+        {"--bundle-location"=>FAKE_DIRECTORY,
+         "--type"=>'directory',
+         '--events'=>'ApplicationStart,DownloadBundle'
+        }
+      end
+
+      it 'throws a ValidationError' do
+        allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
+        allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
+        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
+        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "The only events that can be specified before DownloadBundle are BeforeBlockTraffic,AfterBlockTraffic,ApplicationStop. Please fix the order of your specified events: #{args['--events']}")
+      end
+    end
+
+    context 'when Install specified before DownloadBundle' do
+      let(:args) do
+        {"--bundle-location"=>FAKE_DIRECTORY,
+         "--type"=>'directory',
+         '--events'=>'Install,DownloadBundle'
+        }
+      end
+
+      it 'throws a ValidationError' do
+        allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
+        allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
+        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
+        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "The only events that can be specified before DownloadBundle are BeforeBlockTraffic,AfterBlockTraffic,ApplicationStop. Please fix the order of your specified events: #{args['--events']}")
+      end
+    end
+
+    context 'when previous revision event specified before Install' do
+      let(:args) do
+        {"--bundle-location"=>FAKE_DIRECTORY,
+         "--type"=>'directory',
+         '--events'=>'ApplicationStart,Install'
+        }
+      end
+
+      it 'throws a ValidationError' do
+        allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
+        allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
+        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
+        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "The only events that can be specified before Install are BeforeBlockTraffic,AfterBlockTraffic,ApplicationStop,DownloadBundle. Please fix the order of your specified events: #{args['--events']}")
       end
     end
   end
