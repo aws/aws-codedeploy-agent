@@ -278,12 +278,20 @@ module InstanceAgent
           retries = 0
           errors = []
 
-          if InstanceAgent::Platform.util.supported_oses.include? 'windows'
-            deployment_spec.bundle_type = 'zip'
+          unless (deployment_spec.bundle_type)
+            if InstanceAgent::Platform.util.supported_oses.include? 'windows'
+              deployment_spec.bundle_type = 'zip'
+            else
+              deployment_spec.bundle_type = 'tar'
+            end
+          end
+
+          if deployment_spec.bundle_type == 'zip'
             format = 'zipball'
-          else
-            deployment_spec.bundle_type = 'tar'
+          elsif deployment_spec.bundle_type == 'tar'
             format = 'tarball'
+          else
+            raise ArgumentError.new("GitHub revision specified with bundle_type other than zip or tar [bundle_type=#{deployment_spec.bundle_type}")
           end
 
           uri = URI.parse("https://api.github.com/repos/#{account}/#{repo}/#{format}/#{commit}")

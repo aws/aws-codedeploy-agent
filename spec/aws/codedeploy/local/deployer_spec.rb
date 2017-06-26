@@ -449,7 +449,8 @@ describe AWS::CodeDeploy::Local::Deployer do
         {'GitHubRevision' => {
           'Account' => GIT_OWNER,
           'Repository' => GIT_REPO,
-          'CommitId' => location.include?(GIT_BRANCH_OR_TAG) ? GIT_BRANCH_OR_TAG : 'HEAD'}}
+          'CommitId' => location.include?(GIT_BRANCH_OR_TAG) ? GIT_BRANCH_OR_TAG : 'HEAD',
+          'BundleType' => bundle_type}}
       when 'Local File', 'Local Directory'
         {'LocalRevision' => {
           'Location' => location,

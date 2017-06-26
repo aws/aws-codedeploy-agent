@@ -85,6 +85,7 @@ module InstanceAgent
             @commit_id = revision["CommitId"]
             @external_auth_token = data["GitHubAccessToken"]
             @anonymous = @external_auth_token.nil?
+            @bundle_type = @revision["BundleType"]
           when 'Local File', 'Local Directory'
             @revision = data["Revision"]["LocalRevision"]
             raise 'LocalRevision in Deployment Spec must specify Location and BundleType' unless valid_local_revision?(revision)

@@ -257,6 +257,34 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             URI.expects(:parse).with("https://api.github.com/repos/account/repository/tarball/commitid").returns(@mock_uri)
             @command_executor.execute_command(@command, @deployment_spec)
           end
+
+          context 'when Github bundle_type is specified' do
+            setup do
+              @bundle_type = 'zip'
+
+              @deployment_spec = generate_signed_message_for({
+                "DeploymentId" => @deployment_id.to_s,
+                "DeploymentGroupId" => @deployment_group_id.to_s,
+                "ApplicationName" => @application_name,
+                "DeploymentGroupName" => @deployment_group_name,
+                "Revision" => {
+                  "RevisionType" => "GitHub",
+                  "GitHubRevision" => {
+                    'Account' => 'account',
+                    'Repository' => 'repository',
+                    'CommitId' => 'commitid',
+                    'BundleType' => @bundle_type
+                  }
+                }
+              })
+            end
+
+            should 'downloads from github with the corresponding format' do
+              URI.expects(:parse).with("https://api.github.com/repos/account/repository/zipball/commitid").returns(@mock_uri)
+              Zip::File.expects(:open).with(File.join(@deployment_root_dir, 'bundle.tar'))
+              @command_executor.execute_command(@command, @deployment_spec)
+            end
+          end
         end
 
         context "downloading bundle from S3" do

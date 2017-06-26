@@ -148,7 +148,7 @@ module AWS
           if (uri.scheme == 's3')
             s3_revision(location, uri, bundle_type)
           elsif (uri.scheme == 'https' && uri.host.end_with?('github.com'))
-            github_revision(location, uri)
+            github_revision(location, uri, bundle_type)
           elsif (uri.scheme == 'file' || uri.scheme.nil? || (uri.scheme.size == 1 && /[[:alpha:]]/.match(uri.scheme.chars.first)))
             #For windows we want to check if the scheme is a single drive letter like C:/Users/username/file.zip
             #unlike linux whose paths are usually scheme-less like with /home/user/file.zip
@@ -186,7 +186,7 @@ module AWS
           s3_revision
         end
 
-        def github_revision(location, uri)
+        def github_revision(location, uri, bundle_type)
           if uri.host == 'github.com' && match = uri.path.match(/\/([^\/]*)\/(.*)$/i)
             owner, repository_name = match.captures
             commit = 'HEAD'
@@ -198,7 +198,9 @@ module AWS
           { 'RevisionType' => 'GitHub', 'GitHubRevision' =>
             {'Account' => owner,
              'Repository' => repository_name,
-             'CommitId' => commit}}
+             'CommitId' => commit,
+             'BundleType' => bundle_type == 'zip' || bundle_type == 'tar' ? bundle_type : 'zip'
+            }}
         end
 
         def local_revision(location, bundle_type)

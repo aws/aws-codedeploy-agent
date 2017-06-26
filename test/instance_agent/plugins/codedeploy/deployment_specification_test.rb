@@ -23,6 +23,7 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
       @file_exists_behavior = "RETAIN"
       @agent_actions_overrides_map = {"FileExistsBehavior" => @file_exists_behavior}
       @agent_actions_overrides = {"AgentOverrides" => @agent_actions_overrides_map}
+      @bundle_type = 'tar'
       InstanceAgent::Config.init
     end 
 
@@ -32,6 +33,7 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
           'Account' => 'owner',
           'Repository' => 'repository',
           'CommitId' => 'commitid',
+          "BundleType" => @bundle_type
         }
         @revision = {
           "RevisionType" => "GitHub",
@@ -59,6 +61,7 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
         assert_equal @application_name, parsed_deployment_spec.application_name
         assert_equal @deployment_creator, parsed_deployment_spec.deployment_creator
         assert_equal @deployment_type, parsed_deployment_spec.deployment_type
+        assert_equal @bundle_type, parsed_deployment_spec.bundle_type
       end
     end
 
@@ -67,7 +70,7 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
         @s3Revision = {
           "Bucket" => "mybucket",
           "Key" => "mykey",
-          "BundleType" => "tar"
+          "BundleType" => @bundle_type
         }
         @revision = {
           "RevisionType" => "S3",
@@ -96,6 +99,7 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
           assert_equal @application_name, parsed_deployment_spec.application_name
           assert_equal @deployment_creator, parsed_deployment_spec.deployment_creator
           assert_equal @deployment_type, parsed_deployment_spec.deployment_type
+          assert_equal @bundle_type, parsed_deployment_spec.bundle_type
         end
 
         should "populate the all_possible_lifecycle_events field if present" do
@@ -406,7 +410,7 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
         should "raise when Key is missing" do
           @s3Revision = {
             "Bucket" => "mybucket",
-            "BundleType" => "tar"
+            "BundleType" => @bundle_type
           }
           @revision = {
             "RevisionType" => "S3",
