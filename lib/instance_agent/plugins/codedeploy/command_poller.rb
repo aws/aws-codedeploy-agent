@@ -1,5 +1,7 @@
-require 'instance_metadata'
 require 'socket'
+
+require 'instance_metadata'
+require 'instance_agent/agent/base'
 
 module InstanceAgent
   module Plugins

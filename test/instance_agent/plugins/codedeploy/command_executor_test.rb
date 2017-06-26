@@ -3,6 +3,8 @@ require 'certificate_helper'
 require 'stringio'
 require 'aws-sdk-core/s3'
 
+require 'aws/codedeploy/local/deployer'
+
 class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
 
   include InstanceAgent::Plugins::CodeDeployPlugin
@@ -202,6 +204,33 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC").returns(app_spec)
           unknown_hooks = app_spec_hooks.merge(@test_hook_mapping)
           assert_raised_with_message("appspec.yml file contains unknown lifecycle events: #{unknown_hooks.keys}", ArgumentError) do
+            @command_executor.execute_command(@command, deployment_spec)
+          end
+        end
+
+        should 'raise ArgumentError if appspec custom hook specified that does not exist in appspec' do
+          all_possible_lifecycle_events = AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS + ['ExampleLifecycleEvent', 'SecondLifecycleEvent', 'CustomHookNotInAppspec']
+          deployment_spec = generate_signed_message_for({
+            "DeploymentId" => @deployment_id.to_s,
+            "DeploymentGroupId" => @deployment_group_id,
+            "ApplicationName" => @application_name,
+            "DeploymentGroupName" => @deployment_group_name,
+            "DeploymentCreator" => @deployment_creator,
+            "DeploymentType" => @deployment_type,
+            "AgentActionOverrides" => @agent_actions_overrides,
+            "AllPossibleLifecycleEvents" => all_possible_lifecycle_events,
+            "Revision" => {
+              "RevisionType" => "S3",
+              "S3Revision" => @s3Revision
+            }
+          })
+
+          app_spec = mock("parsed application specification")
+          app_spec_hooks = InstanceAgent::Plugins::CodeDeployPlugin::CommandPoller::DEFAULT_HOOK_MAPPING.merge({'ExampleLifecycleEvent' => nil, 'SecondLifecycleEvent' => nil})
+          app_spec.expects(:hooks).twice.returns(app_spec_hooks)
+          File.stubs(:read).with("#@archive_root_dir/appspec.yml").returns("APP SPEC")
+          ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC").returns(app_spec)
+          assert_raised_with_message("You specified a lifecycle event which is not a default one and doesn't exist in your appspec.yml file: CustomHookNotInAppspec", ArgumentError) do
             @command_executor.execute_command(@command, deployment_spec)
           end
         end

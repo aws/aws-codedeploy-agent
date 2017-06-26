@@ -8,6 +8,7 @@ require 'open-uri'
 require 'uri'
 require 'set'
 
+require 'instance_agent/plugins/codedeploy/command_poller'
 require 'instance_agent/plugins/codedeploy/deployment_specification'
 require 'instance_agent/plugins/codedeploy/hook_executor'
 require 'instance_agent/plugins/codedeploy/installer'
@@ -209,9 +210,19 @@ module InstanceAgent
               unknown_lifecycle_events = app_spec_hooks_plus_hooks_from_mapping - all_possible_lifecycle_events
               raise ArgumentError.new("appspec.yml file contains unknown lifecycle events: #{unknown_lifecycle_events}")
             end
+
+            app_spec_hooks_plus_hooks_from_default_mapping = app_spec.hooks.keys.to_set.merge(InstanceAgent::Plugins::CodeDeployPlugin::CommandPoller::DEFAULT_HOOK_MAPPING.keys).to_a
+            custom_hooks_not_found_in_appspec = custom_lifecycle_events(all_possible_lifecycle_events) - app_spec_hooks_plus_hooks_from_default_mapping
+            unless (custom_hooks_not_found_in_appspec).empty?
+              raise ArgumentError.new("You specified a lifecycle event which is not a default one and doesn't exist in your appspec.yml file: #{custom_hooks_not_found_in_appspec.join(',')}")
+            end
           end
 
           app_spec
+        end
+
+        def custom_lifecycle_events(all_possible_lifecycle_events)
+          all_possible_lifecycle_events - AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS
         end
 
         private
