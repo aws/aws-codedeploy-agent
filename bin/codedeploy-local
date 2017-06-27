@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 $:.unshift File.join(File.dirname(File.expand_path('..', __FILE__)), 'lib')
+Gem.use_paths(nil, Gem.path << "/opt/codedeploy-agent/vendor")
 require 'docopt'
 
 require 'aws/codedeploy/local/deployer'
