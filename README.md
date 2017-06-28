@@ -37,7 +37,7 @@ The integration test creates the following
 It terminates the test ec2 instance and deletes the CodeDeploy application at the end of each test run.
 It also terminates any test ec2 instances before starting up the test.
 
-Update the features/AwsCredentials.yml file with AWS access key, secret key, and optionally your session token. The access key should have permission to create the above mentioned resources. You can also change the default region. To run the integration test execute
+Create your default aws credentials file in the default location (~/.aws/credentials on linux/mac and %USERPROFILE%.awscredentials on windows). Add your AWS access key, secret key, and optionally your session token there. The access key should have permission to create the above mentioned resources. You can also change the default region. To run the integration test execute
 
 ```
 rake test-integration

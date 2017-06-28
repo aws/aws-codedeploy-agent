@@ -6,7 +6,6 @@ require 'fileutils'
 
 $:.unshift File.join(File.dirname(File.expand_path('../..', __FILE__)), 'lib')
 $:.unshift File.join(File.dirname(File.expand_path('../..', __FILE__)), 'features')
-require 'aws_credentials'
 require 'instance_agent'
 require 'instance_agent/plugins/codedeploy/register_plugin'
 require 'instance_agent/config'
@@ -46,7 +45,9 @@ end
 Before("@codedeploy-agent") do
   @working_directory = Dir.mktmpdir
   configure_local_agent(@working_directory)
-  AwsCredentials.instance.configure
+
+  #Reset aws credentials to default location
+  Aws.config[:credentials] = InstanceAgent::FileCredentials.new(StepConstants::DEFAULT_AWS_CREDENTIALS_FILE_LOCATION)
 
   #instantiate these clients first so they use user's aws creds instead of assumed role creds
   @codedeploy_client = Aws::CodeDeploy::Client.new
@@ -113,7 +114,7 @@ end
 def configure_agent_for_on_premise(iam_session_arn)
   on_premise_configuration_content = <<-CONFIG
 ---
-region: #{StepConstants::REGION}
+region: #{Aws.config[:region]}
 aws_credentials_file: #{create_aws_credentials_file}
 iam_session_arn: #{iam_session_arn}
   CONFIG

@@ -4,24 +4,13 @@ $:.unshift File.join(File.dirname(File.expand_path('../..', __FILE__)), 'feature
 require 'step_definitions/step_constants'
 
 Given(/^I have a sample bundle uploaded to s3$/) do
-  #Passing in credentials intentionally because otherwise
-  #it uses assume role credentials
-  credentials = Aws::Credentials.new(
-    ENV['AWS_ACCESS_KEY_ID'],
-    ENV['AWS_SECRET_ACCESS_KEY'],
-    ENV['AWS_SESSION_TOKEN']
-  )
-
-  s3 = Aws::S3::Client.new(
-    region: ENV['AWS_REGION'],
-    credentials: credentials
-  )
+  s3 = Aws::S3::Client.new
 
   begin
     s3.create_bucket({
       bucket: StepConstants::APP_BUNDLE_BUCKET, # required
       create_bucket_configuration: {
-        location_constraint: StepConstants::REGION,
+        location_constraint: Aws.config[:region],
       }
     })
   rescue Aws::S3::Errors::BucketAlreadyOwnedByYou
