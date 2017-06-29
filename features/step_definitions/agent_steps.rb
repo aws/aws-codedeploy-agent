@@ -47,7 +47,7 @@ Before("@codedeploy-agent") do
   configure_local_agent(@working_directory)
 
   #Reset aws credentials to default location
-  Aws.config[:credentials] = InstanceAgent::FileCredentials.new(StepConstants::DEFAULT_AWS_CREDENTIALS_FILE_LOCATION)
+  Aws.config[:credentials] = Aws::SharedCredentials.new.credentials
 
   #instantiate these clients first so they use user's aws creds instead of assumed role creds
   @codedeploy_client = Aws::CodeDeploy::Client.new

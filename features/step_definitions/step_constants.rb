@@ -18,5 +18,4 @@ class StepConstants
   SAMPLE_APP_BUNDLE_FULL_PATH = "#{Dir.pwd}/features/resources/#{StepConstants::SAMPLE_APP_BUNDLE_DIRECTORY}" unless defined? SAMPLE_APP_BUNDLE_FULL_PATH
   SAMPLE_CUSTOM_EVENT_APP_BUNDLE_DIRECTORY = IS_WINDOWS ? 'sample_custom_event_app_bundle_windows' : 'sample_custom_event_app_bundle_linux' unless defined? SAMPLE_CUSTOM_EVENT_APP_BUNDLE_DIRECTORY
   SAMPLE_CUSTOM_EVENT_APP_BUNDLE_FULL_PATH = "#{Dir.pwd}/features/resources/#{StepConstants::SAMPLE_CUSTOM_EVENT_APP_BUNDLE_DIRECTORY}" unless defined? SAMPLE_CUSTOM_EVENT_APP_BUNDLE_FULL_PATH
-  DEFAULT_AWS_CREDENTIALS_FILE_LOCATION = IS_WINDOWS ? "#{ENV['USERPROFILE']}.awscredentials" : File.expand_path('~/.aws/credentials')
 end
