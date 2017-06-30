@@ -112,7 +112,7 @@ rescue AWS::CodeDeploy::Local::CLIValidator::ValidationError,InstanceMetadata::I
   puts "ERROR: #{e.message}"
   exit(false)
 rescue Aws::Errors::MissingCredentialsError => e
-  puts "ERROR: Unable to download from S3 without AWS Credentials set. Please see help message for how to set AWS Credentials (#{__FILE__} --help)"
+  puts "ERROR: Unable to download from S3 without AWS Credentials set. Please see online documentation for ways to specify your AWS credentails: https://aws.amazon.com/blogs/security/a-new-and-standardized-way-to-manage-credentials-in-the-aws-sdks"
   exit(false)
 rescue InstanceAgent::Plugins::CodeDeployPlugin::ScriptError => e
   exit(false)
