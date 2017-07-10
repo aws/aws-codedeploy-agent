@@ -16,12 +16,6 @@ end
 
 agent_dir = "/opt/codedeploy-agent"
 $:.unshift "#{agent_dir}/lib"
-Gem.use_paths(nil, Gem.path << "/opt/codedeploy-agent/vendor")
-ENV['BUNDLE_GEMFILE'] ||= "#{__dir__}/../Gemfile"
-
-require 'bundler'
-require 'bundler/setup'
-Bundler.require
 
 require 'instance_agent'
 require 'gli'

@@ -2,17 +2,7 @@
 
 $:.unshift File.join(File.dirname(File.expand_path('..', __FILE__)), 'lib')
 Gem.use_paths(nil, Gem.path << "/opt/codedeploy-agent/vendor")
-
-require 'rbconfig'
-IS_WINDOWS = (RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/)
-
-unless IS_WINDOWS
-  ENV['BUNDLE_GEMFILE'] ||= "#{__dir__}/../Gemfile"
-
-  require 'bundler'
-  require 'bundler/setup'
-  Bundler.require
-end
+Gem.use_paths(nil, Gem.path << File.join(File.dirname(File.expand_path('..', __FILE__)), 'vendor'))
 
 require 'docopt'
 
