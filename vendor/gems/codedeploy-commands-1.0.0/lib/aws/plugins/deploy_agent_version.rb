@@ -8,10 +8,10 @@ module Aws
           fallback_file_path = File.expand_path(File.join(InstanceAgent::Platform.util.fallback_version_file, '.version'))
           if File.exist?(file_path)
             @agent_version ||= File.read(file_path).split(': ').last.strip
-            log(:info, "Version file found in #{file_path}.")
+            log(:info, "Version file found in #{file_path} with agent version #{@agent_version}.")
           elsif File.exist?(fallback_file_path)
             @agent_version ||= File.read(fallback_file_path).split(': ').last.strip
-            log(:info, "Version file found in #{fallback_file_path}.")
+            log(:info, "Version file found in #{fallback_file_path} with agent version #{@agent_version}.")
           else 
             @agent_version ||= "UNKNOWN_VERSION"
             path_string = file_path.eql?(fallback_file_path)? "#{file_path}" : "#{file_path} or #{fallback_file_path}"
