@@ -234,7 +234,7 @@ module InstanceAgent
           if File.symlink?(@source)
             FileUtils.symlink(File.readlink(@source), @destination)
           else
-            FileUtils.copy(@source, @destination, :preserve => true)
+            FileUtils.cp_r(@source, @destination, :preserve => true)
           end
         end
 
