@@ -72,20 +72,10 @@ module InstanceAgent
               object = permission.object
 
               log(:debug, "generating instructions for setting permissions on object #{object}")
-              log(:debug, "it is an existing directory - #{File.directory?(object)}")
-              if i.copying_file?(object)
-                if permission.type.include?("file")
-                  log(:debug, "found matching file #{object} to set permissions on")
-                  permission.validate_file_permission
-                  permission.validate_file_acl(object)
-                  i.set_permissions(object, permission)
-                end
-              elsif (i.making_directory?(object) || File.directory?(object))
-                log(:debug, "found matching directory #{object} to search for objects to set permissions on")
-                i.find_matches(permission).each do|match|
-                  log(:debug, "found matching object #{match} to set permissions on")
-                  i.set_permissions(match, permission)
-                end
+              log(:debug, "found matching directory #{object} to search for objects to set permissions on")
+              i.find_matches(permission).each do|match|
+                log(:debug, "found matching object #{match} to set permissions on")
+                i.set_permissions(match, permission)
               end
             end
           end
