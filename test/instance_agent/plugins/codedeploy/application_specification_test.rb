@@ -229,6 +229,28 @@ module InstanceAgent
               end
             end
 
+            context "With empty hook" do
+              setup do
+                #A test script without a location
+                @app_spec_string = <<-END
+              version: 0.0
+              os: linux
+              hooks:
+                empty_test_hook:
+                test_hook:
+                  - location: test_location
+                    timeout: 30
+                END
+              end
+
+              should "Return ignore empty hook" do
+                app_spec = make_app_spec()
+                assert_not_equal nil, app_spec.hooks
+                assert_equal nil , app_spec.hooks["empty_test_hook"]
+                assert_equal ['test_location'] , app_spec.hooks["test_hook"].map(&:location)
+              end
+            end
+
             context "With missing location data" do
               setup do
                 #A test script without a location
