@@ -62,7 +62,7 @@ module InstanceAgent
             hooks_hash.each_pair do |hook, scripts|
               current_hook_scripts = []
               scripts.each do |script|
-                if (script.has_key?('location') && !script['location'].nil?)
+                if !script['location'].nil?
                   current_hook_scripts << InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::ScriptInfo.new(script['location'].to_s.strip,
                   {
                     :runas => script.has_key?('runas') && !script['runas'].nil? ? script['runas'].to_s.strip : nil,
