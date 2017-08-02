@@ -1,4 +1,7 @@
-require 'instance_agent/plugins/codedeploy/register_plugin'
+require 'instance_agent/plugins/codedeploy/application_specification/script_info'
+require 'instance_agent/plugins/codedeploy/application_specification/file_info'
+require 'instance_agent/plugins/codedeploy/application_specification/linux_permission_info'
+require 'instance_agent/plugins/codedeploy/application_specification/mode_info'
 
 module InstanceAgent
   module Plugins
