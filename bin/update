@@ -24,9 +24,10 @@ class Proxy
   end
 end
 
-log_file_path = "/tmp/codedeploy-agent.update.log"
-
+require 'tmpdir'
 require 'logger'
+
+log_file_path = "#{Dir.tmpdir()}/codedeploy-agent.update.log"
 
 if($stdout.isatty)
   # if we are being run in a terminal, log to stdout and the log file.
@@ -177,9 +178,45 @@ EOF
     end
   end
 
-  if (Process.uid != 0)
-    @log.error('Must run as root to install packages')
-    exit(1)
+  def is_windows?
+    is_windows = false
+
+    begin
+      require 'rbconfig'
+      is_windows = (RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/)
+    rescue
+    end
+
+    is_windows
+  end
+
+  LOCAL_SERVICE_REGISTRY_KEY = 'S-1-5-19'
+  def is_current_user_local_admin_windows?
+    is_admin = false
+
+    begin
+      require 'win32/registry'
+
+      # Best way to determine if admin which works on windows going all the way back to XP is
+      # to check the LOCAL SERVICE account reg key
+      Win32::Registry::HKEY_USERS.open(LOCAL_SERVICE_REGISTRY_KEY) {|reg| }
+      is_admin = true
+    rescue
+    end
+
+    is_admin
+  end
+
+  if (is_windows?)
+    if (!is_current_user_local_admin_windows?)
+      @log.error('Must run as user with Administrator privileges to update agent')
+      exit(1)
+    end
+  else
+    if (Process.uid != 0)
+      @log.error('Must run as root to install packages')
+      exit(1)
+    end
   end
 
   parse_args()
@@ -253,6 +290,13 @@ EOF
     end
   end
 
+  def setup_windows_certificates
+    cert_dir = File.expand_path(File.join(File.dirname(__FILE__), '..\certs'))
+    @log.info("Setting up windows certificates from cert directory #{cert_dir}")
+    ENV['AWS_SSL_CA_DIRECTORY'] = File.join(cert_dir, 'ca-bundle.crt')
+    ENV['SSL_CERT_FILE'] = File.join(cert_dir, 'ca-bundle.crt')
+  end
+
   def get_version_file_from_s3(region, bucket, key)
     @log.info("Downloading version file from bucket #{bucket} and key #{key}...")
 
@@ -260,6 +304,10 @@ EOF
 
     begin
       require 'json'
+
+      if (is_windows?)
+        setup_windows_certificates
+      end
 
       version_string = uri.read(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy)
       JSON.parse(version_string)
@@ -269,28 +317,37 @@ EOF
     end
   end
 
-  def install_from_s3(region, bucket, version_file_key, type, install_cmd)
+  def install_from_s3(region, bucket, version_file_key, type, install_cmd, post_install_arguments=[])
     version_data = get_version_file_from_s3(region, bucket, version_file_key)
 
     package_key = version_data[type]
     package_base_name = File.basename(package_key)
     package_extension = File.extname(package_base_name)
     package_name = File.basename(package_base_name, package_extension)
-    package_file = Tempfile.new(["#{package_name}.tmp-", package_extension]) # unique file with 0600 permissions
+    package_file = File.new(File.join("#{Dir.tmpdir}","#{package_name}#{package_extension}"), "wb")
 
     get_package_from_s3(region, bucket, package_key, package_file)
     package_file.close
 
-    install_cmd << package_file.path
+    install_cmd << package_file_path(package_file)
+    install_cmd.concat(post_install_arguments)
     @log.info("Executing `#{install_cmd.join(" ")}`...")
 
     if (!run_command(*install_cmd))
-      @log.error("Error installing #{package_file.path}.")
-      package_file.unlink
+      @log.error("Error installing #{package_file_path(package_file)}.")
       exit(1)
     end
+  end
 
-    package_file.unlink
+  def package_file_path(package_file)
+    package_file_path = File.expand_path(package_file.path)
+
+    if (is_windows?)
+      #Flip slashes because in the command line shell it can only handle backwards slashes in windows
+      package_file_path.gsub('/','\\')
+    else
+      package_file_path
+    end
   end
 
   def do_sanity_check(cmd)
@@ -303,6 +360,23 @@ EOF
         run_command(cmd, 'codedeploy-agent', 'start-no-update')
       end
     end
+  end
+
+  NO_AGENT_INSTALLED_REPORTED_WINDOWS_VERSION = 'No Agent Installed'
+  def running_agent_version_windows
+    installed_agent_versions_cmd_output = `wmic product where "name like 'CodeDeploy Host Agent'" get version`
+    installed_agent_versions = installed_agent_versions_cmd_output.lines
+      .collect{|line| line.strip}
+      .reject{|line| line == 'Version'}
+      .reject{|line| line.empty?}
+
+    agent_version = installed_agent_versions.first
+    #Example Agent Version Outputted from the above command: 1.0.1.1231
+    if (/[0-9].[0-9].[0-9].[0-9]+/ =~ agent_version)
+      return agent_version
+    end
+
+    NO_AGENT_INSTALLED_REPORTED_WINDOWS_VERSION
   end
 
   @log.info("Starting update check.")
@@ -322,6 +396,8 @@ EOF
 
     if(has_yum)
       @type = 'rpm'
+    elsif(is_windows?)
+      @type = 'msi'
     elsif(has_zypper)
       @type = 'zypper'
     elsif(has_gdebi)
@@ -384,6 +460,26 @@ EOF
     #use -n for non-interactive mode
     install_cmd = ['/usr/bin/zypper', 'install', '-n']
     install_from_s3(region, bucket, version_file_key, 'rpm', install_cmd)
+  when 'msi'
+    running_version = running_agent_version_windows
+
+    @log.info("Running version " + running_version)
+    target_version = get_version_file_from_s3(region, bucket, version_file_key)[@type]
+    if (target_version.include? running_version)
+      @log.info('Running version matches target version, skipping install')
+    else
+      unless running_version == NO_AGENT_INSTALLED_REPORTED_WINDOWS_VERSION
+        @log.info('Uninstalling old version of the agent')
+        uninstall_command_succeeded = system('wmic product where "name like \'CodeDeploy Host Agent\'" call uninstall /nointeractive')
+        unless uninstall_command_succeeded
+          @log.warn('Uninstalling existing agent failed')
+        end
+      end
+
+      install_cmd = ['msiexec','/quiet','/i']
+      post_install_arguments = ['/L*V',"#{Dir.tmpdir()}/codedeploy-agent.msi_installer.log"]
+      install_from_s3(region, bucket, version_file_key, @type, install_cmd, post_install_arguments)
+    end
   else
     @log.error("Unsupported package type '#{@type}'")
     exit(1)
