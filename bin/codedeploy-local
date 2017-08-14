@@ -19,23 +19,26 @@ rescue
 end
 
 doc = <<DOCOPT
-AWS CodeDeploy Local Deployment CLI
+AWS CodeDeploy Developer Utility
 ***********************************
 
 Description
 ***********
 
-The AWS CodeDeploy Local Deployment CLI is a tool to deploy content on a local instance.
+The AWS CodeDeploy Developer Utility is a tool you use to run test deployments on local development machines.
 
-Using this tool and a properly formatted AWS CodeDeploy application specification file (AppSpec file), you can deploy content without the need for an AWS CodeDeploy application or deployment group.
+This tool lets you quickly validate the integrity of your AWS CodeDeploy application specification (AppSpec) files and deployable content.
 
-If you deploy content that is stored on the same local instance, you also do not need to use an AWS account.
+To use the AWS CodeDeploy Developer Utility, you do not need to create an AWS CodeDeploy application or deployment group. If the deployable source content resides on the same local machine where you run a test deployment, you also do not need an AWS account.
 
-You can also use the tool to deploy content that is stored in a supported remote repository type (Amazon S3 bucket or GitHub repository).
+For the simplest testing, you can run the codedeploy-local command, without specifying any options, in a directory that contains the AppSpec file and the deployable content. 
 
-Prerequisites and Complete Documentation
+For other test cases, you can choose from a number of options available with the tool. If you have an AWS account, you can test the deployment of content that is stored in a supported remote repository type (Amazon S3 bucket or GitHub repository).
+
+
+Prerequisites and full documentation
 ****************************************
-See "Tagging Instances" in the AWS CodeDeploy User Guide
+See "Use the AWS CodeDeploy Developer Utility to Validate a Deployment Package on a Local Machine" in the AWS CodeDeploy User Guide
 
 Usage:
   #{__FILE__} [options]
@@ -52,14 +55,31 @@ Synopsis
 
 Options
 *******
-  -l, --bundle-location <value>           The location of the application revision bundle. If you do not specify a location, the tool uses the directory you are currently working in by default. [default: #{Dir.pwd}]
-  -t, --type <value>                      The format of the application revision bundle. Supported types include tgz, tar, zip, and directory. If you do not specify a type, the tool uses directory by default. If you specify --type, you must also specify --bundle-location. [default: directory]
-  -b, --file-exists-behavior <value>      Optional file exists behavior choice between DISALLOW, OVERWRITE, RETAIN [default: #{InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR}]. Information about how AWS CodeDeploy handles files that already exist in a deployment target location but weren't part of the previous successful deployment. See our create-deployment documentation for more details about this flag, https://docs.aws.amazon.com/cli/latest/reference/deploy/create-deployment.html
-  -g, --deployment-group <value>          The path to the folder that is the target location for the content to be deployed. If you do not specify a folder, the tool creates one named #{AWS::CodeDeploy::Local::Deployer::DEFAULT_DEPLOYMENT_GROUP_ID} inside your deployment root directory. For each local deployment you create, the tool creates a subdirectory inside this folder with names like d-98761234-local. Your configuration shows it would be placed in #{InstanceAgent::Config.config[:root_dir]}/<deployment-group>. You can use the :root_dir: variable in your agent configuration file to configure a custom deployment root folder. If you want to deploy to a location used in a previous deployment make sure to use the correct deployment group id by looking it up using the AWS CLI: https://docs.aws.amazon.com/cli/latest/reference/deploy/get-deployment-group.html. [default: #{AWS::CodeDeploy::Local::Deployer::DEFAULT_DEPLOYMENT_GROUP_ID}].
-  -e, --events <comma-separated-values>   A set of override lifecycle event hooks you want to run, in order, instead of the events you listed in the AppSpec file. Each hook name must be separated by a comma. If you don't specify DownloadBundle and Install events in the override list, they will run before all the event hooks you do specify. If you include DownloadBundle and Install in the list of --event options, they must be preceded only by events that normally run before them in AWS CodeDeploy deployments.
-  -c, --agent-configuration-file <value>  The location of a configuration file to use for the deployment, if you store it in a location other than the default. A configuration file specifies alternatives to other default values and behaviors for a deployment. By default, configuration files are stored as /etc/codedeploy-agent/conf/codedeployagent.yml (Amazon Linux, RHEL, or Ubuntu Server instances) or C:/ProgramData/Amazon/CodeDeploy/conf.yml (Windows Server).
-  -h, --help                              Displays a summary of help content.
-  -v, --version                           Displays the tool's version number.
+  -l, --bundle-location <value>
+  The location of the application revision bundle. If you do not specify a location, the tool uses the directory you are currently working in by default. [default: #{Dir.pwd}]
+
+  -t, --type <value>
+  The format of the application revision bundle. Supported types include tgz, tar, zip, and directory. If you do not specify a type, the tool uses directory by default. If you specify --type, you must also specify --bundle-location. [default: directory]
+
+  -b, --file-exists-behavior <value>
+  Indicates how files are handled that already exist in a deployment target location but weren't part of a previous successful deployment. Options include DISALLOW, OVERWRITE, RETAIN. [default: #{InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR}]. 
+  See also: "create-deployment" in the AWS CLI Reference for AWS CodeDeploy.
+
+  -g, --deployment-group <value>
+  The path to the folder that is the target location for the content to be deployed. If you do not specify a folder, the tool creates one named default-local-deployment-group inside your deployment root directory. For each local deployment you create, the tool creates a subdirectory inside this folder with names like d-98761234-local. Your configuration shows it would be placed in #{InstanceAgent::Config.config[:root_dir]}/<deployment-group>. You can use the :root_dir: variable in an agent configuration file to configure a custom deployment root folder. If you want to deploy to a location previously deployed to by AWS CodeDeploy, you must specify its deployment group ID, which you can look up by using the AWS CLI. [default: #{AWS::CodeDeploy::Local::Deployer::DEFAULT_DEPLOYMENT_GROUP_ID}].
+  See also: "get-deployment-group” in the AWS CLI Reference for AWS CodeDeploy.
+
+  -e, --events <comma-separated-values>
+  A set of lifecycle event hooks you want to run, in order, instead of the events listed in the AppSpec file. Multiple hook names must be separated by commas. If you don't specify DownloadBundle and Install events in the --events list, they will run before all the event hooks you do specify. If you include DownloadBundle and Install in the --events list, they can be preceded only by events that normally run before them in AWS CodeDeploy deployments.
+
+  -c, --agent-configuration-file <value>
+  The location of a configuration file to use for the deployment, if you store it in a location other than the default. A configuration file specifies alternatives to other default values and behaviors for a deployment. By default, configuration files are stored as /etc/codedeploy-agent/conf/codedeployagent.yml (Amazon Linux, RHEL, or Ubuntu Server instances) or C:/ProgramData/Amazon/CodeDeploy/conf.yml (Windows Server).
+
+  -h, --help
+  Displays a summary of help content.
+
+  -v, --version
+  Displays the tool's version number.
 
 Examples
 ********
@@ -69,24 +89,24 @@ Examples
 #{__FILE__} --bundle-location /path/to/local/bundle.tgz --type tgz --deployment-group my-deployment-group
 #{__FILE__} --bundle-location /path/to/local/bundle/directory --type directory --deployment-group my-deployment-group
 
-  Deploying A Bundle From S3
+  Deploy a bundle from Amazon S3
   **************************
   #{__FILE__} --bundle-location s3://mybucket/bundle.zip?versionId=1234&etag=47e8 --type zip
 
-  Deploying A Bundle From A Public Github Repository
+  Deploy a bundle from a public GitHub repository
   **************************************************
   #{__FILE__} --bundle-location https://github.com/awslabs/aws-codedeploy-sample-tomcat --type zip
   #{__FILE__} --bundle-location https://api.github.com/repos/awslabs/aws-codedeploy-sample-tomcat/zipball/master --type zip
 
-  Deploying A Bundle Specifying Only Specific Lifecycle Events
+  Deploy a bundle specifying certain lifecycle events
   ************************************************************
   #{__FILE__} --bundle-location /path/to/local/bundle.tar --type tar --deployment-group my-deployment-group --events ApplicationStop,DownloadBundle,Install,ApplicationStart
 
-  Stopping Previously Deployed Application
+  Stop a previously deployed application
   ****************************************
   #{__FILE__} --bundle-location /path/to/local/bundle.tgz --type tgz --deployment-group 1234abcd-5dd1-4774-89c6-30b107ac5dcas --events ApplicationStop
 
-  Deploying with a specific Deployment Group Id obtained using the AWS CLI
+  Deploy using a specific deployment group ID
   ************************************************************************
   #{__FILE__} --bundle-location C:/path/to/local/bundle/directory --deployment-group 1234abcd-5dd1-4774-89c6-30b107ac5dca
   #{__FILE__} --bundle-location C:/path/to/local/bundle.zip --type zip --deployment-group 1234abcd-5dd1-4774-89c6-30b107ac5dca
@@ -102,10 +122,10 @@ rescue AWS::CodeDeploy::Local::CLIValidator::ValidationError,InstanceMetadata::I
   puts "ERROR: #{e.message}"
   exit(false)
 rescue Aws::Errors::MissingCredentialsError => e
-  puts "ERROR: Unable to download from S3 without AWS Credentials set. Please see online documentation for ways to specify your AWS credentails: https://aws.amazon.com/blogs/security/a-new-and-standardized-way-to-manage-credentials-in-the-aws-sdks"
+  puts "ERROR: We were unable to download content from the Amazon S3 bucket due to missing or invalid credentials. For information about specifying your AWS credentials, see https://aws.amazon.com/blogs/security/a-new-and-standardized-way-to-manage-credentials-in-the-aws-sdks"
   exit(false)
 rescue InstanceAgent::Plugins::CodeDeployPlugin::ScriptError => e
   exit(false)
 end
 
-puts "Successfully deployed your bundle locally"
+puts "AppSpec file valid. Local deployment successful"
