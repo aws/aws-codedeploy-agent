@@ -42,6 +42,9 @@ end
 
 @log.level = Logger::INFO
 
+require 'set'
+VALID_TYPES = Set.new ['rpm','zypper','deb','msi']
+
 begin
   require 'fileutils'
   require 'openssl'
@@ -56,7 +59,7 @@ begin
 install [--sanity-check] [--proxy http://hostname:port] <package-type>
    --sanity-check [optional]
    --proxy [optional]
-   package-type: 'rpm', 'deb', or 'auto'
+   package-type: #{VALID_TYPES.to_a.join(', ')}, or auto
 
 Installs fetches the latest package version of the specified type and
 installs it. rpms are installed with yum; debs are installed using gdebi.
@@ -221,6 +224,11 @@ EOF
 
   parse_args()
 
+  if @type == 'help'
+    usage
+    exit(0)
+  end
+
   ########## Force running as Ruby 2.x or fail here       ##########
   ruby_interpreter_path = check_ruby_version_and_symlink
   force_ruby2x(ruby_interpreter_path)
@@ -264,27 +272,27 @@ EOF
     return 'us-east-1'
   end
 
-  def get_s3_uri(region, bucket, key)
-    if (region == 'us-east-1')
-      URI.parse("https://#{bucket}.s3.amazonaws.com/#{key}")
-    elsif (region.split("-")[0] == 'cn')
-      URI.parse("https://#{bucket}.s3.#{region}.amazonaws.com.cn/#{key}")
+  def get_s3_uri(key)
+    if (REGION == 'us-east-1')
+      URI.parse("https://#{BUCKET}.s3.amazonaws.com/#{key}")
+    elsif (REGION.split("-")[0] == 'cn')
+      URI.parse("https://#{BUCKET}.s3.#{REGION}.amazonaws.com.cn/#{key}")
     else
-      URI.parse("https://#{bucket}.s3-#{region}.amazonaws.com/#{key}")
+      URI.parse("https://#{BUCKET}.s3-#{REGION}.amazonaws.com/#{key}")
     end
   end
 
-  def get_package_from_s3(region, bucket, key, package_file)
-    @log.info("Downloading package from bucket #{bucket} and key #{key}...")
+  def get_package_from_s3(key, package_file)
+    @log.info("Downloading package from BUCKET #{BUCKET} and key #{key}...")
 
-    uri = get_s3_uri(region, bucket, key)
+    uri = get_s3_uri(key)
 
     # stream package file to disk
     begin
       uri.open(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy) do |s3|
         package_file.write(s3.read)
       end
-    rescue OpenURI::HTTPError => e
+    rescue OpenURI::HTTPError
       @log.error("Could not find package to download at '#{uri.to_s}'")
       exit(1)
     end
@@ -297,10 +305,10 @@ EOF
     ENV['SSL_CERT_FILE'] = File.join(cert_dir, 'ca-bundle.crt')
   end
 
-  def get_version_file_from_s3(region, bucket, key)
-    @log.info("Downloading version file from bucket #{bucket} and key #{key}...")
+  def get_version_file_from_s3
+    @log.info("Downloading version file from BUCKET #{BUCKET} and key #{VERSION_FILE_KEY}...")
 
-    uri = get_s3_uri(region, bucket, key)
+    uri = get_s3_uri(VERSION_FILE_KEY)
 
     begin
       require 'json'
@@ -311,22 +319,19 @@ EOF
 
       version_string = uri.read(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy)
       JSON.parse(version_string)
-    rescue OpenURI::HTTPError => e
+    rescue OpenURI::HTTPError
       @log.error("Could not find version file to download at '#{uri.to_s}'")
       exit(1)
     end
   end
 
-  def install_from_s3(region, bucket, version_file_key, type, install_cmd, post_install_arguments=[])
-    version_data = get_version_file_from_s3(region, bucket, version_file_key)
-
-    package_key = version_data[type]
+  def install_from_s3(package_key, install_cmd, post_install_arguments=[])
     package_base_name = File.basename(package_key)
     package_extension = File.extname(package_base_name)
     package_name = File.basename(package_base_name, package_extension)
     package_file = File.new(File.join("#{Dir.tmpdir}","#{package_name}#{package_extension}"), "wb")
 
-    get_package_from_s3(region, bucket, package_key, package_file)
+    get_package_from_s3(package_key, package_file)
     package_file.close
 
     install_cmd << package_file_path(package_file)
@@ -360,23 +365,6 @@ EOF
         run_command(cmd, 'codedeploy-agent', 'start-no-update')
       end
     end
-  end
-
-  NO_AGENT_INSTALLED_REPORTED_WINDOWS_VERSION = 'No Agent Installed'
-  def running_agent_version_windows
-    installed_agent_versions_cmd_output = `wmic product where "name like 'CodeDeploy Host Agent'" get version`
-    installed_agent_versions = installed_agent_versions_cmd_output.lines
-      .collect{|line| line.strip}
-      .reject{|line| line == 'Version'}
-      .reject{|line| line.empty?}
-
-    agent_version = installed_agent_versions.first
-    #Example Agent Version Outputted from the above command: 1.0.1.1231
-    if (/[0-9].[0-9].[0-9].[0-9]+/ =~ agent_version)
-      return agent_version
-    end
-
-    NO_AGENT_INSTALLED_REPORTED_WINDOWS_VERSION
   end
 
   @log.info("Starting update check.")
@@ -417,72 +405,147 @@ EOF
     end
   end
 
-  region = get_region
-  bucket = "aws-codedeploy-#{region}"
-  version_file_key = 'latest/VERSION'
+  unless VALID_TYPES.include? @type
+    @log.error("Unsupported package type '#{@type}'")
+    exit(1)
+  end
 
-  case @type
-  when 'help'
-    usage
-  when 'rpm'
-    running_version = `rpm -q codedeploy-agent`
-    running_version.strip!
-    target_version = get_version_file_from_s3(region, bucket, version_file_key)['rpm']
-    if target_version.include? running_version
-      @log.info('Running version matches target version, skipping install')
-    else
-      #use -y to answer yes to confirmation prompts
-      install_cmd = ['/usr/bin/yum', '-y', 'localinstall']
-      install_from_s3(region, bucket, version_file_key, @type, install_cmd)
-      do_sanity_check('/sbin/service')
-    end
-  when 'deb'
-    running_agent = `dpkg -s codedeploy-agent`
-    running_agent_info = running_agent.split
-    version_index = running_agent_info.index('Version:')
-    if !version_index.nil?
-      running_version = running_agent_info[version_index + 1]
-    else
-      running_version = "No running version"
-    end
-    @log.info("Running version " + running_version)
-    target_version = get_version_file_from_s3(region, bucket, version_file_key)['deb']
-    if target_version.include? running_version
-      @log.info('Running version matches target version, skipping install')
-    else
-      #use -n for non-interactive mode
-      #use -o to not overwrite config files unless they have not been changed
-      install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dkpg::Options::=--force-confold']
-      install_from_s3(region, bucket, version_file_key, @type, install_cmd)
-      do_sanity_check('/usr/sbin/service')
-    end
-  when 'zypper'
-    #use -n for non-interactive mode
-    install_cmd = ['/usr/bin/zypper', 'install', '-n']
-    install_from_s3(region, bucket, version_file_key, 'rpm', install_cmd)
-  when 'msi'
-    running_version = running_agent_version_windows
+  REGION = get_region
+  BUCKET = "aws-codedeploy-#{REGION}"
+  VERSION_FILE_KEY = 'latest/VERSION'
 
-    @log.info("Running version " + running_version)
-    target_version = get_version_file_from_s3(region, bucket, version_file_key)[@type]
-    if (target_version.include? running_version)
-      @log.info('Running version matches target version, skipping install')
+  NO_AGENT_INSTALLED_REPORTED_WINDOWS_VERSION = 'No Agent Installed'
+  def running_agent_version_windows
+    installed_agent_versions_cmd_output = `wmic product where "name like 'CodeDeploy Host Agent'" get version`
+    installed_agent_versions = installed_agent_versions_cmd_output.lines
+      .collect{|line| line.strip}
+      .reject{|line| line == 'Version'}
+      .reject{|line| line.empty?}
+
+    agent_version = installed_agent_versions.first
+    #Example Agent Version Outputted from the above command: 1.0.1.1231
+    if (/[0-9].[0-9].[0-9].[0-9]+/ =~ agent_version)
+      return agent_version
+    end
+
+    NO_AGENT_INSTALLED_REPORTED_WINDOWS_VERSION
+  end
+
+  def upgrade_or_install_required?(target_version, running_version)
+    running_version_numbers = version_numbers(running_version)
+    @log.info("running_version_numbers: #{running_version_numbers}")
+
+    if running_version_numbers == 'No running version' then return true end
+
+    # detect returns the first number for which block is true, otherwise return nil
+    version_numbers(target_version).zip(running_version_numbers).detect do |target_version_number, running_version_number|
+      target_version_number.to_i > running_version_number.to_i
+    end
+  end
+
+  def version_numbers(version)
+    if match = version.match(/^.*(\d+)\.(\d+)[.-](\d+)\.(\d+).*$/i)
+      match.captures
     else
+      'No running version'
+    end
+  end
+
+  def running_version(type)
+    case type
+    when 'rpm','zypper'
+      `rpm --query codedeploy-agent`.strip
+    when 'deb'
+      running_agent = `dpkg --status codedeploy-agent`
+      running_agent_info = running_agent.split
+      version_index = running_agent_info.index('Version:')
+      if !version_index.nil?
+        running_agent_info[version_index + 1]
+      else
+        'No running version'
+      end
+    when 'msi'
+      running_agent_version_windows
+    else
+      @log.error("Unsupported package type '#{@type}'")
+      exit(1)
+    end
+  end
+
+  def target_version(type)
+    file_type = type == 'zypper' ? 'rpm' : type
+    get_version_file_from_s3[file_type]
+  end
+
+  def install_command(type, upgrade_or_install_required)
+    case @type
+    when 'rpm'
+      if upgrade_or_install_required
+        ['/usr/bin/yum', '--assumeyes', 'localinstall']
+      else
+        ['/usr/bin/yum', '--assumeyes', 'downgrade']
+      end
+    when 'deb'
+      if upgrade_or_install_required
+        #use --option to not overwrite config files unless they have not been changed
+        ['/usr/bin/gdebi', '--non-interactive', '--option=Dpkg::Options::=--force-confdef', '--option=Dkpg::Options::=--force-confold']
+      else
+        ['/usr/bin/dpkg', '--install']
+      end
+    when 'zypper'
+      if upgrade_or_install_required
+        ['/usr/bin/zypper', '--non-interactive', 'install']
+      else
+        ['/usr/bin/zypper', '--non-interactive', 'install', '--oldpackage']
+      end
+    when 'msi'
+      ['msiexec','/quiet','/i']
+    else
+      @log.error("Unsupported package type '#{@type}'")
+      exit(1)
+    end
+  end
+
+  def pre_installation_steps(type, running_version)
+    if type == 'msi'
       unless running_version == NO_AGENT_INSTALLED_REPORTED_WINDOWS_VERSION
-        @log.info('Uninstalling old version of the agent')
+        @log.info('Uninstalling old versions of the agent')
         uninstall_command_succeeded = system('wmic product where "name like \'CodeDeploy Host Agent\'" call uninstall /nointeractive')
         unless uninstall_command_succeeded
           @log.warn('Uninstalling existing agent failed')
         end
       end
-
-      install_cmd = ['msiexec','/quiet','/i']
-      post_install_arguments = ['/L*V',"#{Dir.tmpdir()}/codedeploy-agent.msi_installer.log"]
-      install_from_s3(region, bucket, version_file_key, @type, install_cmd, post_install_arguments)
     end
+  end
+
+  def post_install_arguments(type)
+    if type == 'msi'
+      ['/L*V',"#{Dir.tmpdir()}/codedeploy-agent.msi_installer.log"]
+    else
+      []
+    end
+  end
+
+  running_version = running_version(@type)
+  target_version = target_version(@type)
+  if target_version.include? running_version
+    @log.info("Running version, #{running_version}, matches target version, #{target_version}, skipping install")
   else
-    @log.error("Unsupported package type '#{@type}'")
-    exit(1)
+    if upgrade_or_install_required?(target_version, running_version)
+      @log.info("Running version, #{running_version}, less than target version, #{target_version}, updating agent")
+    else
+      @log.info("Running version, #{running_version}, greater than target version, #{target_version}, rolling back agent")
+    end
+
+    pre_installation_steps(@type, running_version)
+
+    install_cmd = install_command(@type, upgrade_or_install_required?(target_version, running_version))
+    post_install_args = post_install_arguments(@type)
+    install_from_s3(target_version, install_cmd, post_install_args)
+
+    unless @type == 'msi'
+      do_sanity_check('/sbin/service')
+    end
   end
 
   @log.info("Update check complete.")
