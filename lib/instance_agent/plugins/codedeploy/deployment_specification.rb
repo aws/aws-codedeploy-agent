@@ -176,8 +176,10 @@ module InstanceAgent
           when 'beta', 'gamma'
             cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-signer-integ.amazonaws.com"
           when 'prod'
-            if (@@region.split("-")[0] == "cn")
+            if (@@region == "cn-north-1")
               cert.subject.to_s == "/C=CN/ST=Beijing/L=Beijing/O=Amazon Connect Technology Services (Beijing) Co., Ltd./CN=codedeploy-signer-"+@@region+".amazonaws.com.cn"
+            elsif (@@region == "cn-northwest-1")
+              cert.subject.to_s == "/C=CN/ST=Ningxia/L=Ningxia/O=Amazon Cloud Technology Services (Ningxia) Co., Ltd./CN=codedeploy-signer-"+@@region+".amazonaws.com.cn"
             else
               cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-signer-"+@@region+".amazonaws.com"
             end
