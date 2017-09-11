@@ -34,6 +34,7 @@ module AWS
                                               AfterAllowTraffic)
 
         REQUIRED_LIFECYCLE_EVENTS = %w(DownloadBundle Install)
+        @@running_as_developer_utility = false
 
         def initialize(configuration_file_location = CONF_DEFAULT_LOCATION)
           configuration_file_location ||= CONF_DEFAULT_LOCATION # Default gets set this way even if the input is nil
@@ -63,7 +64,12 @@ module AWS
           ENV['SSL_CERT_FILE'] = File.join(cert_dir, 'windows-ca-bundle.crt')
         end
 
+        def self.running_as_developer_utility?
+          @@running_as_developer_utility
+        end
+
         def execute_events(args)
+          @@running_as_developer_utility = true
           args = AWS::CodeDeploy::Local::CLIValidator.new.validate(args)
           # Sets default value of deployment_group_id if it's missing
           deployment_group_id = args['--deployment-group']

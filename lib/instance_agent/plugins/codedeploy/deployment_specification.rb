@@ -122,6 +122,10 @@ module InstanceAgent
 
             parse_deployment_spec_data(pkcs7.data)
           when "TEXT/JSON"
+            raise "Unsupported DeploymentSpecification format: #{envelope.format}" unless AWS::CodeDeploy::Local::Deployer.running_as_developer_utility?
+            # We only allow json unsigned messages from the local developer utility (codedeploy-local cli)
+            # This is because the local cli cannot actually sign messages since it doens't have the private key
+            # that the CodeDeploy service has.
             parse_deployment_spec_data(envelope.payload)
           else
             raise "Unsupported DeploymentSpecification format: #{envelope.format}"
