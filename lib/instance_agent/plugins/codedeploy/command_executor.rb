@@ -286,7 +286,8 @@ module InstanceAgent
             format = 'tarball'
           end
 
-          uri = URI.parse("https://api.github.com/repos/#{account}/#{repo}/#{format}/#{commit}")
+          github_api = InstanceAgent::Config.config[:github_api_url]
+          uri = URI.parse("#{github_api}/repos/#{account}/#{repo}/#{format}/#{commit}")
           options = {:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :ssl_ca_cert => ENV['AWS_SSL_CA_DIRECTORY']}
 
           if anonymous
@@ -422,7 +423,7 @@ module InstanceAgent
 
           full_path_deployment_archives = deployment_archives.map{ |f| File.join(ProcessManager::Config.config[:root_dir], deployment_group, f)}
           full_path_deployment_archives.delete(deployment_root_dir(deployment_spec))
-          
+
           extra = full_path_deployment_archives.size - @archives_to_retain + 1
           return unless extra > 0
 
