@@ -56,9 +56,10 @@ begin
   def usage
     print <<EOF
 
-install [--sanity-check] [--proxy http://hostname:port] <package-type>
+update [--sanity-check] [--proxy http://hostname:port] [--upgrade|--downgrade] <package-type>
    --sanity-check [optional]
    --proxy [optional]
+   --upgrade | --downgrade [optional]
    package-type: #{VALID_TYPES.to_a.join(', ')}, or auto
 
 Installs fetches the latest package version of the specified type and
@@ -79,6 +80,12 @@ to check for a running agent.
 
 To use a HTTP proxy, specify --proxy followed by the proxy server
 defined by http://hostname:port
+
+If --upgrade is specified, the script will only update the agent if a newer version is available.
+Downgrades will not be respected.
+
+If --downgrade is specified, the script will only update the agent if an older version of the
+agent is marked as current. Upgrades will be ignored.
 
 This install script needs Ruby version 2.x installed as a prerequisite.
 Currently recommanded Ruby versions are 2.0.0, 2.1.8, 2.2.4 and 2.3.0, and 2.4.0.
@@ -138,9 +145,13 @@ EOF
     @sanity_check = false
     @reexeced = false
     @http_proxy = nil
+    @downgrade = false
+    @upgrade = false
 
     @args = Array.new(ARGV)
-    opts = GetoptLong.new(['--sanity-check', GetoptLong::NO_ARGUMENT], ['--help', GetoptLong::NO_ARGUMENT], ['--re-execed', GetoptLong::NO_ARGUMENT], ['--proxy', GetoptLong::OPTIONAL_ARGUMENT])
+    opts = GetoptLong.new(['--sanity-check', GetoptLong::NO_ARGUMENT], ['--help', GetoptLong::NO_ARGUMENT],
+                          ['--re-execed', GetoptLong::NO_ARGUMENT], ['--proxy', GetoptLong::OPTIONAL_ARGUMENT],
+                          ['--downgrade', GetoptLong::NO_ARGUMENT], ['--upgrade', GetoptLong::NO_ARGUMENT])
     opts.each do |opt, args|
       case opt
       when '--sanity-check'
@@ -149,12 +160,28 @@ EOF
         usage
       when '--re-execed'
         @reexeced = true
+      when '--downgrade'
+        @downgrade = true
+      when '--upgrade'
+        @upgrade = true
       when '--proxy'
         if (args != '')
           @http_proxy = args
         end
       end
     end
+
+    if (@upgrade and @downgrade)
+      usage
+      @log.error('Cannot provide both --upgrade and --downgrade')
+      exit(1)
+    elsif (!@upgrade and !@downgrade)
+      #Default to allowing both if one if neither is specified
+      @upgrade = true
+      @downgrade = true
+    end
+
+
     if (ARGV.length < 1)
       usage
       @log.error('Expected package type as argument.')
@@ -532,9 +559,19 @@ EOF
     @log.info("Running version, #{running_version}, matches target version, #{target_version}, skipping install")
   else
     if upgrade_or_install_required?(target_version, running_version)
-      @log.info("Running version, #{running_version}, less than target version, #{target_version}, updating agent")
+      if @upgrade
+        @log.info("Running version, #{running_version}, less than target version, #{target_version}, updating agent")
+      else
+        @log.info("New version available but only checking for downgrades. Skipping install.")
+        exit 0;
+      end
     else
-      @log.info("Running version, #{running_version}, greater than target version, #{target_version}, rolling back agent")
+      if @downgrade
+        @log.info("Running version, #{running_version}, greater than target version, #{target_version}, rolling back agent")
+      else
+        @log.info("Older version available but only checking for upgrades. Skipping install.")
+        exit 0;
+      end
     end
 
     pre_installation_steps(@type, running_version)
