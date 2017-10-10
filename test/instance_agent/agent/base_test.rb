@@ -48,7 +48,7 @@ class InstanceAgentBaseTest < InstanceAgentTestCase
         @base.expects(:log).with { |v1, v2| v1.eql?(:error) && v2 =~ /Error during perform/ }
         assert_nothing_raised { @base.run }
       end
-      
+
       should 'back off on repeated exceptions' do
         @base.stubs(:perform).raises Exception
         @base.expects(:sleep).with(any_of(9, 10))
