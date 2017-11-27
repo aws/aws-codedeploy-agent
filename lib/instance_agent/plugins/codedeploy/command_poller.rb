@@ -1,4 +1,5 @@
 require 'socket'
+require 'concurrent'
 
 require 'instance_metadata'
 require 'instance_agent/agent/base'
@@ -22,6 +23,8 @@ module InstanceAgent
             "AfterAllowTraffic"=>["AfterAllowTraffic"],
             "ValidateService"=>["ValidateService"]}
 
+        WAIT_FOR_ALL_THREADS_TIMEOUT_SECONDS = 60 * 60 # One hour timeout in seconds
+
         def initialize
           test_profile = InstanceAgent::Config.config[:codedeploy_test_profile]
           unless ["beta", "gamma"].include?(test_profile.downcase)
@@ -44,6 +47,13 @@ module InstanceAgent
 
           @plugin = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => DEFAULT_HOOK_MAPPING)
 
+          @thread_pool = Concurrent::ThreadPoolExecutor.new(
+            #TODO: Make these values configurable in agent configuration
+            min_threads: 1,
+            max_threads: 16,
+            max_queue: 0 # unbounded work queue
+          )
+
           log(:debug, "Initializing Host Agent: " +
           "Host Identifier = #{@host_identifier}")
         end
@@ -63,22 +73,11 @@ module InstanceAgent
 
           begin
             spec = get_deployment_specification(command)
-            #Successful commands will complete without raising an exception
-            script_output = process_command(command, spec)
-            log(:debug, 'Calling PutHostCommandComplete: "Succeeded"')
-            @deploy_control_client.put_host_command_complete(
-            :command_status => 'Succeeded',
-            :diagnostics => {:format => "JSON", :payload => gather_diagnostics()},
-            :host_command_identifier => command.host_command_identifier)
-
+            #Commands will be executed on a separate thread.
+            @thread_pool.post {
+              process_command(command, spec)
+            }
             #Commands that throw an exception will be considered to have failed
-          rescue ScriptError => e
-            log(:debug, 'Calling PutHostCommandComplete: "Code Error" ')
-            @deploy_control_client.put_host_command_complete(
-            :command_status => "Failed",
-            :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_script_error(e)},
-            :host_command_identifier => command.host_command_identifier)
-            raise e
           rescue Exception => e
             log(:debug, 'Calling PutHostCommandComplete: "Code Error" ')
             @deploy_control_client.put_host_command_complete(
@@ -87,6 +86,16 @@ module InstanceAgent
             :host_command_identifier => command.host_command_identifier)
             raise e
           end
+        end
+
+        def graceful_shutdown
+          log(:info, "Gracefully shutting down command execution threads now, will wait up to #{WAIT_FOR_ALL_THREADS_TIMEOUT_SECONDS} seconds")
+          # tell the pool to shutdown in an orderly fashion, allowing in progress work to complete
+          @thread_pool.shutdown
+          # now wait for all work to complete, wait till the timeout value
+          # TODO: Make the timeout configurable in the agent configuration
+          @thread_pool.wait_for_termination WAIT_FOR_ALL_THREADS_TIMEOUT_SECONDS
+          log(:info, 'All command execution threads have been shut down')
         end
 
         def next_command
@@ -131,7 +140,33 @@ module InstanceAgent
 
         def process_command(command, spec)
           log(:debug, "Calling #{@plugin.to_s}.execute_command")
-          @plugin.execute_command(command, spec)
+          begin
+            #Successful commands will complete without raising an exception
+            @plugin.execute_command(command, spec)
+
+            log(:debug, 'Calling PutHostCommandComplete: "Succeeded"')
+            @deploy_control_client.put_host_command_complete(
+            :command_status => 'Succeeded',
+            :diagnostics => {:format => "JSON", :payload => gather_diagnostics()},
+            :host_command_identifier => command.host_command_identifier)
+            #Commands that throw an exception will be considered to have failed
+          rescue ScriptError => e
+            log(:debug, 'Calling PutHostCommandComplete: "Code Error" ')
+            @deploy_control_client.put_host_command_complete(
+            :command_status => "Failed",
+            :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_script_error(e)},
+            :host_command_identifier => command.host_command_identifier)
+            log(:error, "Error during perform: #{e.class} - #{e.message} - #{e.backtrace.join("\n")}")
+            raise e
+          rescue Exception => e
+            log(:debug, 'Calling PutHostCommandComplete: "Code Error" ')
+            @deploy_control_client.put_host_command_complete(
+            :command_status => "Failed",
+            :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_error(e)},
+            :host_command_identifier => command.host_command_identifier)
+            log(:error, "Error during perform: #{e.class} - #{e.message} - #{e.backtrace.join("\n")}")
+            raise e
+          end
         end
 
         private

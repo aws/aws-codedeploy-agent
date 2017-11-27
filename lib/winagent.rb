@@ -55,9 +55,10 @@ class InstanceAgentService < Daemon
   end
   
   def service_stop
-    log(:info, 'stopping')
+    log(:info, 'stopping the agent')
     @polling_mutex.synchronize do
-      log(:info, 'exited')
+      @runner.graceful_shutdown
+      log(:info, 'command execution threads shutdown, agent exiting now')
     end
   end
   
