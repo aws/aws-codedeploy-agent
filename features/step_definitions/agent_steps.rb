@@ -60,8 +60,6 @@ def configure_local_agent(working_directory)
   InstanceAgent::Log.init(File.join(working_directory, 'codedeploy-agent.log'))
   InstanceAgent::Config.init
   InstanceAgent::Platform.util = StepConstants::IS_WINDOWS ? InstanceAgent::WindowsUtil : InstanceAgent::LinuxUtil
-
-  if StepConstants::IS_WINDOWS then configure_windows_certificate end
   InstanceAgent::Config.config[:on_premises_config_file] = "#{working_directory}/codedeploy.onpremises.yml"
 
   configuration_contents = <<-CONFIG
@@ -82,13 +80,6 @@ def configure_local_agent(working_directory)
   File.open(InstanceAgent::Config.config[:config_file], 'w') { |file| file.write(configuration_contents) }
 
   InstanceAgent::Config.load_config
-end
-
-def configure_windows_certificate
-  cert_dir = File.expand_path(File.join(File.dirname(__FILE__), '..\certs'))
-  Aws.config[:ssl_ca_bundle] = File.join(cert_dir, 'windows-ca-bundle.crt')
-  ENV['AWS_SSL_CA_DIRECTORY'] = File.join(cert_dir, 'windows-ca-bundle.crt')
-  ENV['SSL_CERT_FILE'] = File.join(cert_dir, 'windows-ca-bundle.crt')
 end
 
 After("@codedeploy-agent") do

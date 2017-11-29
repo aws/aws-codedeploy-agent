@@ -134,7 +134,10 @@ def create_local_deployment(custom_events = nil, file_exists_behavior = nil)
     codeedeploy_command_suffix = " --file-exists-behavior #{file_exists_behavior}"
   end
 
-  system "bin/codedeploy-local --bundle-location #{@bundle_location} --type #{@bundle_type} --deployment-group #{LOCAL_DEPLOYMENT_GROUP_ID} --agent-configuration-file #{InstanceAgent::Config.config[:config_file]}#{codeedeploy_command_suffix}"
+  # Windows doesn't respect shebang lines so ruby needs to be specified
+  ruby_prefix_for_windows = StepConstants::IS_WINDOWS ? "ruby " : ""
+
+  system "#{ruby_prefix_for_windows}bin/codedeploy-local --bundle-location #{@bundle_location} --type #{@bundle_type} --deployment-group #{LOCAL_DEPLOYMENT_GROUP_ID} --agent-configuration-file #{InstanceAgent::Config.config[:config_file]}#{codeedeploy_command_suffix}"
 end
 
 Then(/^the local deployment command should succeed$/) do
