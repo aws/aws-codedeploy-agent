@@ -1,7 +1,5 @@
 require 'instance_agent/plugins/codedeploy/application_specification/script_info'
 require 'instance_agent/plugins/codedeploy/application_specification/file_info'
-require 'instance_agent/plugins/codedeploy/application_specification/linux_permission_info'
-require 'instance_agent/plugins/codedeploy/application_specification/mode_info'
 
 module InstanceAgent
   module Plugins
@@ -63,18 +61,16 @@ module InstanceAgent
             temp_hooks_hash = Hash.new
             hooks_hash.each_pair do |hook, scripts|
               current_hook_scripts = []
-              if scripts.kind_of?(Array)
-                scripts.each do |script|
-                  if script['location'].kind_of?(String)
-                    current_hook_scripts << InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::ScriptInfo.new(script['location'].to_s.strip,
-                    {
-                      :runas => script.has_key?('runas') && !script['runas'].nil? ? script['runas'].to_s.strip : nil,
-                      :sudo => script['sudo'],
-                      :timeout => script['timeout']
-                    })
-                  else
-                    raise AppSpecValidationException, 'The deployment failed because the application specification file specifies a script with no location value. Specify the location in the hooks section of the AppSpec file, and then try again.'
-                  end
+              scripts.each do |script|
+                if (script.has_key?('location') && !script['location'].nil?)
+                  current_hook_scripts << InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::ScriptInfo.new(script['location'].to_s.strip,
+                  {
+                    :runas => script.has_key?('runas') && !script['runas'].nil? ? script['runas'].to_s.strip : nil,
+                    :sudo => script['sudo'],
+                    :timeout => script['timeout']
+                  })
+                else
+                  raise AppSpecValidationException, 'The deployment failed because the application specification file specifies a script with no location value. Specify the location in the hooks section of the AppSpec file, and then try again.'
                 end
               end
               temp_hooks_hash[hook] = current_hook_scripts

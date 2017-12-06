@@ -33,8 +33,7 @@ module InstanceAgent
         :codedeploy_test_profile => 'prod',
         :on_premises_config_file => '/etc/codedeploy-agent/conf/codedeploy.onpremises.yml',
         :proxy_uri => nil,
-        :enable_deployments_log => true,
-        :github_api_url => 'https://api.github.com'
+        :enable_deployments_log => true
       })
     end
 
@@ -42,5 +41,6 @@ module InstanceAgent
       errors << 'children can only be set to 1' unless config[:children] == 1
       errors
     end
+
   end
 end
