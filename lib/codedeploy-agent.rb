@@ -16,6 +16,8 @@ end
 
 agent_dir = "/opt/codedeploy-agent"
 $:.unshift "#{agent_dir}/lib"
+# Required for integration tests to run correctly
+$:.unshift File.join(File.dirname(File.expand_path('..', __FILE__)), 'lib')
 
 require 'instance_agent'
 require 'gli'
