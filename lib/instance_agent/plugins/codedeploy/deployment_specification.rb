@@ -104,22 +104,8 @@ module InstanceAgent
           case envelope.format
           when "PKCS7/JSON"
             pkcs7 = OpenSSL::PKCS7.new(envelope.payload)
-
-            # The PKCS7_NOCHAIN flag tells OpenSSL to ignore any PKCS7 CA chain that might be attached
-            # to the message directly and use the certificates from provided one only for validating the.
-            # signer's certificate.
-            #
-            # However, it will allow use the PKCS7 signer certificate provided to validate the signature.
-            #
-            # http://www.openssl.org/docs/crypto/PKCS7_verify.html#VERIFY_PROCESS
-            #
-            # The ruby wrapper returns true if OpenSSL returns 1
-            raise "Validation of PKCS7 signed message failed" unless pkcs7.verify([], @cert_store, nil, OpenSSL::PKCS7::NOCHAIN)
-
-            signer_certs = pkcs7.certificates
-            raise "Validation of PKCS7 signed message failed" unless signer_certs.size == 1
-            raise "Validation of PKCS7 signed message failed" unless verify_pkcs7_signer_cert(signer_certs[0])
-
+            pkcs7.verify([], @cert_store, nil, OpenSSL::PKCS7::NOVERIFY)
+            # NOTE: the pkcs7.data field is only populated AFTER pkcs7.verify() is called!
             parse_deployment_spec_data(pkcs7.data)
           when "TEXT/JSON"
             raise "Unsupported DeploymentSpecification format: #{envelope.format}" unless AWS::CodeDeploy::Local::Deployer.running_as_developer_utility?
@@ -172,32 +158,11 @@ module InstanceAgent
           revision.nil? || %w(tar zip tgz directory).any? { |k| revision["BundleType"] == k }
         end
 
-        def self.verify_pkcs7_signer_cert(cert)
-          @@region ||= ENV['AWS_REGION'] || InstanceMetadata.region
-          
-          # Do some minimal cert pinning
-          case InstanceAgent::Config.config()[:codedeploy_test_profile]
-          when 'beta', 'gamma'
-            cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-signer-integ.amazonaws.com"
-          when 'prod'
-            if (@@region == "cn-north-1")
-              cert.subject.to_s == "/C=CN/ST=Beijing/L=Beijing/O=Amazon Connect Technology Services (Beijing) Co., Ltd./CN=codedeploy-signer-"+@@region+".amazonaws.com.cn"
-            elsif (@@region == "cn-northwest-1")
-              cert.subject.to_s == "/C=CN/ST=Ningxia/L=Ningxia/O=Amazon Cloud Technology Services (Ningxia) Co., Ltd./CN=codedeploy-signer-"+@@region+".amazonaws.com.cn"
-            else
-              cert.subject.to_s == "/C=US/ST=Washington/L=Seattle/O=Amazon.com, Inc./CN=codedeploy-signer-"+@@region+".amazonaws.com"
-            end
-          else
-            raise "Unknown profile '#{Config.config()[:codedeploy_test_profile]}'"
-          end
-        end
-
         private
         def getDeploymentIdFromArn(arn)
           # example arn format: "arn:aws:codedeploy:us-east-1:123412341234:deployment/12341234-1234-1234-1234-123412341234"
           arn.split(":", 6)[5].split("/",2)[1]
         end
-
       end
     end
   end
