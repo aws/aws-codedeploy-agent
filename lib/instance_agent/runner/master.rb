@@ -1,12 +1,14 @@
 # encoding: UTF-8
 require 'process_manager/master'
 require 'instance_metadata'
+require 'instance_agent/plugins/codedeploy/deployment_command_tracker'
 
 module InstanceAgent
   module Runner
-    class Master < ProcessManager::Daemon::Master
+    class DeploymentAlreadyInProgressException < Exception;  end 
     
-      ChildTerminationMaxWaitTime = 80
+    class Master < ProcessManager::Daemon::Master
+      ChildTerminationMaxWaitTime = 3600 #timeout of an hour
       
       def self.description(pid = $$)
         "master #{pid}"
@@ -30,9 +32,16 @@ module InstanceAgent
 
       def stop
         if (pid = self.class.find_pid)
-          puts "Stopping #{description(pid)}"
-          ProcessManager::Log.info("Stopping #{description(pid)}")
+          puts "Checking first if a deployment is already in progress"
+          ProcessManager::Log.info("Checking first if any deployment lifecycle event is in progress #{description(pid)}")
           begin
+            if(DeploymentCommandTracker.check_deployment_event_inprogress?)
+              ProcessManager::Log.info("Master process (#{pid}) will not be shut down right now, as a deployment is already in progress")
+              raise "A deployment is already in Progress",DeploymentAlreadyInProgressException
+            else
+              puts "Stopping #{description(pid)}"
+              ProcessManager::Log.info("Stopping #{description(pid)}")
+            end  
             Process.kill('TERM', pid)
           rescue Errno::ESRCH
           end

@@ -23,6 +23,7 @@ module InstanceAgent
         :pid_dir => nil,
         :shared_dir => nil,
         :user => nil,
+        :ongoing_deployment_tracking => 'ongoing-deployment',
         :children => 1,
         :http_read_timeout => 80,
         :instance_service_region => nil,
