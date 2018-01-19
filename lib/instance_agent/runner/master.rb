@@ -35,7 +35,7 @@ module InstanceAgent
           puts "Checking first if a deployment is already in progress"
           ProcessManager::Log.info("Checking first if any deployment lifecycle event is in progress #{description(pid)}")
           begin
-            if(DeploymentCommandTracker.check_deployment_event_inprogress?)
+            if(InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.check_deployment_event_inprogress?)
               ProcessManager::Log.info("Master process (#{pid}) will not be shut down right now, as a deployment is already in progress")
               raise "A deployment is already in Progress",DeploymentAlreadyInProgressException
             else

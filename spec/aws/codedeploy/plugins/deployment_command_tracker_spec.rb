@@ -8,7 +8,7 @@ describe InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker do
     describe '.create_ongoing_deployment_tracking_file' do
         $deployment_id = 'D-123'
         deployment_command_tracker = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker;
-        context "when the deploymenmt life cycle event is in progress" do
+        context "when the deployment life cycle event is in progress" do
             before do
                 InstanceAgent::Config.config[:root_dir] = File.join(Dir.tmpdir(), 'codeDeploytest')
                 InstanceAgent::Config.config[:ongoing_deployment_tracking] = 'ongoing-deployment' 
@@ -40,7 +40,15 @@ describe InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker do
             it 'checks if any deployment life cycle event is in progress ' do 
                 expect(InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.check_deployment_event_inprogress?).to equal(true)
             end
-        end    
+        end
+        context 'when the agent starts for the first time' do
+            before do 
+                FileUtils.rm_r(File.join(InstanceAgent::Config.config[:root_dir], InstanceAgent::Config.config[:ongoing_deployment_tracking]))              
+            end
+            it 'checks if any deployment life cycle event is in progress ' do 
+                expect(InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.check_deployment_event_inprogress?).to equal(false)
+            end
+        end     
     end
     describe '.delete_deployment_tracking_file_if_stale' do
         context 'when deployment life cycle event is in progress' do 

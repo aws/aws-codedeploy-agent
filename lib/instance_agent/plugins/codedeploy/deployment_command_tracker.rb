@@ -27,7 +27,11 @@ module InstanceAgent
             end
             
             def self.check_deployment_event_inprogress?
-              directories_and_files_inside(deployment_dir_path()).any?{|deployment_id| check_deployment_tracking_file_exist?(deployment_id)}
+              if(File.exists?deployment_dir_path())
+                return directories_and_files_inside(deployment_dir_path()).any?{|deployment_id| check_deployment_tracking_file_exist?(deployment_id)}
+              else
+                return false
+              end    
             end
 
             def self.delete_deployment_command_tracking_file(deployment_id)
