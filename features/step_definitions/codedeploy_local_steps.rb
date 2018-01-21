@@ -14,10 +14,6 @@ ORIGINAL_FILE_CONTENT_TO_POTENTIALLY_OVERWRITE = 'ORIGINAL_FILE_CONTENT_TO_POTEN
 
 Before("@codedeploy-local") do
   @test_directory = Dir.mktmpdir
-
-  #Reset aws credentials to default location
-  Aws.config[:credentials] = Aws::SharedCredentials.new.credentials
-
   configure_local_agent(@test_directory)
 end
 

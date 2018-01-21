@@ -46,9 +46,6 @@ Before("@codedeploy-agent") do
   @working_directory = Dir.mktmpdir
   configure_local_agent(@working_directory)
 
-  #Reset aws credentials to default location
-  Aws.config[:credentials] = Aws::SharedCredentials.new.credentials
-
   #instantiate these clients first so they use user's aws creds instead of assumed role creds
   @codedeploy_client = Aws::CodeDeploy::Client.new
   @iam_client = Aws::IAM::Client.new
@@ -225,12 +222,20 @@ def create_instance_role
   rescue Aws::IAM::Errors::EntityAlreadyExists
     #Using the existing role
   end
-  eventually do
+
+  instance_role_arn = eventually do
     instance_role = @iam_client.get_role({:role_name => INSTANCE_ROLE_NAME}).role
     expect(instance_role).not_to be_nil
     expect(instance_role.assume_role_policy_document).not_to be_nil
     instance_role.arn
   end
+
+  @iam_client.update_assume_role_policy({
+    policy_document: instance_role_policy,
+    role_name: INSTANCE_ROLE_NAME,
+  })
+
+  instance_role_arn
 end
 
 def instance_role_policy

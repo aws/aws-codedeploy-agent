@@ -1,0 +1,19 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo Installing bundler
+      - gem install bundler
+      - echo Using bundler to install remaining gems
+      - bundle install
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Running rake  - unit tests
+      - rake
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Running rake test-integration - integ tests
+      - rake test-integration
