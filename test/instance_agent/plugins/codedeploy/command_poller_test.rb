@@ -1,10 +1,8 @@
 require 'test_helper'
 require 'json'
-require 'instance_agent/log'
-
 
 class CommandPollerTest < InstanceAgentTestCase
-  include InstanceAgent::Plugins::CodeDeployPlugin
+
   def gather_diagnostics_from_error(error)
     {'error_code' => InstanceAgent::Plugins::CodeDeployPlugin::ScriptError::UNKNOWN_ERROR_CODE, 'script_name' => "", 'message' => error.message, 'log' => ""}.to_json
   end
@@ -112,12 +110,6 @@ class CommandPollerTest < InstanceAgentTestCase
           starts_as('setup')
         @deploy_control_client.stubs(:put_host_command_complete).
           when(@put_host_command_complete_state.is('setup'))
-        @deployment_id  = stub(:deployment_id => "D-1234")
-        InstanceAgent::Config.config[:root_dir] = File.join(Dir.tmpdir(), "CodeDeploy")
-        InstanceAgent::Config.config[:ongoing_deployment_tracking] = "ongoing-deployment"
-        InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.stubs(:parse).returns(@deployment_id) 
-        InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.stubs(:delete_deployment_command_tracking_file).returns(true)
-        InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.stubs(:create_ongoing_deployment_tracking_file).returns(true)
       end
 
       should 'call PollHostCommand with the current host name' do
@@ -418,7 +410,8 @@ class CommandPollerTest < InstanceAgentTestCase
 
       should 'allow exceptions from execute_command to propagate to caller' do
         @executor.expects(:execute_command).
-          raises("some error") 
+          raises("some error")
+
         @deploy_control_client.expects(:put_host_command_complete).
           with(:command_status => "Failed",
                :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_error(RuntimeError.new("some error"))},

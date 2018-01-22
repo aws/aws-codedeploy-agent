@@ -97,9 +97,7 @@ module InstanceAgent
             raise 'Exactly one of S3Revision, GitHubRevision, or LocalRevision must be specified'
           end
         end
-        # Decrypts the envelope /deployment specs
-        # Params:
-        # envelope: deployment specification thats to be cheked and decrypted
+
         def self.parse(envelope)
           raise 'Provided deployment spec was nil' if envelope.nil?
 
