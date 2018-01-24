@@ -77,7 +77,7 @@ To use a HTTP proxy, specify --proxy followed by the proxy server
 defined by http://hostname:port
 
 This install script needs Ruby version 2.x installed as a prerequisite.
-Currently recommanded Ruby versions are 2.0.0, 2.1.8, 2.2.4 and 2.3.0, and 2.4.0.
+Currently recommanded Ruby versions are 2.0.0, 2.1.8, 2.2.4, 2.3, 2.4, and 2.5.
 If multiple Ruby versions are installed, the default ruby version will be used.
 If the default ruby version does not satisfy reqirement, the newest version will be used.
 If you do not have a supported Ruby version installed, please install one of them first.
@@ -86,14 +86,14 @@ EOF
   end
 
   def supported_ruby_versions
-    ['2.4', '2.3', '2.2', '2.1', '2.0']
+    ['2.5', '2.4', '2.3', '2.2', '2.1', '2.0']
   end
 
   # check ruby version, only version 2.x works
   def check_ruby_version_and_symlink
     @log.info("Starting Ruby version check.")
     actual_ruby_version = RUBY_VERSION.split('.').map{|s|s.to_i}[0,2]
-    
+
     supported_ruby_versions.each do |version|
       if ((actual_ruby_version <=> version.split('.').map{|s|s.to_i}) == 0)
         return File.join(RbConfig::CONFIG["bindir"], RbConfig::CONFIG["RUBY_INSTALL_NAME"] + RbConfig::CONFIG["EXEEXT"])
@@ -109,13 +109,13 @@ EOF
       end
     end
 
-    unsupported_ruby_version_error    
+    unsupported_ruby_version_error
     exit(1)
   end
 
   def unsupported_ruby_version_error
     @log.error("Current running Ruby version for "+ENV['USER']+" is "+RUBY_VERSION+", but Ruby version 2.x needs to be installed.")
-    @log.error('If you already have the proper Ruby version installed, please either create a symlink to /usr/bin/ruby2.x,') 
+    @log.error('If you already have the proper Ruby version installed, please either create a symlink to /usr/bin/ruby2.x,')
     @log.error( "or run this install script with right interpreter. Otherwise please install Ruby 2.x for "+ENV['USER']+" user.")
     @log.error('You can get more information by running the script with --help option.')
   end
@@ -163,7 +163,7 @@ EOF
     # change interpreter when symlink /usr/bin/ruby2.x exists, but running with non-supported ruby version
     actual_ruby_version = RUBY_VERSION.split('.').map{|s|s.to_i}
     left_bound = '2.0.0'.split('.').map{|s|s.to_i}
-    right_bound = '2.4.1'.split('.').map{|s|s.to_i}
+    right_bound = '2.5.0'.split('.').map{|s|s.to_i}
     if (actual_ruby_version <=> left_bound) < 0
       if(!@reexeced)
         @log.info("The current Ruby version is not 2.x! Restarting the installer with #{ruby_interpreter_path}")
