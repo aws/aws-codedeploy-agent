@@ -58,7 +58,7 @@ class InstanceAgentService < Daemon
     log(:info, 'stopping the agent')
     @polling_mutex.synchronize do
       @runner.graceful_shutdown
-      log(:info, 'command execution threads shutdown, agent exiting now')
+      log(:info, 'agent exiting now')
     end
   end
   

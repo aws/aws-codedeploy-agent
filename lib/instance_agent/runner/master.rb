@@ -28,6 +28,8 @@ module InstanceAgent
         File.join(ProcessManager::Config.config[:pid_dir], "#{ProcessManager::Config.config[:program_name]}.pid")
       end
 
+      # Stops the master after recieving the kill signal
+      # is overriden from ProcessManager::Daemon::Master
       def stop
         if (pid = self.class.find_pid)
           puts "Stopping #{description(pid)}"

@@ -89,13 +89,13 @@ module InstanceAgent
         end
 
         def graceful_shutdown
-          log(:info, "Gracefully shutting down command execution threads now, will wait up to #{WAIT_FOR_ALL_THREADS_TIMEOUT_SECONDS} seconds")
+          log(:info, "Gracefully shutting down agent child threads now, will wait up to #{WAIT_FOR_ALL_THREADS_TIMEOUT_SECONDS} seconds")
           # tell the pool to shutdown in an orderly fashion, allowing in progress work to complete
           @thread_pool.shutdown
           # now wait for all work to complete, wait till the timeout value
           # TODO: Make the timeout configurable in the agent configuration
           @thread_pool.wait_for_termination WAIT_FOR_ALL_THREADS_TIMEOUT_SECONDS
-          log(:info, 'All command execution threads have been shut down')
+          log(:info, 'All agent child threads have been shut down')
         end
 
         def next_command
