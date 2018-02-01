@@ -23,8 +23,6 @@ module InstanceAgent
             "AfterAllowTraffic"=>["AfterAllowTraffic"],
             "ValidateService"=>["ValidateService"]}
 
-        WAIT_FOR_ALL_THREADS_TIMEOUT_SECONDS = 60 * 60 # One hour timeout in seconds
-
         def initialize
           test_profile = InstanceAgent::Config.config[:codedeploy_test_profile]
           unless ["beta", "gamma"].include?(test_profile.downcase)
@@ -89,12 +87,12 @@ module InstanceAgent
         end
 
         def graceful_shutdown
-          log(:info, "Gracefully shutting down agent child threads now, will wait up to #{WAIT_FOR_ALL_THREADS_TIMEOUT_SECONDS} seconds")
+          log(:info, "Gracefully shutting down agent child threads now, will wait up to #{ProcessManager::Config.config[:kill_agent_max_wait_time_seconds]} seconds")
           # tell the pool to shutdown in an orderly fashion, allowing in progress work to complete
           @thread_pool.shutdown
           # now wait for all work to complete, wait till the timeout value
           # TODO: Make the timeout configurable in the agent configuration
-          @thread_pool.wait_for_termination WAIT_FOR_ALL_THREADS_TIMEOUT_SECONDS
+          @thread_pool.wait_for_termination ProcessManager::Config.config[:kill_agent_max_wait_time_seconds]
           log(:info, 'All agent child threads have been shut down')
         end
 

@@ -6,8 +6,6 @@ module InstanceAgent
   module Runner
     class Master < ProcessManager::Daemon::Master
     
-      ChildTerminationMaxWaitTime = 80
-      
       def self.description(pid = $$)
         "master #{pid}"
       end
@@ -40,7 +38,7 @@ module InstanceAgent
           end
           
           begin
-            Timeout.timeout(ChildTerminationMaxWaitTime) do  
+            Timeout.timeout(ProcessManager::Config.config[:kill_agent_max_wait_time_seconds]) do  
               loop do
                 begin
                   Process.kill(0, pid)
@@ -68,7 +66,7 @@ module InstanceAgent
         end
     
         begin
-          Timeout.timeout(ChildTerminationMaxWaitTime) do
+          Timeout.timeout(ProcessManager::Config.config[:kill_agent_max_wait_time_seconds]) do
             children.each do |index, child_pid|
               begin
                 Process.wait(child_pid)

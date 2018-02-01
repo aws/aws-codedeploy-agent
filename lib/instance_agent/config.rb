@@ -31,6 +31,7 @@ module InstanceAgent
         :wait_between_runs => 30,
         :wait_after_error => 30,
         :codedeploy_test_profile => 'prod',
+        :kill_agent_max_wait_time_seconds => 7200,
         :on_premises_config_file => '/etc/codedeploy-agent/conf/codedeploy.onpremises.yml',
         :proxy_uri => nil,
         :enable_deployments_log => true
