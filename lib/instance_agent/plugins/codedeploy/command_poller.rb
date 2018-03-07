@@ -67,22 +67,14 @@ module InstanceAgent
 
         def perform
           return unless command = next_command
-          return unless acknowledge_command(command)
 
+          #Commands will be executed on a separate thread.
           begin
-            spec = get_deployment_specification(command)
-            #Commands will be executed on a separate thread.
             @thread_pool.post {
-              process_command(command, spec)
+              acknowledge_and_process_command(command)
             }
-            #Commands that throw an exception will be considered to have failed
-          rescue Exception => e
-            log(:debug, 'Calling PutHostCommandComplete: "Code Error" ')
-            @deploy_control_client.put_host_command_complete(
-            :command_status => "Failed",
-            :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_error(e)},
-            :host_command_identifier => command.host_command_identifier)
-            raise e
+          rescue Concurrent::RejectedExecutionError
+            log(:warn, 'Graceful shutdown initiated, skipping any further polling until agent restarts')
           end
         end
 
@@ -96,44 +88,21 @@ module InstanceAgent
           log(:info, 'All agent child threads have been shut down')
         end
 
-        def next_command
-          log(:debug, "Calling PollHostCommand:")
-          output = @deploy_control_client.poll_host_command(:host_identifier => @host_identifier)
-          command = output.host_command
-          if command.nil?
-            log(:debug, "PollHostCommand: Host Command =  nil")
-          else
-            log(:debug, "PollHostCommand: "  +
-            "Host Identifier = #{command.host_identifier}; "  +
-            "Host Command Identifier = #{command.host_command_identifier}; "  +
-            "Deployment Execution ID = #{command.deployment_execution_id}; "  +
-            "Command Name = #{command.command_name}")
-            raise "Host Identifier mismatch: #{@host_identifier} != #{command.host_identifier}" unless @host_identifier.include? command.host_identifier
-            raise "Command Name missing" if command.command_name.nil? || command.command_name.empty?
+        def acknowledge_and_process_command(command)
+          return unless acknowledge_command(command)
+
+          begin
+            spec = get_deployment_specification(command)
+            process_command(command, spec)
+            #Commands that throw an exception will be considered to have failed
+          rescue Exception => e
+            log(:warn, 'Calling PutHostCommandComplete: "Code Error" ')
+            @deploy_control_client.put_host_command_complete(
+            :command_status => "Failed",
+            :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_error(e)},
+            :host_command_identifier => command.host_command_identifier)
+            raise e
           end
-          command
-        end
-
-        def acknowledge_command(command)
-          log(:debug, "Calling PutHostCommandAcknowledgement:")
-          output =  @deploy_control_client.put_host_command_acknowledgement(
-          :diagnostics => nil,
-          :host_command_identifier => command.host_command_identifier)
-          status = output.command_status
-          log(:debug, "Command Status = #{status}")
-          true unless status == "Succeeded" || status == "Failed"
-        end
-
-        def get_deployment_specification(command)
-          log(:debug, "Calling GetDeploymentSpecification:")
-          output =  @deploy_control_client.get_deployment_specification(
-          :deployment_execution_id => command.deployment_execution_id,
-          :host_identifier => @host_identifier)
-          log(:debug, "GetDeploymentSpecification: " +
-          "Deployment System = #{output.deployment_system}")
-          raise "Deployment System mismatch: #{@plugin.deployment_system} != #{output.deployment_system}" unless @plugin.deployment_system == output.deployment_system
-          raise "Deployment Specification missing" if output.deployment_specification.nil?
-          output.deployment_specification.generic_envelope
         end
 
         def process_command(command, spec)
@@ -165,6 +134,49 @@ module InstanceAgent
             log(:error, "Error during perform: #{e.class} - #{e.message} - #{e.backtrace.join("\n")}")
             raise e
           end
+        end
+
+        private
+        def next_command
+          log(:debug, "Calling PollHostCommand:")
+          output = @deploy_control_client.poll_host_command(:host_identifier => @host_identifier)
+          command = output.host_command
+          if command.nil?
+            log(:debug, "PollHostCommand: Host Command =  nil")
+          else
+            log(:debug, "PollHostCommand: "  +
+            "Host Identifier = #{command.host_identifier}; "  +
+            "Host Command Identifier = #{command.host_command_identifier}; "  +
+            "Deployment Execution ID = #{command.deployment_execution_id}; "  +
+            "Command Name = #{command.command_name}")
+            raise "Host Identifier mismatch: #{@host_identifier} != #{command.host_identifier}" unless @host_identifier.include? command.host_identifier
+            raise "Command Name missing" if command.command_name.nil? || command.command_name.empty?
+          end
+          command
+        end
+
+        private
+        def acknowledge_command(command)
+          log(:debug, "Calling PutHostCommandAcknowledgement:")
+          output =  @deploy_control_client.put_host_command_acknowledgement(
+          :diagnostics => nil,
+          :host_command_identifier => command.host_command_identifier)
+          status = output.command_status
+          log(:debug, "Command Status = #{status}")
+          true unless status == "Succeeded" || status == "Failed"
+        end
+
+        private
+        def get_deployment_specification(command)
+          log(:debug, "Calling GetDeploymentSpecification:")
+          output =  @deploy_control_client.get_deployment_specification(
+          :deployment_execution_id => command.deployment_execution_id,
+          :host_identifier => @host_identifier)
+          log(:debug, "GetDeploymentSpecification: " +
+          "Deployment System = #{output.deployment_system}")
+          raise "Deployment System mismatch: #{@plugin.deployment_system} != #{output.deployment_system}" unless @plugin.deployment_system == output.deployment_system
+          raise "Deployment Specification missing" if output.deployment_specification.nil?
+          output.deployment_specification.generic_envelope
         end
 
         private

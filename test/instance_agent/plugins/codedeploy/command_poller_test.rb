@@ -116,7 +116,6 @@ class CommandPollerTest < InstanceAgentTestCase
         @deploy_control_client.expects(:poll_host_command).
           with(:host_identifier => @host_identifier).
           returns(@poll_host_command_output)
-        Thread.expects(:new).returns(nil)
 
         @poller.perform
       end
@@ -179,7 +178,6 @@ class CommandPollerTest < InstanceAgentTestCase
         @deploy_control_client.expects(:poll_host_command).
           with(:host_identifier => @host_identifier).
           returns(poll_host_command_output)
-        Thread.expects(:new).returns(nil)
 
         @poller.perform
       end
@@ -254,9 +252,8 @@ class CommandPollerTest < InstanceAgentTestCase
           with(:diagnostics => nil,
                :host_command_identifier => @command.host_command_identifier).
           returns(@poll_host_command_acknowledgement_output)
-        Thread.expects(:new).returns(nil)
 
-        @poller.perform
+        @poller.acknowledge_and_process_command(@command)
       end
 
       should 'return when Succeeded command status is given by PollHostCommandAcknowledgement' do
@@ -272,7 +269,7 @@ class CommandPollerTest < InstanceAgentTestCase
         @deploy_control_client.expects(:put_host_command_complete).never.
           when(@put_host_command_complete_state.is('never'))
 
-        @poller.perform
+        @poller.acknowledge_and_process_command(@command)
       end
 
       should 'return when Failed command status is given by PollHostCommandAcknowledgement' do
@@ -288,7 +285,7 @@ class CommandPollerTest < InstanceAgentTestCase
         @deploy_control_client.expects(:put_host_command_complete).never.
           when(@put_host_command_complete_state.is('never'))
 
-        @poller.perform
+        @poller.acknowledge_and_process_command(@command)
       end
 
       should 'call GetDeploymentSpecification with the host ID and execution ID of the command' do
@@ -296,9 +293,8 @@ class CommandPollerTest < InstanceAgentTestCase
           with(:deployment_execution_id => @command.deployment_execution_id,
                :host_identifier => @host_identifier).
           returns(@get_deploy_specification_output)
-        Thread.expects(:new).returns(nil)
 
-        @poller.perform
+        @poller.acknowledge_and_process_command(@command)
       end
 
       should 'allow exceptions from GetDeploymentSpecification to propagate to caller' do
@@ -306,7 +302,7 @@ class CommandPollerTest < InstanceAgentTestCase
           raises("some error")
 
         assert_raise "some error" do
-          @poller.perform
+          @poller.acknowledge_and_process_command(@command)
         end
       end
 
@@ -319,11 +315,9 @@ class CommandPollerTest < InstanceAgentTestCase
 
         should 'not dispatch the command to the command executor' do
           @execute_command_state.become('never')
-          Thread.expects(:new).never.
-            when(@execute_command_state.is('never'))
 
           assert_raise do
-            @poller.perform
+            @poller.acknowledge_and_process_command(@command)
           end
         end
 
@@ -335,7 +329,7 @@ class CommandPollerTest < InstanceAgentTestCase
                  :host_command_identifier => @command.host_command_identifier)
 
           assert_raise do
-            @poller.perform
+            @poller.acknowledge_and_process_command(@command)
           end
         end
 
@@ -350,11 +344,9 @@ class CommandPollerTest < InstanceAgentTestCase
 
         should 'not dispatch the command to the command executor' do
           @execute_command_state.become('never')
-          Thread.expects(:new).never.
-            when(@execute_command_state.is('never'))
 
           assert_raise do
-            @poller.perform
+            @poller.acknowledge_and_process_command(@command)
           end
         end
 
@@ -365,7 +357,7 @@ class CommandPollerTest < InstanceAgentTestCase
                  :host_command_identifier => @command.host_command_identifier)
 
           assert_raise do
-            @poller.perform
+            @poller.acknowledge_and_process_command(@command)
           end
         end
 
@@ -380,11 +372,9 @@ class CommandPollerTest < InstanceAgentTestCase
 
         should 'not dispatch the command to the command executor' do
           @execute_command_state.become('never')
-          Thread.expects(:new).never.
-            when(@execute_command_state.is('never'))
 
           assert_raise do
-            @poller.perform
+            @poller.acknowledge_and_process_command(@command)
           end
         end
 
@@ -395,7 +385,7 @@ class CommandPollerTest < InstanceAgentTestCase
                  :host_command_identifier => @command.host_command_identifier)
 
           assert_raise do
-            @poller.perform
+            @poller.acknowledge_and_process_command(@command)
           end
         end
 
@@ -462,6 +452,14 @@ class CommandPollerTest < InstanceAgentTestCase
         @poller.perform
       end
 
+      should 'not try to enter thread if rejected execution error is raised (happens after shutdown initiated)' do
+        Thread.expects(:new).never
+        @mock_thread_pool_executor = mock()
+        Concurrent::ThreadPoolExecutor.expects(:new).returns(@mock_thread_pool_executor)
+        @mock_thread_pool_executor.stubs(:post).raises(Concurrent::RejectedExecutionError.new('RejectedExecutionError'))
+
+        poller = InstanceAgent::Plugins::CodeDeployPlugin::CommandPoller.new
+      end
     end
 
   end
