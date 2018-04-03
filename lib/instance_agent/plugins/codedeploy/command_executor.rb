@@ -454,7 +454,8 @@ module InstanceAgent
 
           # Absolute path takes care of relative root directories
           directories = oldest_extra.map{ |f| File.absolute_path(f) }
-          FileUtils.rm_rf(directories)
+          log(:debug,"Delete Files #{directories}" )
+          InstanceAgent::Platform.util.delete_dirs_command(directories)
 
         end
 
