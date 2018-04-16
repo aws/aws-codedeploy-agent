@@ -56,7 +56,7 @@ def tar_app_bundle(temp_directory_to_create_bundle)
   #Unfortunately Minitar will keep pack all the file paths as given, so unless you change directories into the location where you want to pack the files the bundle won't have the correct files and folders
   Dir.chdir @bundle_original_directory_location
 
-  File.open(tar_file_name, 'wb') { |tar| Minitar.pack(directories_and_files_inside(@bundle_original_directory_location), tar) }
+  File.open(tar_file_name, 'wb') { |tar| Minitar.pack(InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.directories_and_files_inside(@bundle_original_directory_location), tar) }
 
   Dir.chdir old_direcory
   tar_file_name
@@ -98,7 +98,7 @@ def tgz_app_bundle(temp_directory_to_create_bundle)
 
   File.open(tgz_file_name, 'wb') do |file|
     Zlib::GzipWriter.wrap(file) do |gz|
-      Minitar.pack(directories_and_files_inside(@bundle_original_directory_location), gz)
+      Minitar.pack(InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.directories_and_files_inside(@bundle_original_directory_location), gz)
     end
   end
 
@@ -145,7 +145,7 @@ Then(/^the local deployment command should fail$/) do
 end
 
 Then(/^the expected files should have have been locally deployed to my host(| twice)$/) do |maybe_twice|
-  deployment_ids = directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{LOCAL_DEPLOYMENT_GROUP_ID}")
+  deployment_ids = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{LOCAL_DEPLOYMENT_GROUP_ID}")
   step "the expected files in directory #{bundle_original_directory_location}/scripts should have have been deployed#{maybe_twice} to my host during deployment with deployment group id #{LOCAL_DEPLOYMENT_GROUP_ID} and deployment ids #{deployment_ids.join(' ')}"
 end
 

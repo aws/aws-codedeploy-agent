@@ -1,8 +1,9 @@
 require 'socket'
 require 'concurrent'
-
+require 'pathname'
 require 'instance_metadata'
 require 'instance_agent/agent/base'
+require_relative 'deployment_command_tracker'
 
 module InstanceAgent
   module Plugins
@@ -83,7 +84,6 @@ module InstanceAgent
           # tell the pool to shutdown in an orderly fashion, allowing in progress work to complete
           @thread_pool.shutdown
           # now wait for all work to complete, wait till the timeout value
-          # TODO: Make the timeout configurable in the agent configuration
           @thread_pool.wait_for_termination ProcessManager::Config.config[:kill_agent_max_wait_time_seconds]
           log(:info, 'All agent child threads have been shut down')
         end
@@ -104,13 +104,15 @@ module InstanceAgent
             raise e
           end
         end
-
+        
         def process_command(command, spec)
           log(:debug, "Calling #{@plugin.to_s}.execute_command")
           begin
+            deployment_id = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(spec).deployment_id
+            DeploymentCommandTracker.create_ongoing_deployment_tracking_file(deployment_id)
             #Successful commands will complete without raising an exception
             @plugin.execute_command(command, spec)
-
+            
             log(:debug, 'Calling PutHostCommandComplete: "Succeeded"')
             @deploy_control_client.put_host_command_complete(
             :command_status => 'Succeeded',
@@ -133,9 +135,11 @@ module InstanceAgent
             :host_command_identifier => command.host_command_identifier)
             log(:error, "Error during perform: #{e.class} - #{e.message} - #{e.backtrace.join("\n")}")
             raise e
+          ensure 
+            DeploymentCommandTracker.delete_deployment_command_tracking_file(deployment_id)  
           end
         end
-
+        
         private
         def next_command
           log(:debug, "Calling PollHostCommand:")
