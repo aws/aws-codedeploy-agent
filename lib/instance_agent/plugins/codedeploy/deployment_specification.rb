@@ -106,8 +106,17 @@ module InstanceAgent
           case envelope.format
           when "PKCS7/JSON"
             pkcs7 = OpenSSL::PKCS7.new(envelope.payload)
-            pkcs7.verify([], @cert_store, nil, OpenSSL::PKCS7::NOVERIFY)
-            # NOTE: the pkcs7.data field is only populated AFTER pkcs7.verify() is called!
+
+            # The PKCS7_NOCHAIN flag tells OpenSSL to ignore any PKCS7 CA chain that might be attached
+            # to the message directly and use the certificates from provided one only for validating the.
+            # signer's certificate.
+            #
+            # However, it will allow use the PKCS7 signer certificate provided to validate the signature.
+            #
+            # http://www.openssl.org/docs/crypto/PKCS7_verify.html#VERIFY_PROCESS
+            #
+            # The ruby wrapper returns true if OpenSSL returns 1
+            raise "Validation of PKCS7 signed message failed" unless pkcs7.verify([], @cert_store, nil, OpenSSL::PKCS7::NOCHAIN)
             parse_deployment_spec_data(pkcs7.data)
           when "TEXT/JSON"
             raise "Unsupported DeploymentSpecification format: #{envelope.format}" unless AWS::CodeDeploy::Local::Deployer.running_as_developer_utility?
