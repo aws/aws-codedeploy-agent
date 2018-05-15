@@ -1,5 +1,6 @@
 # encoding: UTF-8
 require 'process_manager/child'
+require 'thread'
 
 module InstanceAgent
   module Runner
@@ -37,6 +38,28 @@ module InstanceAgent
         with_error_handling do
           runner.run
         end
+      end
+      
+      # Stops the master after recieving the kill signal
+      # is overriden from ProcessManager::Daemon::Child 
+      def stop
+        @runner.graceful_shutdown
+        ProcessManager::Log.info('agent exiting now')
+        super
+      end
+
+      # Catches the trap signals and does a default or custom action 
+      # is overriden from ProcessManager::Daemon::Child
+      def trap_signals
+        [:INT, :QUIT, :TERM].each do |sig|
+          trap(sig) do
+            ProcessManager::Log.info "#{description}: Received #{sig} - setting internal shutting down flag and possibly finishing last run"
+            stop_thread = Thread.new {stop}
+            stop_thread.join
+          end
+        end
+        # make sure we do not handle children like the master process
+        trap(:CHLD, 'DEFAULT')
       end
 
       def description

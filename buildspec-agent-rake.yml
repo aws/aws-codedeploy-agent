@@ -1,0 +1,25 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo Installing bundler
+      - gem install bundler
+      - echo Using bundler to install remaining gems
+      - bundle install
+  pre_build:
+    commands:
+      - echo Build started on `date`
+      - echo Running rake  - unit tests
+      - rake
+  build:
+    commands:
+      - echo Build completed on `date`
+      - echo Running rake test-integration - integ tests
+      - rake test-integration
+  post_build:
+    commands:
+      - echo $CODEBUILD_SOURCE_VERSION > codebuild_source_commit_id
+artifacts:
+  files:
+    - codebuild_source_commit_id

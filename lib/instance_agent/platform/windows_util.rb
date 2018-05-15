@@ -32,10 +32,12 @@ module InstanceAgent
     end
 
     def self.extract_tar(bundle_file, dst)
+      log(:warn, "Bundle format 'tar' not supported on Windows platforms. Bundle unpack may fail.")
       Minitar.unpack(bundle_file, dst)
     end
 
     def self.extract_tgz(bundle_file, dst)
+      log(:warn, "Bundle format 'tgz' not supported on Windows platforms. Bundle unpack may fail.")
       compressed = Zlib::GzipReader.open(bundle_file)
       Minitar.unpack(compressed, dst)
     end
@@ -51,7 +53,33 @@ module InstanceAgent
     def self.fallback_version_file
         File.join(ENV['PROGRAMDATA'], "Amazon/CodeDeploy")
     end
-
+  
+     # shelling out the rm folder command to native os in this case Window.
+    def self.delete_dirs_command(dirs_to_delete)
+      log(:debug,"Dirs to delete: #{dirs_to_delete}");
+      for dir in dirs_to_delete do
+        log(:debug,"Deleting dir: #{dir}");
+        delete_folder(dir);  
+      end
+    end
+    
+    private 
+    def self.delete_folder (dir)
+      if dir != nil && dir != "/"
+        output = `rd /s /q "#{dir}" 2>&1`
+        exit_status = $?.exitstatus
+        log(:debug, "Command status: #{$?}")
+        log(:debug, "Command output: #{output}")
+        unless exit_status == 0
+          msg = "Error deleting directories: #{exit_status}"
+          log(:error, msg)
+          raise msg
+        end 
+      else 
+        log(:debug, "Empty directory or a wrong directory passed,#{dir}");
+      end
+    end  
+  
     private
     def self.log(severity, message)
       raise ArgumentError, "Unknown severity #{severity.inspect}" unless InstanceAgent::Log::SEVERITIES.include?(severity.to_s)

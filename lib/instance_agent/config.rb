@@ -23,6 +23,7 @@ module InstanceAgent
         :pid_dir => nil,
         :shared_dir => nil,
         :user => nil,
+        :ongoing_deployment_tracking => 'ongoing-deployment',
         :children => 1,
         :http_read_timeout => 80,
         :instance_service_region => nil,
@@ -31,6 +32,7 @@ module InstanceAgent
         :wait_between_runs => 30,
         :wait_after_error => 30,
         :codedeploy_test_profile => 'prod',
+        :kill_agent_max_wait_time_seconds => 7200,
         :on_premises_config_file => '/etc/codedeploy-agent/conf/codedeploy.onpremises.yml',
         :proxy_uri => nil,
         :enable_deployments_log => true

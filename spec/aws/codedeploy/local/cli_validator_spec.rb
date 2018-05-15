@@ -208,8 +208,24 @@ describe AWS::CodeDeploy::Local::CLIValidator do
         allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
         allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
         expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
-        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "The only events that can be specified before Install are BeforeBlockTraffic,AfterBlockTraffic,ApplicationStop,DownloadBundle. Please fix the order of your specified events: #{args['--events']}")
+        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "The only events that can be specified before Install are BeforeBlockTraffic,AfterBlockTraffic,ApplicationStop,DownloadBundle,BeforeInstall. Please fix the order of your specified events: #{args['--events']}")
       end
+    end
+
+    context 'when BeforeInstall event specified before Install' do
+      let(:args) do
+        {"--bundle-location"=>FAKE_DIRECTORY,
+         "--type"=>'directory',
+         '--events'=>'BeforeInstall,Install'
+        }
+      end
+
+      it 'returns the same arguments' do
+        allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
+        allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
+        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
+        expect(validator.validate(args)).to equal(args)
+      end 
     end
   end
 end
