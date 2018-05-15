@@ -46,9 +46,6 @@ Before("@codedeploy-agent") do
   @working_directory = Dir.mktmpdir
   configure_local_agent(@working_directory)
 
-  #Reset aws credentials to default location
-  Aws.config[:credentials] = Aws::SharedCredentials.new.credentials
-
   #instantiate these clients first so they use user's aws creds instead of assumed role creds
   @codedeploy_client = Aws::CodeDeploy::Client.new
   @iam_client = Aws::IAM::Client.new
@@ -60,8 +57,6 @@ def configure_local_agent(working_directory)
   InstanceAgent::Log.init(File.join(working_directory, 'codedeploy-agent.log'))
   InstanceAgent::Config.init
   InstanceAgent::Platform.util = StepConstants::IS_WINDOWS ? InstanceAgent::WindowsUtil : InstanceAgent::LinuxUtil
-
-  if StepConstants::IS_WINDOWS then configure_windows_certificate end
   InstanceAgent::Config.config[:on_premises_config_file] = "#{working_directory}/codedeploy.onpremises.yml"
 
   configuration_contents = <<-CONFIG
@@ -82,13 +77,6 @@ def configure_local_agent(working_directory)
   File.open(InstanceAgent::Config.config[:config_file], 'w') { |file| file.write(configuration_contents) }
 
   InstanceAgent::Config.load_config
-end
-
-def configure_windows_certificate
-  cert_dir = File.expand_path(File.join(File.dirname(__FILE__), '..\certs'))
-  Aws.config[:ssl_ca_bundle] = File.join(cert_dir, 'windows-ca-bundle.crt')
-  ENV['AWS_SSL_CA_DIRECTORY'] = File.join(cert_dir, 'windows-ca-bundle.crt')
-  ENV['SSL_CERT_FILE'] = File.join(cert_dir, 'windows-ca-bundle.crt')
 end
 
 After("@codedeploy-agent") do
@@ -234,12 +222,20 @@ def create_instance_role
   rescue Aws::IAM::Errors::EntityAlreadyExists
     #Using the existing role
   end
-  eventually do
+
+  instance_role_arn = eventually do
     instance_role = @iam_client.get_role({:role_name => INSTANCE_ROLE_NAME}).role
     expect(instance_role).not_to be_nil
     expect(instance_role.assume_role_policy_document).not_to be_nil
     instance_role.arn
   end
+
+  @iam_client.update_assume_role_policy({
+    policy_document: instance_role_policy,
+    role_name: INSTANCE_ROLE_NAME,
+  })
+
+  instance_role_arn
 end
 
 def instance_role_policy
