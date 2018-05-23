@@ -132,7 +132,7 @@ EOF
   end
 
   def parse_args()
-    if (ARGV.length > 4)
+    if (ARGV.length > 5)
       usage
       @log.error('Too many arguments.')
       exit(1)
