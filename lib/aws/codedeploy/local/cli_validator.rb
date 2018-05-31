@@ -24,7 +24,7 @@ module AWS
           end
 
           if (uri.scheme == 'http')
-            raise ValidationError.new("location #{location} cannot be http, only encyrpted (https) url endpoints supported")
+            raise ValidationError.new("location #{location} cannot be http, only encrypted (https) url endpoints supported")
           end
 
           if (uri.scheme != 'https' && uri.scheme != 's3' && !File.exists?(location))
