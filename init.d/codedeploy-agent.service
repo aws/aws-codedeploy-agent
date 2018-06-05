@@ -8,6 +8,7 @@ ExecStart=/bin/bash -a -c '[ -f /etc/profile ] && source /etc/profile; /opt/code
 ExecStop=/opt/codedeploy-agent/bin/codedeploy-agent stop
 RemainAfterExit=no
 Restart=on-failure
+KillMode=process
 
 
 # Uncomment the following line to run the agent as the codedeploy user
