@@ -132,9 +132,9 @@ module AWS
             :format => "TEXT/JSON",
             :payload => {
               "ApplicationId" => location,
-              "ApplicationName" => deployment_group_name || location,
+              "ApplicationName" => application_name || location,
               "DeploymentGroupId" => deployment_group_id,
-              "DeploymentGroupName" => application_name || "LocalFleet",
+              "DeploymentGroupName" => deployment_group_name || "LocalFleet",
               "DeploymentId" => @deployment_id,
               "AgentActionOverrides" => {"AgentOverrides" => {"FileExistsBehavior" => file_exists_behavior}},
               "Revision" => revision(location, bundle_type),
