@@ -50,6 +50,8 @@ Synopsis
   [--type <value>]
   [--file-exists-behavior <value>]
   [--deployment-group <value>]
+  [--deployment-group-name <value>]
+  [--application-name <value>]
   [--events <value>]
   [--agent-configuration-file <value>]
 
@@ -68,6 +70,12 @@ Options
   -g, --deployment-group <value>
   The path to the folder that is the target location for the content to be deployed. If you do not specify a folder, the tool creates one named default-local-deployment-group inside your deployment root directory. For each local deployment you create, the tool creates a subdirectory inside this folder with names like d-98761234-local. Your configuration shows it would be placed in #{InstanceAgent::Config.config[:root_dir]}/<deployment-group>. You can use the :root_dir: variable in an agent configuration file to configure a custom deployment root folder. If you want to deploy to a location previously deployed to by AWS CodeDeploy, you must specify its deployment group ID, which you can look up by using the AWS CLI. [default: #{AWS::CodeDeploy::Local::Deployer::DEFAULT_DEPLOYMENT_GROUP_ID}].
   See also: "get-deployment-group” in the AWS CLI Reference for AWS CodeDeploy.
+
+  -d, --deployment-group-name <value>
+  Indicates the deployment group name to be used during the CodeDeploy hook execution, can be accessed on the DEPLOYMENT_GROUP_NAME environment variable. If you do not specify a name, "LocalFleet" will be used.
+
+  -a, --application-name <value>
+  Indicates the application name to be used during the CodeDeploy hook execution, can be accessed on the APPLICATION_NAME environment variable. If you do not specify a name, the bundle-location will be used.
 
   -e, --events <comma-separated-values>
   A set of lifecycle event hooks you want to run, in order, instead of the events listed in the AppSpec file. Multiple hook names must be separated by commas. If you don't specify DownloadBundle and Install events in the --events list, they will run before all the event hooks you do specify. If you include DownloadBundle and Install in the --events list, they can be preceded only by events that normally run before them in AWS CodeDeploy deployments.

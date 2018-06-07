@@ -75,7 +75,7 @@ module AWS
           deployment_group_id = args['--deployment-group']
           events = self.class.events_from_comma_separated_list(args['--events'])
 
-          spec = build_spec(args['--bundle-location'], args['--type'], deployment_group_id, args['--file-exists-behavior'], all_possible_lifecycle_events(events))
+          spec = build_spec(args['--bundle-location'], args['--type'], deployment_group_id, args['--file-exists-behavior'], all_possible_lifecycle_events(events), args['--deployment-group-name'], args['--application-name'])
 
           command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => hook_mapping(events))
           all_lifecycle_events_to_execute = add_download_bundle_and_install_events(ordered_lifecycle_events(events))
@@ -125,16 +125,16 @@ module AWS
           Hash[all_events_plus_default_events_minus_required_events.map{|h|[h,[h]]}]
         end
 
-        def build_spec(location, bundle_type, deployment_group_id, file_exists_behavior, all_possible_lifecycle_events)
+        def build_spec(location, bundle_type, deployment_group_id, file_exists_behavior, all_possible_lifecycle_events, deployment_group_name, application_name)
           @deployment_id = self.class.random_deployment_id
           puts "Starting to execute deployment from within folder #{deployment_folder(deployment_group_id, @deployment_id)}"
           OpenStruct.new({
             :format => "TEXT/JSON",
             :payload => {
               "ApplicationId" => location,
-              "ApplicationName" => location,
+              "ApplicationName" => deployment_group_name || location,
               "DeploymentGroupId" => deployment_group_id,
-              "DeploymentGroupName" => "LocalFleet",
+              "DeploymentGroupName" => application_name || "LocalFleet",
               "DeploymentId" => @deployment_id,
               "AgentActionOverrides" => {"AgentOverrides" => {"FileExistsBehavior" => file_exists_behavior}},
               "Revision" => revision(location, bundle_type),
