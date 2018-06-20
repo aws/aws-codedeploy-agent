@@ -14,6 +14,7 @@ unless defined?(InstanceAgent)
   require 'instance_agent/log'
   require 'instance_agent/platform'
   require 'instance_agent/platform/linux_util'
+  require 'instance_agent/platform/thread_joiner'
   require 'instance_agent/agent/plugin'
   require 'instance_agent/agent/base'
   require 'instance_agent/runner/master'
