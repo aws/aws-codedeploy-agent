@@ -199,6 +199,14 @@ module InstanceAgent
         def default_app_spec(deployment_spec)
           default_app_spec_location = File.join(archive_root_dir(deployment_spec), app_spec_path)
           log(:debug, "Checking for app spec in #{default_app_spec_location}")
+          app_spec =  ApplicationSpecification::ApplicationSpecification.parse(File.read(default_app_spec_location), {
+            :application_name => deployment_spec.application_name,
+            :deployment_id => deployment_spec.deployment_id,
+            :deployment_group_name => deployment_spec.deployment_group_name,
+            :deployment_group_id => deployment_spec.deployment_group_id,
+            :deployment_root_dir => deployment_root_dir(deployment_spec),
+            :last_successful_deployment_dir => last_successful_deployment_dir(deployment_spec.deployment_group_id)
+          })
           validate_app_spec_hooks(ApplicationSpecification::ApplicationSpecification.parse(File.read(default_app_spec_location)), deployment_spec.all_possible_lifecycle_events)
         end
 
