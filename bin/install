@@ -89,6 +89,16 @@ EOF
     ['2.4', '2.3', '2.2', '2.1', '2.0']
   end
 
+  def http_connection_options
+    {
+      :ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER,
+      :redirect => true,
+      :open_timeout => 3,
+      :read_timeout => 120,
+      :proxy => @http_proxy
+    }
+  end
+
   # check ruby version, only version 2.x works
   def check_ruby_version_and_symlink
     @log.info("Starting Ruby version check.")
@@ -246,7 +256,7 @@ EOF
     retries ||= 0
     exceptions = [OpenURI::HTTPError, OpenSSL::SSL::SSLError]
     begin
-      uri.open(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy) do |s3|
+      uri.open(http_connection_options) do |s3|
          package_file.write(s3.read)
       end
     rescue *exceptions  => e
@@ -270,7 +280,7 @@ end
     begin
       require 'json'
 
-      version_string = uri.read(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy)
+      version_string = uri.read(http_connection_options)
       JSON.parse(version_string)
     rescue OpenURI::HTTPError => e
       @log.error("Could not find version file to download at '#{uri.to_s}'")
