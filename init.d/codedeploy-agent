@@ -26,14 +26,18 @@ prog="codedeploy-agent"
 # Note: You also need to chown /opt/codedeploy /var/log/aws 
 CODEDEPLOY_USER=""
 AGENT_ROOT="/opt/codedeploy-agent/"
+VENDOR_ROOT="$AGENT_ROOT/vendor"
 INSTALLER="/opt/codedeploy-agent/bin/install"
 BIN="/opt/codedeploy-agent/bin/codedeploy-agent"
+
+export GEM_PATH="$VENDOR_ROOT"
+export GEM_HOME="$VENDOR_ROOT"
 
 start() {
         echo -n $"Starting $prog:"
         cd $AGENT_ROOT
         if [ $CODEDEPLOY_USER ]; then
-          nohup sudo -i -u $CODEDEPLOY_USER $BIN start >/dev/null </dev/null 2>&1 # Try to start the server
+          nohup sudo -i -u $CODEDEPLOY_USER GEM_PATH="$VENDOR_ROOT" GEM_HOME="$VENDOR_ROOT" $BIN start >/dev/null </dev/null 2>&1 # Try to start the server
         else
           nohup $BIN start >/dev/null </dev/null 2>&1  # Try to start the server
         fi
@@ -44,7 +48,7 @@ stop() {
         echo -n $"Stopping $prog:"
         cd $AGENT_ROOT
         if [ $CODEDEPLOY_USER ]; then
-          nohup sudo -i -u $CODEDEPLOY_USER $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
+          nohup sudo -i -u $CODEDEPLOY_USER GEM_PATH="$VENDOR_ROOT" GEM_HOME="$VENDOR_ROOT" $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
         else
           nohup $BIN stop >/dev/null </dev/null 2>&1  # Try to stop the server
         fi
@@ -55,7 +59,7 @@ restart() {
         echo -n $"Restarting $prog:"
         cd $AGENT_ROOT
         if [ $CODEDEPLOY_USER ]; then
-          nohup sudo -i -u $CODEDEPLOY_USER $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
+          nohup sudo -i -u $CODEDEPLOY_USER GEM_PATH="$VENDOR_ROOT" GEM_HOME="$VENDOR_ROOT" $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
         else
           nohup $BIN restart >/dev/null </dev/null 2>&1  # Try to restart the server
         fi
@@ -65,7 +69,7 @@ restart() {
 status() {
         cd $AGENT_ROOT
         if [ $CODEDEPLOY_USER ]; then
-          sudo -i -u $CODEDEPLOY_USER $BIN status # Status of the server
+          sudo -i -u $CODEDEPLOY_USER GEM_PATH="$VENDOR_ROOT" GEM_HOME="$VENDOR_ROOT" $BIN status # Status of the server
         else
           $BIN status # Status of the server
         fi
