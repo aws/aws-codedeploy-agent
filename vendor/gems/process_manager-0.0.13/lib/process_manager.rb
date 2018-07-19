@@ -11,8 +11,6 @@ unless defined?(ProcessManager)
   require 'process_manager/child'
 
   module ProcessManager
-    VERSION = '0.0.13'
-
     def self.process_running?(pid)
       begin
         Process.kill(0, Integer(pid))
