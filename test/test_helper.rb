@@ -18,4 +18,4 @@ require 'base64'
 
 # require local test helpers. If you need a helper write,
 # keep this pattern or you'll be punished hard
-require 'instance_agent_helper'
+require_relative './helpers/instance_agent_helper'
