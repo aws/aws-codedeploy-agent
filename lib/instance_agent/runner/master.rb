@@ -1,5 +1,5 @@
 # encoding: UTF-8
-require 'process_manager/master'
+require 'process_manager'
 require 'instance_metadata'
 require 'instance_agent/plugins/codedeploy/deployment_command_tracker'
 

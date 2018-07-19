@@ -1,5 +1,5 @@
 # encoding: UTF-8
-require 'process_manager/child'
+require 'process_manager'
 require 'thread'
 
 module InstanceAgent
