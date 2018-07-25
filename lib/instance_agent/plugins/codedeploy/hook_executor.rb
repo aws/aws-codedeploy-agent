@@ -4,7 +4,7 @@ require 'json'
 require 'fileutils'
 
 require 'instance_agent/plugins/codedeploy/application_specification/application_specification'
-
+require 'instance_agent/platform/thread_joiner'
 module InstanceAgent
   module Plugins
     module CodeDeployPlugin
