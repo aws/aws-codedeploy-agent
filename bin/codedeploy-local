@@ -75,7 +75,7 @@ Options
   Indicates the deployment group name to be used during the CodeDeploy hook execution, can be accessed on the DEPLOYMENT_GROUP_NAME environment variable. If you do not specify a name, "LocalFleet" will be used.
 
   -a, --application-name <value>
-  Indicates the application name to be used during the CodeDeploy hook execution, can be accessed on the APPLICATION_NAME environment variable. If you do not specify a name, the bundle-location will be used.
+  Indicates the application name to be used during the CodeDeploy hook execution, can be accessed on the APPLICATION_NAME environment variable. If you do not specify a name, the "bundle-location" will be used.
 
   -e, --events <comma-separated-values>
   A set of lifecycle event hooks you want to run, in order, instead of the events listed in the AppSpec file. Multiple hook names must be separated by commas. If you don't specify DownloadBundle and Install events in the --events list, they will run before all the event hooks you do specify. If you include DownloadBundle and Install in the --events list, they can be preceded only by events that normally run before them in AWS CodeDeploy deployments.
