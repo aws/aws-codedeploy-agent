@@ -26,6 +26,7 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         :instance_service_port => nil,
         :wait_between_runs => 30,
         :wait_after_error => 30,
+        :time_zone => 'local',
         :codedeploy_test_profile => 'prod',
         :on_premises_config_file => '/etc/codedeploy-agent/conf/codedeploy.onpremises.yml',
         :ongoing_deployment_tracking => 'ongoing-deployment',
@@ -62,6 +63,18 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         InstanceAgent::Config.config[:children] = 2
         assert_equal 'children can only be set to 1', InstanceAgent::Config.validate_config.pop
         InstanceAgent::Config.config[:children] = 1
+        assert InstanceAgent::Config.validate_config.empty?, InstanceAgent::Config.validate_config.inspect
+      end
+
+      should 'validate the time_zone setting' do
+        InstanceAgent::Config.config[:time_zone] = nil
+        puts InstanceAgent::Config.config.inspect
+        assert_equal 'time_zone can only be set to [local|utc]', InstanceAgent::Config.validate_config.pop
+        InstanceAgent::Config.config[:time_zone] = 'invalid_time_zone'
+        assert_equal 'time_zone can only be set to [local|utc]', InstanceAgent::Config.validate_config.pop
+        InstanceAgent::Config.config[:time_zone] = 'local'
+        assert InstanceAgent::Config.validate_config.empty?, InstanceAgent::Config.validate_config.inspect
+        InstanceAgent::Config.config[:time_zone] = 'utc'
         assert InstanceAgent::Config.validate_config.empty?, InstanceAgent::Config.validate_config.inspect
       end
     end

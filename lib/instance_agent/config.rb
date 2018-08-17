@@ -3,6 +3,8 @@ require 'process_manager/config'
 
 module InstanceAgent
   class Config < ProcessManager::Config
+    VALID_TIME_ZONES = ['local', 'utc']
+
     def self.init
       @config = Config.new
       ProcessManager::Config.instance_variable_set("@config", @config)
@@ -11,6 +13,7 @@ module InstanceAgent
     def validate
       errors = super
       validate_children(errors)
+      validate_time_zone(errors)
       errors
     end
 
@@ -31,6 +34,7 @@ module InstanceAgent
         :instance_service_port => nil,
         :wait_between_runs => 30,
         :wait_after_error => 30,
+        :time_zone => 'local',
         :codedeploy_test_profile => 'prod',
         :kill_agent_max_wait_time_seconds => 7200,
         :on_premises_config_file => '/etc/codedeploy-agent/conf/codedeploy.onpremises.yml',
@@ -39,8 +43,15 @@ module InstanceAgent
       })
     end
 
+    private
+
     def validate_children(errors = [])
       errors << 'children can only be set to 1' unless config[:children] == 1
+      errors
+    end
+
+    def validate_time_zone(errors = [])
+      errors << 'time_zone can only be set to [local|utc]' unless VALID_TIME_ZONES.include?(config[:time_zone])
       errors
     end
 
