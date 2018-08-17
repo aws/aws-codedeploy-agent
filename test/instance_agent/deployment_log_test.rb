@@ -7,10 +7,6 @@ class InstanceAgentDeploymentLogTest < InstanceAgentTestCase
     @log_file = File.join(@dir, 'deployment-logs', "app-deployments.log")
   end
 
-  teardown do
-    truncate_file(@log_file)
-  end
-
   context 'The instance agent deployment log when no explicit :time_zone config option is given' do
     should 'prints log output with local time' do
       Timecop.freeze(Time.local(2008, 9, 1, 12, 0, 0)) do
