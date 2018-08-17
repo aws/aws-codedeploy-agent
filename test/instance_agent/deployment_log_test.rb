@@ -35,7 +35,7 @@ class InstanceAgentDeploymentLogTest < InstanceAgentTestCase
     end
 
     should 'prints log output with UTC ISO8601 time' do
-      Timecop.freeze(Time.local(2018, 9, 1, 14, 0, 0)) do
+      Timecop.freeze(Time.new(2018, 9, 1, 14, 0, 0, "+10:00")) do
         InstanceAgent::DeploymentLog.instance.log("Use UTC ISO8601 formatted time")
         assert_equal("[2018-09-01T04:00:00.000Z] Use UTC ISO8601 formatted time\n", `tail -n 1 #{@log_file}`)
       end
