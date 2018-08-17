@@ -5,7 +5,7 @@ class InstanceAgentDeploymentLogTest < InstanceAgentTestCase
     InstanceAgent::Config.config[:root_dir] = @dir
     InstanceAgent::Config.config[:program_name] = 'app'
     @log_file = File.join(@dir, 'deployment-logs', "app-deployments.log")
-    File.open(@log_file, 'w') { |file| file.truncate(0) }
+    truncate_file(@log_file)
   end
 
   context 'The instance agent deployment log when no explicit :time_zone config option is given' do
@@ -48,5 +48,4 @@ class InstanceAgentDeploymentLogTest < InstanceAgentTestCase
       end
     end
   end
-
 end
