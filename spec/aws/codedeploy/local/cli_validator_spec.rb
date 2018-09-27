@@ -82,7 +82,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
 
       it 'throws a ValidationError since unencrypted urls are not supported' do
-        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "location #{HTTP_URL} cannot be http, only encyrpted (https) url endpoints supported")
+        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "location #{HTTP_URL} cannot be http, only encrypted (https) url endpoints supported")
       end
     end
 
