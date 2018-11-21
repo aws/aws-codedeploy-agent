@@ -86,7 +86,7 @@ EOF
   end
 
   def supported_ruby_versions
-    ['2.5', '2.4', '2.3', '2.2', '2.1', '2.0']
+    ['2.4', '2.3', '2.2', '2.1', '2.0']
   end
 
   # check ruby version, only version 2.x works
@@ -163,7 +163,7 @@ EOF
     # change interpreter when symlink /usr/bin/ruby2.x exists, but running with non-supported ruby version
     actual_ruby_version = RUBY_VERSION.split('.').map{|s|s.to_i}
     left_bound = '2.0.0'.split('.').map{|s|s.to_i}
-    right_bound = '2.5.1'.split('.').map{|s|s.to_i}
+    right_bound = '2.4.1'.split('.').map{|s|s.to_i}
     if (actual_ruby_version <=> left_bound) < 0
       if(!@reexeced)
         @log.info("The current Ruby version is not 2.x! Restarting the installer with #{ruby_interpreter_path}")
