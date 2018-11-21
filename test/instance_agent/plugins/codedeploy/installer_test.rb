@@ -255,6 +255,93 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
 
         end # "regular files"
 
+        context "symbolic links" do
+
+          setup do
+            @app_spec
+              .stubs(:files)
+              .returns([stub(:source => "src1",
+                             :destination => "dst1")])
+
+            File.stubs(:directory?).returns(false)
+            File.stubs(:directory?).with("dst1").returns(true)
+
+            File.stubs(:exists?).returns(false)
+            File.stubs(:exists?).with("dst1").returns(true)
+
+            @command_sequence = sequence("commands")
+          end
+
+          should "generate a copy command for the source file if it is a symbolic link of a regular file" do
+            File.stubs(:directory?).with("deploy-archive-dir/src1").returns(false)
+            File.stubs(:symlink?).with("deploy-archive-dir/src1").returns(true)
+
+            @instruction_builder
+              .expects(:copy)
+              .with("deploy-archive-dir/src1", "dst1/src1")
+              .in_sequence(@command_sequence)
+
+            @installer.install(@deployment_group_id, @app_spec)
+          end
+
+          should "generate a copy command instead of a mkdir command for the source file if it is a symbolic link of a directory" do
+            File.stubs(:directory?).with("deploy-archive-dir/src1").returns(true)
+            File.stubs(:symlink?).with("deploy-archive-dir/src1").returns(true)
+
+            @instruction_builder
+              .expects(:mkdir)
+              .with("dst1/src1")
+              .never
+            @instruction_builder
+              .expects(:copy)
+              .with("deploy-archive-dir/src1", "dst1/src1")
+              .in_sequence(@command_sequence)
+
+            @installer.install(@deployment_group_id, @app_spec)
+          end
+
+          should "generate a copy command if the file inside the source directory is a symbolic link of a regular file" do
+            File.stubs(:directory?).with("deploy-archive-dir/src1").returns(true)
+            File.stubs(:symlink?).with("deploy-archive-dir/src1").returns(false)
+            Dir.stubs(:entries)
+              .with("deploy-archive-dir/src1")
+              .returns([".", "..", "foo"])
+
+            File.stubs(:directory?).with("deploy-archive-dir/src1/foo").returns(false)
+            File.stubs(:symlink?).with("deploy-archive-dir/src1/foo").returns(true)
+
+            @instruction_builder
+              .expects(:copy)
+              .with("deploy-archive-dir/src1/foo", "dst1/foo")
+              .in_sequence(@command_sequence)
+
+            @installer.install(@deployment_group_id, @app_spec)
+          end
+
+          should "generate a copy command instead of a mkdir command if the file inside the source directory is a symbolic link of a directory" do
+            File.stubs(:directory?).with("deploy-archive-dir/src1").returns(true)
+            File.stubs(:symlink?).with("deploy-archive-dir/src1").returns(false)
+            Dir.stubs(:entries)
+              .with("deploy-archive-dir/src1")
+              .returns([".", "..", "foo"])
+
+            File.stubs(:directory?).with("deploy-archive-dir/src1/foo").returns(true)
+            File.stubs(:symlink?).with("deploy-archive-dir/src1/foo").returns(true)
+
+            @instruction_builder
+              .expects(:mkdir)
+              .with("dst1/foo")
+              .never
+            @instruction_builder
+              .expects(:copy)
+              .with("deploy-archive-dir/src1/foo", "dst1/foo")
+              .in_sequence(@command_sequence)
+
+            @installer.install(@deployment_group_id, @app_spec)
+          end
+
+        end # "symlinks"
+
         context "directories" do
 
           setup do

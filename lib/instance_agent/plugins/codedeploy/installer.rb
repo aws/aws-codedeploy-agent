@@ -64,7 +64,7 @@ module InstanceAgent
               fi.source)
 
               log(:debug, "generating instructions for copying #{fi.source} to #{fi.destination}")
-              if File.directory?(absolute_source_path)
+              if File.directory?(absolute_source_path) && !File.symlink?(absolute_source_path)
                 fill_in_missing_ancestors(i, fi.destination)
                 generate_directory_copy(i, absolute_source_path, fi.destination)
               else
@@ -108,7 +108,8 @@ module InstanceAgent
             absolute_source_path = absolute_source_path.force_encoding("UTF-8");
             absolute_entry_path = File.join(absolute_source_path, entry)
             entry_destination = File.join(destination, entry)
-            if File.directory?(absolute_entry_path)
+
+            if File.directory?(absolute_entry_path) && !File.symlink?(absolute_entry_path)
               generate_directory_copy(i, absolute_entry_path, entry_destination)
             else
               generate_normal_copy(i, absolute_entry_path, entry_destination)
