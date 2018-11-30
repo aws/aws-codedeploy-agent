@@ -167,7 +167,7 @@ module ProcessManager
         if pid == own_pid
           return false
         end
-        File.read("/proc/#{pid}/cmdline").include?("codedeploy-agent: master")
+        `ps -p #{pid} -o command`.include?("codedeploy-agent: master")
       end
 
       def handle_pid_file       

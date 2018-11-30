@@ -31,7 +31,8 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         :ongoing_deployment_tracking => 'ongoing-deployment',
         :proxy_uri => nil,
         :enable_deployments_log => true,
-        :kill_agent_max_wait_time_seconds => 7200
+        :kill_agent_max_wait_time_seconds => 7200,
+        :use_fips_mode => false
       }, InstanceAgent::Config.config)
     end
 
@@ -41,9 +42,11 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
     end
 
     should 'execute all available validation methods' do
+      InstanceMetadata.stubs(:region).returns('us-west-1')    #without stubbing this, the test will fail in the build fleet because MetadataService is not available there  
       validations = sequence('validation')
       err = []
       InstanceAgent::Config.any_instance.expects(:validate_children).with(err).in_sequence(validations)
+      InstanceAgent::Config.any_instance.expects(:validate_use_fips_mode).with(err).in_sequence(validations)
       InstanceAgent::Config.validate_config
     end
 
@@ -53,6 +56,8 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         InstanceAgent::Config.config[:instance_service_region] = 'eu-west-1'
         InstanceAgent::Config.config[:instance_service_endpoint] = 'api-endpoint.example.com'
         InstanceAgent::Config.config[:instance_service_port] = 123
+          
+        InstanceMetadata.stubs(:region).returns('us-west-1')    #without stubbing this, the test will fail in the build fleet because MetadataService is not available there  
       end
 
       should 'validate the children setting' do
@@ -64,6 +69,40 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         InstanceAgent::Config.config[:children] = 1
         assert InstanceAgent::Config.validate_config.empty?, InstanceAgent::Config.validate_config.inspect
       end
+    end
+    
+    context 'validate use_fips_mode' do
+      
+      error = 'use_fips_mode can be set to true only in regions located in the USA'
+      
+      should 'error in eu-west-1' do
+        InstanceAgent::Config.config[:use_fips_mode] = true                
+        ENV['AWS_REGION'] = 'eu-west-1'
+        assert InstanceAgent::Config.validate_config.include? error    
+      end
+      
+      should 'not error in eu-west-1 if not set' do
+        InstanceAgent::Config.config[:use_fips_mode] = false
+        ENV['AWS_REGION'] = 'eu-west-1'
+        assert_false InstanceAgent::Config.validate_config.include? error    
+      end
+      
+      should 'not error in us-east-1' do
+        InstanceAgent::Config.config[:use_fips_mode] = true                
+        ENV['AWS_REGION'] = 'us-east-1'
+        assert_false InstanceAgent::Config.validate_config.include? error    
+      end
+      
+      should 'not error in us-gov-west-1' do
+        InstanceAgent::Config.config[:use_fips_mode] = true                
+        ENV['AWS_REGION'] = 'us-gov-west-1'
+        assert_false InstanceAgent::Config.validate_config.include? error    
+      end
+      
+      cleanup do
+        ENV['AWS_REGION'] = nil
+      end
+
     end
   end
 end

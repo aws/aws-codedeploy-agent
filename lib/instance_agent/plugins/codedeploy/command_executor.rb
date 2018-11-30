@@ -238,33 +238,8 @@ module InstanceAgent
         private
         def download_from_s3(deployment_spec, bucket, key, version, etag)
           log(:debug, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
-          region = ENV['AWS_REGION'] || InstanceMetadata.region
-
-          proxy_uri = nil
-          if InstanceAgent::Config.config[:proxy_uri]
-            proxy_uri = URI(InstanceAgent::Config.config[:proxy_uri])
-          end
-
-          if InstanceAgent::Config.config[:log_aws_wire]
-            s3 = Aws::S3::Client.new(
-            :region => region,
-            :ssl_ca_directory => ENV['AWS_SSL_CA_DIRECTORY'],
-            # wire logs might be huge; customers should be careful about turning them on
-            # allow 1GB of old wire logs in 64MB chunks
-            :logger => Logger.new(
-            File.join(InstanceAgent::Config.config[:log_dir], "#{InstanceAgent::Config.config[:program_name]}.aws_wire.log"),
-            16,
-            64 * 1024 * 1024),
-            :http_wire_trace => true,
-            :signature_version => 'v4',
-            :http_proxy => proxy_uri)
-          else
-            s3 = Aws::S3::Client.new(
-            :region => region,
-            :ssl_ca_directory => ENV['AWS_SSL_CA_DIRECTORY'],
-            :signature_version => 'v4',
-            :http_proxy => proxy_uri)
-          end
+                    
+          s3 = Aws::S3::Client.new(s3_options)
 
           File.open(artifact_bundle(deployment_spec), 'wb') do |file|
 
@@ -283,6 +258,39 @@ module InstanceAgent
           log(:debug, "Download complete from bucket #{bucket} and key #{key}")
         end
 
+        public
+        def s3_options
+          options = {}
+          options[:ssl_ca_directory] = ENV['AWS_SSL_CA_DIRECTORY']
+          options[:signature_version] = 'v4'
+
+          region = ENV['AWS_REGION'] || InstanceMetadata.region
+          options[:region] = region
+          if InstanceAgent::Config.config[:use_fips_mode]
+            #S3 Fips pseudo-regions are not supported by the SDK yet 
+            #source for the URL: https://aws.amazon.com/compliance/fips/
+            options[:endpoint] = "https://s3-fips.#{region}.amazonaws.com"
+          end
+            
+          proxy_uri = nil
+          if InstanceAgent::Config.config[:proxy_uri]
+            proxy_uri = URI(InstanceAgent::Config.config[:proxy_uri])
+          end          
+          options[:http_proxy] = proxy_uri
+
+          if InstanceAgent::Config.config[:log_aws_wire]
+            # wire logs might be huge; customers should be careful about turning them on
+            # allow 1GB of old wire logs in 64MB chunks
+            options[:logger] = Logger.new(
+                File.join(InstanceAgent::Config.config[:log_dir], "#{InstanceAgent::Config.config[:program_name]}.aws_wire.log"),
+                16,
+                64 * 1024 * 1024)
+            options[:http_wire_trace] = true
+          end
+          
+          options          
+        end  
+        
         private
         def download_from_github(deployment_spec, account, repo, commit, anonymous, token)
 
