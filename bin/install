@@ -243,15 +243,24 @@ EOF
     uri = get_s3_uri(region, bucket, key)
 
     # stream package file to disk
+    retries ||= 0
+    exceptions = [OpenURI::HTTPError, OpenSSL::SSL::SSLError]
     begin
       uri.open(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy) do |s3|
-        package_file.write(s3.read)
+         package_file.write(s3.read)
       end
-    rescue OpenURI::HTTPError => e
-      @log.error("Could not find package to download at '#{uri.to_s}'")
-      exit(1)
+    rescue *exceptions  => e
+      @log.error("Could not find package to download at '#{uri.to_s}' - Retrying... Attempt: '#{retries.to_s}'")
+      if (retries < 5)
+        sleep 2 ** retries
+        retries += 1
+        retry
+      else
+        @log.error("Could not download CodeDeploy Agent Package. Exiting Install script.")
+        exit(1)
+      end
     end
-  end
+end
 
   def get_version_file_from_s3(region, bucket, key)
     @log.info("Downloading version file from bucket #{bucket} and key #{key}...")

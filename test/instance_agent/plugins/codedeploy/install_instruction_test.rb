@@ -363,7 +363,7 @@ module InstanceAgent
             setup do
               @command_builder = CommandBuilder.new()
               @command_builder.copy("source", "destination")
-              @expected_json = {"instructions"=>[{"type"=>"copy","source"=>"source","destination"=>"#{Dir.tmpdir()}/destination"}]}.to_json
+              @expected_json = {"instructions"=>[{"type"=>"copy","source"=>"source","destination"=>"#{File.realdirpath(Dir.tmpdir())}/destination"}]}.to_json
             end
 
             should "have a single copy in the returned JSON" do
@@ -371,7 +371,7 @@ module InstanceAgent
             end
 
             should "raise a duplicate exception when a copy collides with another copy" do
-              assert_raised_with_message("The deployment failed because the application specification file specifies two source files named source and source for the same destination (#{Dir.tmpdir()}/destination). Remove one of the source file paths from the AppSpec file, and then try again.") do
+              assert_raised_with_message("The deployment failed because the application specification file specifies two source files named source and source for the same destination (#{File.realdirpath(Dir.tmpdir())}/destination). Remove one of the source file paths from the AppSpec file, and then try again.") do
                 @command_builder.copy("source", "destination")
               end
             end
@@ -381,7 +381,7 @@ module InstanceAgent
             setup do
               @command_builder = CommandBuilder.new()
               @command_builder.mkdir("directory")
-              @expected_json = {"instructions"=>[{"type"=>"mkdir","directory"=>"#{Dir.tmpdir()}/directory"}]}.to_json
+              @expected_json = {"instructions"=>[{"type"=>"mkdir","directory"=>"#{File.realdirpath(Dir.tmpdir())}/directory"}]}.to_json
             end
 
             should "have a single mkdir in the returned JSON" do
@@ -390,7 +390,7 @@ module InstanceAgent
 
             should "raise a duplicate exception when trying to create a directory collides with a copy" do
               @command_builder.copy("source", "directory/dir1")
-              assert_raised_with_message("The deployment failed because the application specification file includes an mkdir command more than once for the same destination path (#{Dir.tmpdir()}/directory/dir1) from (source). Update the files section of the AppSpec file, and then try again.") do
+              assert_raised_with_message("The deployment failed because the application specification file includes an mkdir command more than once for the same destination path (#{File.realdirpath(Dir.tmpdir())}/directory/dir1) from (source). Update the files section of the AppSpec file, and then try again.") do
                 @command_builder.mkdir("directory/dir1")
               end
             end
@@ -404,71 +404,71 @@ module InstanceAgent
             end
 
             should "raise a duplicate exception when trying to make a copy collides with a mkdir" do
-              assert_raised_with_message("The deployment failed because the application specification file calls for installing the file target, but a file with that name already exists at the location (#{Dir.tmpdir()}/directory/target). Update your AppSpec file or directory structure, and then try again.") do
+              assert_raised_with_message("The deployment failed because the application specification file calls for installing the file target, but a file with that name already exists at the location (#{File.realdirpath(Dir.tmpdir())}/directory/target). Update your AppSpec file or directory structure, and then try again.") do
                 @command_builder.copy( "target", "directory/target")
               end
             end
 
             should "say it is copying the appropriate file" do
-              assert @command_builder.copying_file?("#{Dir.tmpdir()}/directory/target/file_target")
-              assert !@command_builder.copying_file?("#{Dir.tmpdir()}/directory/target")
+              assert @command_builder.copying_file?("#{File.realdirpath(Dir.tmpdir())}/directory/target/file_target")
+              assert !@command_builder.copying_file?("#{File.realdirpath(Dir.tmpdir())}/directory/target")
             end
 
             should "say it is making the appropriate directory" do
-              assert !@command_builder.making_directory?("#{Dir.tmpdir()}/directory/target/file_target")
-              assert @command_builder.making_directory?("#{Dir.tmpdir()}/directory/target")
+              assert !@command_builder.making_directory?("#{File.realdirpath(Dir.tmpdir())}/directory/target/file_target")
+              assert @command_builder.making_directory?("#{File.realdirpath(Dir.tmpdir())}/directory/target")
             end
 
             should "match the file when appropriate" do
-              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{Dir.tmpdir()}/directory/target", {
+              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{File.realdirpath(Dir.tmpdir())}/directory/target", {
                 :type => ["file"],
                 :pattern => "file*",
                 :except => []})
-              assert @command_builder.find_matches(permission).include?("#{Dir.tmpdir()}/directory/target/file_target")
+              assert @command_builder.find_matches(permission).include?("#{File.realdirpath(Dir.tmpdir())}/directory/target/file_target")
 
-              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{Dir.tmpdir()}/directory/target", {
+              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{File.realdirpath(Dir.tmpdir())}/directory/target", {
                 :type => ["directory"],
                 :pattern => "file*",
                 :except => []})
-              assert !@command_builder.find_matches(permission).include?("#{Dir.tmpdir()}/directory/target/file_target")
+              assert !@command_builder.find_matches(permission).include?("#{File.realdirpath(Dir.tmpdir())}/directory/target/file_target")
 
-              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{Dir.tmpdir()}/directory/target", {
+              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{File.realdirpath(Dir.tmpdir())}/directory/target", {
                 :type => ["file"],
                 :pattern => "filefile*",
                 :except => []})
-              assert !@command_builder.find_matches(permission).include?("#{Dir.tmpdir()}/directory/target/file_target")
+              assert !@command_builder.find_matches(permission).include?("#{File.realdirpath(Dir.tmpdir())}/directory/target/file_target")
 
-              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{Dir.tmpdir()}/directory/target", {
+              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{File.realdirpath(Dir.tmpdir())}/directory/target", {
                 :type => ["file"],
                 :pattern => "file*",
                 :except => ["*target"]})
-              assert !@command_builder.find_matches(permission).include?("#{Dir.tmpdir()}/directory/target/file_target")
+              assert !@command_builder.find_matches(permission).include?("#{File.realdirpath(Dir.tmpdir())}/directory/target/file_target")
             end
 
             should "match the directory when appropriate" do
-              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{Dir.tmpdir()}/directory/", {
+              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{File.realdirpath(Dir.tmpdir())}/directory/", {
                 :type => ["directory"],
                 :pattern => "tar*",
                 :except => []})
-              assert @command_builder.find_matches(permission).include?("#{Dir.tmpdir()}/directory/target")
+              assert @command_builder.find_matches(permission).include?("#{File.realdirpath(Dir.tmpdir())}/directory/target")
 
-              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{Dir.tmpdir()}/directory/", {
+              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{File.realdirpath(Dir.tmpdir())}/directory/", {
                 :type => ["file"],
                 :pattern => "tar*",
                 :except => []})
-              assert !@command_builder.find_matches(permission).include?("#{Dir.tmpdir()}/directory/target")
+              assert !@command_builder.find_matches(permission).include?("#{File.realdirpath(Dir.tmpdir())}/directory/target")
 
-              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{Dir.tmpdir()}/directory/", {
+              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{File.realdirpath(Dir.tmpdir())}/directory/", {
                 :type => ["directory"],
                 :pattern => "tarr*",
                 :except => []})
-              assert !@command_builder.find_matches(permission).include?("#{Dir.tmpdir()}/directory/target")
+              assert !@command_builder.find_matches(permission).include?("#{File.realdirpath(Dir.tmpdir())}/directory/target")
 
-              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{Dir.tmpdir()}/directory/", {
+              permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("#{File.realdirpath(Dir.tmpdir())}/directory/", {
                 :type => ["directory"],
                 :pattern => "tar*",
                 :except => ["*et"]})
-              assert !@command_builder.find_matches(permission).include?("#{Dir.tmpdir()}/directory/target")
+              assert !@command_builder.find_matches(permission).include?("#{File.realdirpath(Dir.tmpdir())}/directory/target")
             end
           end
 
@@ -477,7 +477,7 @@ module InstanceAgent
               @command_builder = CommandBuilder.new()
               @command_builder.mkdir("directory")
               @command_builder.mkdir("directory")
-              @expected_json = {"instructions"=>[{"type"=>"mkdir","directory"=>"#{Dir.tmpdir()}/directory"}]}.to_json
+              @expected_json = {"instructions"=>[{"type"=>"mkdir","directory"=>"#{File.realdirpath(Dir.tmpdir())}/directory"}]}.to_json
             end
 
             should "have a single mkdir in the returned JSON" do
@@ -490,7 +490,7 @@ module InstanceAgent
               @command_builder = CommandBuilder.new()
               @command_builder.mkdir("directory")
               @command_builder.mkdir("directory/")
-              @expected_json = {"instructions"=>[{"type"=>"mkdir","directory"=>"#{Dir.tmpdir()}/directory"}]}.to_json
+              @expected_json = {"instructions"=>[{"type"=>"mkdir","directory"=>"#{File.realdirpath(Dir.tmpdir())}/directory"}]}.to_json
             end
 
             should "have a single mkdir in the returned JSON" do
@@ -503,7 +503,7 @@ module InstanceAgent
               @permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("testfile.txt")
               @command_builder = CommandBuilder.new()
               @command_builder.set_permissions("testfile.txt", @permission)
-              assert_raised_with_message("The deployment failed because the permissions setting for (#{Dir.tmpdir()}/testfile.txt) is specified more than once in the application specification file. Update the files section of the AppSpec file, and then try again.") do
+              assert_raised_with_message("The deployment failed because the permissions setting for (#{File.realdirpath(Dir.tmpdir())}/testfile.txt) is specified more than once in the application specification file. Update the files section of the AppSpec file, and then try again.") do
                 @command_builder.set_permissions("testfile.txt", @permission)
               end
             end
@@ -525,10 +525,10 @@ module InstanceAgent
                 :group=>"dev"})
               @command_builder = CommandBuilder.new()
               @command_builder.set_permissions("testfile.txt", @permission)
-              @expected_json = {"instructions"=>[{"type"=>"chmod","mode"=>"744","file"=>"#{Dir.tmpdir()}/testfile.txt"},
-                {"type"=>"setfacl","acl"=>["user:bob:rwx","default:group:dev:r--"],"file"=>"#{Dir.tmpdir()}/testfile.txt"},
-                {"type"=>"semanage","context"=>{"user"=>"name","role"=>nil,"type"=>"type","range"=>"s2-s3:c0,c2.c4,c6"},"file"=>"#{Dir.tmpdir()}/testfile.txt"},
-                {"type"=>"chown","owner"=>"bob","group"=>"dev","file"=>"#{Dir.tmpdir()}/testfile.txt"}
+              @expected_json = {"instructions"=>[{"type"=>"chmod","mode"=>"744","file"=>"#{File.realdirpath(Dir.tmpdir())}/testfile.txt"},
+                {"type"=>"setfacl","acl"=>["user:bob:rwx","default:group:dev:r--"],"file"=>"#{File.realdirpath(Dir.tmpdir())}/testfile.txt"},
+                {"type"=>"semanage","context"=>{"user"=>"name","role"=>nil,"type"=>"type","range"=>"s2-s3:c0,c2.c4,c6"},"file"=>"#{File.realdirpath(Dir.tmpdir())}/testfile.txt"},
+                {"type"=>"chown","owner"=>"bob","group"=>"dev","file"=>"#{File.realdirpath(Dir.tmpdir())}/testfile.txt"}
                 ]}.to_json
               assert_equal JSON.parse(@expected_json), JSON.parse(@command_builder.to_json)
             end
@@ -537,7 +537,7 @@ module InstanceAgent
               @permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("testfile.txt", {:owner=>"bob"})
               @command_builder = CommandBuilder.new()
               @command_builder.set_permissions("testfile.txt", @permission)
-              @expected_json = {"instructions"=>[{"type"=>"chown","owner"=>"bob","group"=>nil,"file"=>"#{Dir.tmpdir()}/testfile.txt"}]}.to_json
+              @expected_json = {"instructions"=>[{"type"=>"chown","owner"=>"bob","group"=>nil,"file"=>"#{File.realdirpath(Dir.tmpdir())}/testfile.txt"}]}.to_json
               assert_equal JSON.parse(@expected_json), JSON.parse(@command_builder.to_json)
             end
 
@@ -545,7 +545,7 @@ module InstanceAgent
               @permission = InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::LinuxPermissionInfo.new("testfile.txt", {:group=>"dev"})
               @command_builder = CommandBuilder.new()
               @command_builder.set_permissions("testfile.txt", @permission)
-              @expected_json = {"instructions"=>[{"type"=>"chown","owner"=>nil,"group"=>"dev","file"=>"#{Dir.tmpdir()}/testfile.txt"}]}.to_json
+              @expected_json = {"instructions"=>[{"type"=>"chown","owner"=>nil,"group"=>"dev","file"=>"#{File.realdirpath(Dir.tmpdir())}/testfile.txt"}]}.to_json
               assert_equal JSON.parse(@expected_json), JSON.parse(@command_builder.to_json)
             end
           end

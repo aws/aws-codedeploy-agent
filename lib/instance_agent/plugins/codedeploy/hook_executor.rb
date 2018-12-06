@@ -4,7 +4,7 @@ require 'json'
 require 'fileutils'
 
 require 'instance_agent/plugins/codedeploy/application_specification/application_specification'
-
+require 'instance_agent/platform/thread_joiner'
 module InstanceAgent
   module Plugins
     module CodeDeployPlugin
@@ -47,6 +47,7 @@ module InstanceAgent
         SCRIPT_TIMED_OUT_CODE = 3
         SCRIPT_FAILED_CODE = 4
         UNKNOWN_ERROR_CODE = 5
+        OUTPUTS_LEFT_OPEN_CODE = 6
         def initialize(error_code, script_name, log)
           @error_code = error_code
           @script_name = script_name
@@ -160,12 +161,21 @@ module InstanceAgent
             stdin.close
             stdout_thread = Thread.new{stdout.each_line { |line| log_script("[stdout]" + line.to_s, script_log_file)}}
             stderr_thread = Thread.new{stderr.each_line { |line| log_script("[stderr]" + line.to_s, script_log_file)}}
-            if !wait_thr.join(script.timeout)
+            thread_joiner = InstanceAgent::ThreadJoiner.new(script.timeout)
+            thread_joiner.joinOrFail(wait_thr) do
               Process.kill(signal, wait_thr.pid)
               raise Timeout::Error
             end
-            stdout_thread.join
-            stderr_thread.join
+            thread_joiner.joinOrFail(stdout_thread) do
+              script_error = "Script at specified location: #{script.location} failed to close STDOUT"
+              log :error, script_error
+              raise ScriptError.new(ScriptError::OUTPUTS_LEFT_OPEN_CODE, script.location, @script_log), script_error
+            end
+            thread_joiner.joinOrFail(stderr_thread) do
+              script_error = "Script at specified location: #{script.location} failed to close STDERR"
+              log :error, script_error
+              raise ScriptError.new(ScriptError::OUTPUTS_LEFT_OPEN_CODE, script.location, @script_log), script_error
+            end
             exit_status = wait_thr.value.exitstatus
           end
           if(exit_status != 0)

@@ -1,6 +1,10 @@
 version: 0.0
 os: windows
 hooks:
+    BeforeBlockTraffic:
+        - location: scripts/before_block_traffic.bat
+    AfterBlockTraffic:
+        - location: scripts/after_block_traffic.bat
     ApplicationStop:
         - location: scripts/application_stop.bat
     BeforeInstall:
@@ -11,3 +15,7 @@ hooks:
         - location: scripts/application_start.bat
     ValidateService:
         - location: scripts/validate_service.bat
+    BeforeAllowTraffic:
+        - location: scripts/before_allow_traffic.bat
+    AfterAllowTraffic:
+        - location: scripts/after_allow_traffic.bat

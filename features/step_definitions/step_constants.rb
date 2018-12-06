@@ -5,7 +5,16 @@ class StepConstants
   ENV['AWS_REGION'] = Aws.config[:region]
 
   def self.current_aws_account
+    if StepConstants::IS_WINDOWS then StepConstants.configure_windows_certificate end
+
     Aws::STS::Client.new.get_caller_identity.account
+  end
+
+  def self.configure_windows_certificate
+    cert_dir = File.expand_path(File.join(File.dirname(__FILE__), '..\..\certs'))
+    Aws.config[:ssl_ca_bundle] = File.join(cert_dir, 'windows-ca-bundle.crt')
+    ENV['AWS_SSL_CA_DIRECTORY'] = File.join(cert_dir, 'windows-ca-bundle.crt')
+    ENV['SSL_CERT_FILE'] = File.join(cert_dir, 'windows-ca-bundle.crt')
   end
 
   CODEDEPLOY_TEST_PREFIX = "codedeploy-agent-integ-test-" unless defined?(CODEDEPLOY_TEST_PREFIX)

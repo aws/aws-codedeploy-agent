@@ -24,7 +24,7 @@ module AWS
           end
 
           if (uri.scheme == 'http')
-            raise ValidationError.new("location #{location} cannot be http, only encyrpted (https) url endpoints supported")
+            raise ValidationError.new("location #{location} cannot be http, only encrypted (https) url endpoints supported")
           end
 
           if (uri.scheme != 'https' && uri.scheme != 's3' && !File.exists?(location))
@@ -52,7 +52,7 @@ module AWS
             end
 
             if events.include?('Install') && any_new_revision_event_before_install(events)
-              raise ValidationError.new("The only events that can be specified before Install are #{events_using_previous_successfuly_deployment_revision.push('DownloadBundle').join(',')}. Please fix the order of your specified events: #{args['--events']}")
+              raise ValidationError.new("The only events that can be specified before Install are #{events_using_previous_successfuly_deployment_revision.push('DownloadBundle', 'BeforeInstall').join(',')}. Please fix the order of your specified events: #{args['--events']}")
             end
           end
 
@@ -79,7 +79,7 @@ module AWS
 
         def events_using_new_revision
           InstanceAgent::Plugins::CodeDeployPlugin::HookExecutor::MAPPING_BETWEEN_HOOKS_AND_DEPLOYMENTS.select do |key,value|
-            value != InstanceAgent::Plugins::CodeDeployPlugin::HookExecutor::LAST_SUCCESSFUL_DEPLOYMENT
+            value != InstanceAgent::Plugins::CodeDeployPlugin::HookExecutor::LAST_SUCCESSFUL_DEPLOYMENT && key != 'BeforeInstall'
           end.keys
         end
 

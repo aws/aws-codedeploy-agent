@@ -1,7 +1,9 @@
 require 'socket'
-
+require 'concurrent'
+require 'pathname'
 require 'instance_metadata'
 require 'instance_agent/agent/base'
+require_relative 'deployment_command_tracker'
 
 module InstanceAgent
   module Plugins
@@ -44,6 +46,13 @@ module InstanceAgent
 
           @plugin = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new(:hook_mapping => DEFAULT_HOOK_MAPPING)
 
+          @thread_pool = Concurrent::ThreadPoolExecutor.new(
+            #TODO: Make these values configurable in agent configuration
+            min_threads: 1,
+            max_threads: 16,
+            max_queue: 0 # unbounded work queue
+          )
+
           log(:debug, "Initializing Host Agent: " +
           "Host Identifier = #{@host_identifier}")
         end
@@ -59,28 +68,35 @@ module InstanceAgent
 
         def perform
           return unless command = next_command
+
+          #Commands will be executed on a separate thread.
+          begin
+            @thread_pool.post {
+              acknowledge_and_process_command(command)
+            }
+          rescue Concurrent::RejectedExecutionError
+            log(:warn, 'Graceful shutdown initiated, skipping any further polling until agent restarts')
+          end
+        end
+
+        def graceful_shutdown
+          log(:info, "Gracefully shutting down agent child threads now, will wait up to #{ProcessManager::Config.config[:kill_agent_max_wait_time_seconds]} seconds")
+          # tell the pool to shutdown in an orderly fashion, allowing in progress work to complete
+          @thread_pool.shutdown
+          # now wait for all work to complete, wait till the timeout value
+          @thread_pool.wait_for_termination ProcessManager::Config.config[:kill_agent_max_wait_time_seconds]
+          log(:info, 'All agent child threads have been shut down')
+        end
+
+        def acknowledge_and_process_command(command)
           return unless acknowledge_command(command)
 
           begin
             spec = get_deployment_specification(command)
-            #Successful commands will complete without raising an exception
-            script_output = process_command(command, spec)
-            log(:debug, 'Calling PutHostCommandComplete: "Succeeded"')
-            @deploy_control_client.put_host_command_complete(
-            :command_status => 'Succeeded',
-            :diagnostics => {:format => "JSON", :payload => gather_diagnostics()},
-            :host_command_identifier => command.host_command_identifier)
-
+            process_command(command, spec)
             #Commands that throw an exception will be considered to have failed
-          rescue ScriptError => e
-            log(:debug, 'Calling PutHostCommandComplete: "Code Error" ')
-            @deploy_control_client.put_host_command_complete(
-            :command_status => "Failed",
-            :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_script_error(e)},
-            :host_command_identifier => command.host_command_identifier)
-            raise e
           rescue Exception => e
-            log(:debug, 'Calling PutHostCommandComplete: "Code Error" ')
+            log(:warn, 'Calling PutHostCommandComplete: "Code Error" ')
             @deploy_control_client.put_host_command_complete(
             :command_status => "Failed",
             :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_error(e)},
@@ -88,7 +104,43 @@ module InstanceAgent
             raise e
           end
         end
-
+        
+        def process_command(command, spec)
+          log(:debug, "Calling #{@plugin.to_s}.execute_command")
+          begin
+            deployment_id = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(spec).deployment_id
+            DeploymentCommandTracker.create_ongoing_deployment_tracking_file(deployment_id)
+            #Successful commands will complete without raising an exception
+            @plugin.execute_command(command, spec)
+            
+            log(:debug, 'Calling PutHostCommandComplete: "Succeeded"')
+            @deploy_control_client.put_host_command_complete(
+            :command_status => 'Succeeded',
+            :diagnostics => {:format => "JSON", :payload => gather_diagnostics()},
+            :host_command_identifier => command.host_command_identifier)
+            #Commands that throw an exception will be considered to have failed
+          rescue ScriptError => e
+            log(:debug, 'Calling PutHostCommandComplete: "Code Error" ')
+            @deploy_control_client.put_host_command_complete(
+            :command_status => "Failed",
+            :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_script_error(e)},
+            :host_command_identifier => command.host_command_identifier)
+            log(:error, "Error during perform: #{e.class} - #{e.message} - #{e.backtrace.join("\n")}")
+            raise e
+          rescue Exception => e
+            log(:debug, 'Calling PutHostCommandComplete: "Code Error" ')
+            @deploy_control_client.put_host_command_complete(
+            :command_status => "Failed",
+            :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_error(e)},
+            :host_command_identifier => command.host_command_identifier)
+            log(:error, "Error during perform: #{e.class} - #{e.message} - #{e.backtrace.join("\n")}")
+            raise e
+          ensure 
+            DeploymentCommandTracker.delete_deployment_command_tracking_file(deployment_id)  
+          end
+        end
+        
+        private
         def next_command
           log(:debug, "Calling PollHostCommand:")
           output = @deploy_control_client.poll_host_command(:host_identifier => @host_identifier)
@@ -107,6 +159,7 @@ module InstanceAgent
           command
         end
 
+        private
         def acknowledge_command(command)
           log(:debug, "Calling PutHostCommandAcknowledgement:")
           output =  @deploy_control_client.put_host_command_acknowledgement(
@@ -117,6 +170,7 @@ module InstanceAgent
           true unless status == "Succeeded" || status == "Failed"
         end
 
+        private
         def get_deployment_specification(command)
           log(:debug, "Calling GetDeploymentSpecification:")
           output =  @deploy_control_client.get_deployment_specification(
@@ -127,11 +181,6 @@ module InstanceAgent
           raise "Deployment System mismatch: #{@plugin.deployment_system} != #{output.deployment_system}" unless @plugin.deployment_system == output.deployment_system
           raise "Deployment Specification missing" if output.deployment_specification.nil?
           output.deployment_specification.generic_envelope
-        end
-
-        def process_command(command, spec)
-          log(:debug, "Calling #{@plugin.to_s}.execute_command")
-          @plugin.execute_command(command, spec)
         end
 
         private

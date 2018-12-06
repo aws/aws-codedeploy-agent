@@ -67,6 +67,32 @@ module InstanceAgent
     def self.fallback_version_file
       "/opt/codedeploy-agent"
     end
+
+     # shelling out the rm folder command to native os in this case linux.
+    def self.delete_dirs_command(dirs_to_delete)
+      log(:debug,"Dirs to delete: #{dirs_to_delete}");
+      for dir in dirs_to_delete do
+        log(:debug,"Deleting dir: #{dir}");
+        delete_folder(dir);  
+      end
+    end
+     
+    private 
+    def self.delete_folder (dir)
+      if dir != nil && dir != "/"
+        output = `rm -rf #{dir} 2>&1`
+        exit_status = $?.exitstatus
+        log(:debug, "Command status: #{$?}")
+        log(:debug, "Command output: #{output}")
+        unless exit_status == 0
+          msg = "Error deleting directories: #{exit_status}"
+          log(:error, msg)
+          raise msg
+        end 
+      else
+        log(:debug, "Empty directory or a wrong directory passed,#{dir}");  
+      end
+    end  
     
     private
     def self.execute_tar_command(cmd)
@@ -84,7 +110,7 @@ module InstanceAgent
         raise msg
       end
     end
-
+   
     private
     def self.log(severity, message)
       raise ArgumentError, "Unknown severity #{severity.inspect}" unless InstanceAgent::Log::SEVERITIES.include?(severity.to_s)

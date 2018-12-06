@@ -316,6 +316,28 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           end
         end
 
+        context "when creating S3 options" do
+          
+          should "use right region" do
+            assert_equal 'us-east-1', @command_executor.s3_options[:region]
+          end
+          
+          should "use right signature version" do 
+            assert_equal 'v4', @command_executor.s3_options[:signature_version]
+          end
+          
+          should "use right endpoint when using Fips" do
+            InstanceAgent::Config.config[:use_fips_mode] = true
+            assert_equal 'https://s3-fips.us-east-1.amazonaws.com', @command_executor.s3_options[:endpoint]
+            InstanceAgent::Config.config[:use_fips_mode] = false
+          end
+          
+          should "use no endpoint when not using Fips" do
+            assert_false @command_executor.s3_options.include? :endpoint
+          end
+          
+        end
+        
         context "downloading bundle from S3" do
           setup do
             File.expects(:open).with(File.join(@deployment_root_dir, 'bundle.tar'), 'wb').yields(@mock_file)
