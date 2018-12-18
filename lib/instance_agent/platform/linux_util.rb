@@ -39,6 +39,7 @@ module InstanceAgent
     end
 
     def self.extract_tar(bundle_file, dst)
+      log(:debug, "extract_tar - dst : #{dst}")
       FileUtils.mkdir_p(dst)
       working_dir = FileUtils.pwd()
       absolute_bundle_path = File.expand_path(bundle_file)
@@ -47,7 +48,18 @@ module InstanceAgent
       FileUtils.cd(working_dir)
     end
 
+    def self.extract_zip(bundle_file, dst)
+      log(:debug, "extract_zip - dst : #{dst}")
+      FileUtils.mkdir_p(dst)
+      working_dir = FileUtils.pwd()
+      absolute_bundle_path = File.expand_path(bundle_file)
+      FileUtils.cd(dst)
+      execute_zip_command("unzip -qo #{absolute_bundle_path}")
+      FileUtils.cd(working_dir)
+    end    
+
     def self.extract_tgz(bundle_file, dst)
+      log(:debug, "extract_tgz - dst : #{dst}")
       FileUtils.mkdir_p(dst)
       working_dir = FileUtils.pwd()
       absolute_bundle_path = File.expand_path(bundle_file)
@@ -110,6 +122,23 @@ module InstanceAgent
         raise msg
       end
     end
+
+    private
+    def self.execute_zip_command(cmd)
+      log(:debug, "Executing #{cmd}")
+
+      output = `#{cmd} 2>&1`
+      exit_status = $?.exitstatus
+
+      log(:debug, "Command status: #{$?}")
+      log(:debug, "Command output: #{output}")
+
+      if exit_status != 0
+        msg = "Error extracting zip archive: #{exit_status}"
+        log(:error, msg)
+        raise msg
+      end
+    end    
    
     private
     def self.log(severity, message)

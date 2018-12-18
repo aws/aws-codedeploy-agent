@@ -42,6 +42,14 @@ module InstanceAgent
       Minitar.unpack(compressed, dst)
     end
 
+    def self.extract_zip(bundle_file, dst)
+      log(:debug, "extract_zip - dst : #{dst}")
+      FileUtils.mkdir_p(dst)
+      working_dir = FileUtils.pwd()
+      absolute_bundle_path = File.expand_path(bundle_file)
+      execute_zip_command("powershell [System.Reflection.Assembly]::LoadWithPartialName(‘System.IO.Compression.FileSystem’); [System.IO.Compression.ZipFile]::ExtractToDirectory(‘#{absolute_bundle_path}’, ‘#{dst}’)")
+    end 
+
     def self.supports_process_groups?()
       false
     end
@@ -80,6 +88,23 @@ module InstanceAgent
       end
     end  
   
+    private
+    def self.execute_zip_command(cmd)
+      log(:debug, "Executing #{cmd}")
+
+      output = `#{cmd} 2>&1`
+      exit_status = $?.exitstatus
+
+      log(:debug, "Command status: #{$?}")
+      log(:debug, "Command output: #{output}")
+
+      if exit_status != 0
+        msg = "Error extracting zip archive: #{exit_status}"
+        log(:debug, msg)
+        raise msg
+      end
+    end 
+
     private
     def self.log(severity, message)
       raise ArgumentError, "Unknown severity #{severity.inspect}" unless InstanceAgent::Log::SEVERITIES.include?(severity.to_s)
