@@ -209,10 +209,10 @@ module InstanceAgent
             FileUtils.rm(@file_path)
           elsif File.exist?(@file_path)
             if File.directory?(@file_path)
-              # TODO (AWSGLUE-713): handle the exception if the directory is non-empty;
-              # this might mean the customer has put files in this directory and we should
-              # probably ignore the error and move on
-              FileUtils.rmdir(@file_path)
+              begin
+                FileUtils.rmdir(@file_path)
+              rescue Errno::ENOTEMPTY
+              end
             else
               FileUtils.rm(@file_path)
             end
