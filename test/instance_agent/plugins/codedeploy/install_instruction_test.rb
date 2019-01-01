@@ -232,18 +232,18 @@ module InstanceAgent
           context "an empty delete file" do
             setup do
               @parse_string = <<-END
-            END
+              END
+            end
+
+            should "return an empty command collection" do
+              commands = InstallInstruction.parse_remove_commands(@parse_string)
+              assert_equal 0, commands.length
+            end
           end
 
-          should "return an empty command collection" do
-            commands = InstallInstruction.parse_remove_commands(@parse_string)
-            assert_equal 0, commands.length
-          end
-        end
-
-        context "a single file to delete" do
-          setup do
-            @parse_string = <<-END
+          context "a single file to delete" do
+            setup do
+              @parse_string = <<-END
             test_delete_path
               END
               File.stubs(:exist?).with("test_delete_path").returns(true)
