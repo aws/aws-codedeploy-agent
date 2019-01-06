@@ -15,6 +15,7 @@ end
 # if installed as a gem
 
 agent_dir = "/opt/codedeploy-agent"
+$:.unshift *Dir.glob("#{agent_dir}/vendor/gems/**/lib")
 $:.unshift "#{agent_dir}/lib"
 # Required for integration tests to run correctly
 $:.unshift File.join(File.dirname(File.expand_path('..', __FILE__)), 'lib')
