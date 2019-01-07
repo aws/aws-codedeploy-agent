@@ -231,8 +231,7 @@ module InstanceAgent
         context "Parsing a delete file" do
           context "an empty delete file" do
             setup do
-              @parse_string = <<-END
-              END
+              @parse_string = ""
             end
 
             should "return an empty command collection" do
@@ -243,9 +242,7 @@ module InstanceAgent
 
           context "a single file to delete" do
             setup do
-              @parse_string = <<-END
-            test_delete_path
-              END
+              @parse_string = "test_delete_path\n"
               File.stubs(:exist?).with("test_delete_path").returns(true)
             end
 
@@ -281,10 +278,7 @@ module InstanceAgent
 
           context "multiple files to delete" do
             setup do
-              @parse_string = <<-END
-            test_delete_path
-            another_delete_path
-              END
+              @parse_string = "test_delete_path\nanother_delete_path\n"
               File.stubs(:directory?).returns(false)
               File.stubs(:exist?).with("test_delete_path").returns(true)
               File.stubs(:exist?).with("another_delete_path").returns(true)
@@ -315,11 +309,7 @@ module InstanceAgent
 
           context "removes mangled line at the end" do
             setup do
-              @parse_string = <<-END
-            test_delete_path
-            another_delete_path
-              END
-              @parse_string << "mangled"
+              @parse_string = "test_delete_path\nanother_delete_path\nmangled"
               File.stubs(:exist?).with("test_delete_path").returns(true)
               File.stubs(:exist?).with("another_delete_path").returns(true)
             end
@@ -338,7 +328,7 @@ module InstanceAgent
 
           context "correctly determines method from file type" do
             setup do
-              @parse_string = 'foo'
+              @parse_string = "foo\n"
               @instruction_file = mock
               @instruction_file.stubs(:path).returns("test/123-cleanup")
               File.stubs(:open).with("test/123-cleanup", 'r').returns(@instruction_file)
