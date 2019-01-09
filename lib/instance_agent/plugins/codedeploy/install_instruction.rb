@@ -232,7 +232,7 @@ module InstanceAgent
           # the CopyCommand entry should not even be created by Installer
           cleanup_file.puts(@destination)
           if File.symlink?(@source)
-            FileUtils.symlink(File.readlink(@source), @destination)
+            FileUtils.symlink(File.readlink(@source), @destination, :force => true)
           else
             FileUtils.copy(@source, @destination, :preserve => true)
           end

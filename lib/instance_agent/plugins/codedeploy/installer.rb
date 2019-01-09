@@ -123,6 +123,9 @@ module InstanceAgent
             when "DISALLOW"
               raise "The deployment failed because a specified file already exists at this location: #{destination}"
             when "OVERWRITE"
+              if File.directory?(destination)
+                raise "The deployment failed because a directory already exists at this location: #{destination}"
+              end
               i.copy(absolute_source_path, destination)
             when "RETAIN"
               # neither generate copy command or fail the deployment
