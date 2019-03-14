@@ -212,7 +212,7 @@ module InstanceAgent
               # TODO (AWSGLUE-713): handle the exception if the directory is non-empty;
               # this might mean the customer has put files in this directory and we should
               # probably ignore the error and move on
-              FileUtils.rmdir(@file_path)
+              FileUtils.rmdir(@file_path) rescue StandardError
             else
               FileUtils.rm(@file_path)
             end
