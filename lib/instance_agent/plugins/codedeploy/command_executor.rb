@@ -389,11 +389,15 @@ module InstanceAgent
           elsif "tgz".eql? deployment_spec.bundle_type
             InstanceAgent::Platform.util.extract_tgz(bundle_file, dst)
           elsif "zip".eql? deployment_spec.bundle_type
-            Zip::File.open(bundle_file) do |zipfile|
-              zipfile.each do |f|
-                file_dst = File.join(dst, f.name)
-                FileUtils.mkdir_p(File.dirname(file_dst))
-                zipfile.extract(f, file_dst)
+            begin
+              InstanceAgent::Platform.util.extract_zip(bundle_file, dst)
+            rescue
+              Zip::File.open(bundle_file) do |zipfile|
+                zipfile.each do |f|
+                  file_dst = File.join(dst, f.name)
+                  FileUtils.mkdir_p(File.dirname(file_dst))
+                  zipfile.extract(f, file_dst)
+                end
               end
             end
           else
