@@ -41,7 +41,8 @@ module InstanceAgent
         :on_premises_config_file => '/etc/codedeploy-agent/conf/codedeploy.onpremises.yml',
         :proxy_uri => nil,
         :enable_deployments_log => true,
-        :use_fips_mode => false
+        :use_fips_mode => false,
+        :deploy_control_endpoint => nil
       })
     end
 

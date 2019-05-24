@@ -38,8 +38,8 @@ module InstanceAgent
           region = ENV['AWS_REGION'] || InstanceMetadata.region
           @host_identifier = ENV['AWS_HOST_IDENTIFIER'] || InstanceMetadata.host_identifier
 
-          log(:debug, "Configuring deploy control client: Region = #{region.inspect}")
-          log(:debug, "Deploy control endpoint override = " + ENV['AWS_DEPLOY_CONTROL_ENDPOINT'].inspect)
+          log(:debug, "Configuring deploy control client: Region=#{region.inspect}")
+          log(:debug, "Deploy control endpoint override=#{InstanceAgent::Config.config[:deploy_control_endpoint]}")
 
           @deploy_control = InstanceAgent::Plugins::CodeDeployPlugin::CodeDeployControl.new(:region => region, :logger => InstanceAgent::Log, :ssl_ca_directory => ENV['AWS_SSL_CA_DIRECTORY'])
           @deploy_control_client = @deploy_control.get_client

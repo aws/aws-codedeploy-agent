@@ -36,7 +36,7 @@ class CodeDeployControlTest < InstanceAgentTestCase
 
       context "without an endpoint" do
         setup do
-          ENV['AWS_DEPLOY_CONTROL_ENDPOINT'] = nil
+          InstanceAgent::Config.config[:deploy_control_endpoint] = nil
         end
 
         should "raise an exception" do
@@ -53,7 +53,7 @@ class CodeDeployControlTest < InstanceAgentTestCase
 
       context "with ADCS endpoint set in an environment variable" do
         setup do
-          ENV['AWS_DEPLOY_CONTROL_ENDPOINT'] = "https://tempuri"
+          InstanceAgent::Config.config[:deploy_control_endpoint] = "https://tempuri"
         end
 
         should "use endpoint from environment variable" do
@@ -61,9 +61,9 @@ class CodeDeployControlTest < InstanceAgentTestCase
             assert_equal "tempuri", codedeploy_control_client.get_client.config.endpoint.host
         end
         
-       cleanup do
-         ENV['AWS_DEPLOY_CONTROL_ENDPOINT'] = nil
-       end
+        cleanup do
+         InstanceAgent::Config.config[:deploy_control_endpoint] = nil
+        end
       end            
       
       context "with use_fips_mode not set" do
