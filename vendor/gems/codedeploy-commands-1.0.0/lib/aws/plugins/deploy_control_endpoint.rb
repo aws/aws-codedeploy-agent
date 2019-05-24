@@ -4,7 +4,7 @@ module Aws
   module Plugins
     class DeployControlEndpoint < Seahorse::Client::Plugin
       option(:endpoint) do |cfg|
-        url = ENV['AWS_DEPLOY_CONTROL_ENDPOINT']
+        url = InstanceAgent::Config.config[:deploy_control_endpoint]
         if url.nil?
           url = "https://codedeploy-commands"
           if InstanceAgent::Config.config[:use_fips_mode]

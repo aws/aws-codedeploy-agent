@@ -32,7 +32,8 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         :proxy_uri => nil,
         :enable_deployments_log => true,
         :kill_agent_max_wait_time_seconds => 7200,
-        :use_fips_mode => false
+        :use_fips_mode => false,
+        :deploy_control_endpoint => nil
       }, InstanceAgent::Config.config)
     end
 
