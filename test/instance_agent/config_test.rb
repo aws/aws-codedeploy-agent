@@ -33,7 +33,8 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         :enable_deployments_log => true,
         :kill_agent_max_wait_time_seconds => 7200,
         :use_fips_mode => false,
-        :deploy_control_endpoint => nil
+        :deploy_control_endpoint => nil,
+        :s3_endpoint_override => nil
       }, InstanceAgent::Config.config)
     end
 

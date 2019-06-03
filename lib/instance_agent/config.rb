@@ -42,7 +42,8 @@ module InstanceAgent
         :proxy_uri => nil,
         :enable_deployments_log => true,
         :use_fips_mode => false,
-        :deploy_control_endpoint => nil
+        :deploy_control_endpoint => nil,
+        :s3_endpoint_override => nil
       })
     end
 
