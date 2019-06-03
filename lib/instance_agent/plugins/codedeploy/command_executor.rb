@@ -266,12 +266,13 @@ module InstanceAgent
 
           region = ENV['AWS_REGION'] || InstanceMetadata.region
           options[:region] = region
-          if InstanceAgent::Config.config[:use_fips_mode]
+          if !InstanceAgent::Config.config[:s3_endpoint_override].to_s.empty?
+            options[:endpoint] = URI(InstanceAgent::Config.config[:s3_endpoint_override])
+          elsif InstanceAgent::Config.config[:use_fips_mode]
             #S3 Fips pseudo-regions are not supported by the SDK yet 
             #source for the URL: https://aws.amazon.com/compliance/fips/
             options[:endpoint] = "https://s3-fips.#{region}.amazonaws.com"
-          end
-            
+          end 
           proxy_uri = nil
           if InstanceAgent::Config.config[:proxy_uri]
             proxy_uri = URI(InstanceAgent::Config.config[:proxy_uri])

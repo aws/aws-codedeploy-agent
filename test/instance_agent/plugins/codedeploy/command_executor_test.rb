@@ -332,7 +332,16 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             InstanceAgent::Config.config[:use_fips_mode] = false
           end
           
-          should "use no endpoint when not using Fips" do
+          should "use right endpoint when using endpoint override" do
+            s3_endpoint_override_url = 'htpp://testendpointoverride'
+            InstanceAgent::Config.config[:s3_endpoint_override] = s3_endpoint_override_url
+            assert_equal s3_endpoint_override_url, @command_executor.s3_options[:endpoint].to_s
+            InstanceAgent::Config.config[:s3_endpoint_override] = nil
+          end
+          
+          should "use no endpoint when neither using Fips nor Endpoint override" do
+            InstanceAgent::Config.config[:s3_endpoint_override] = nil
+            InstanceAgent::Config.config[:use_fips_mode] = false
             assert_false @command_executor.s3_options.include? :endpoint
           end
           
