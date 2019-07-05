@@ -17,7 +17,7 @@ module InstanceAgent
       end
 
       if runas && !sudo
-        return 'su - ' + script.runas + ' -c ' + absolute_cmd_path
+        return 'su ' + script.runas + ' -c ' + absolute_cmd_path
       end
 
       if !runas && sudo
