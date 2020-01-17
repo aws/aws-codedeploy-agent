@@ -2,14 +2,14 @@ require 'net/http'
 require 'json'
 require 'instance_agent'
 
+# https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-identity-documents.html
 class InstanceMetadata
 
   IP_ADDRESS = '169.254.169.254'
   PORT = 80
   HTTP_TIMEOUT = 30
-  
+
   def self.host_identifier
-    doc = JSON.parse(http_get('/latest/dynamic/instance-identity/document').strip)
     "arn:#{partition}:ec2:#{doc['region']}:#{doc['accountId']}:instance/#{doc['instanceId']}"
   end
 
@@ -18,15 +18,7 @@ class InstanceMetadata
   end
 
   def self.region
-    begin 
-      az = http_get('/latest/meta-data/placement/availability-zone').strip
-    rescue Net::ReadTimeout, Net::OpenTimeout
-      raise InstanceMetadata::InstanceMetadataError.new('Not an EC2 instance and region not provided in the environment variable AWS_REGION. Please specify your region using environment variable AWS_REGION.')
-    end
-
-    raise "Invalid availability zone name: #{az}" unless
-      az =~ /[a-z]{2}-[a-z]+-\d+[a-z]/
-    az.chop
+    doc['region']
   end
 
   def self.instance_id
@@ -56,5 +48,10 @@ class InstanceMetadata
       end
       return response.body
     end
+  end
+
+  private
+  def self.doc
+    JSON.parse(http_get('/latest/dynamic/instance-identity/document').strip)
   end
 end
