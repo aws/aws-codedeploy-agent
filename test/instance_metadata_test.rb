@@ -5,7 +5,6 @@ class InstanceMetadataTest < InstanceAgentTestCase
 
   def self.should_check_status_code(&blk)
     should 'raise unless status code is 200' do
-      @response.stubs(:code).returns(503)
       @instance_doc_response.stubs(:code).returns(503)
       assert_raise(&blk)
     end
@@ -20,15 +19,12 @@ class InstanceMetadataTest < InstanceAgentTestCase
       @host_identifier = "arn:#{@partition}:ec2:#{region}:#{account_id}:instance/#{instance_id}"
       @instance_document = JSON.dump({"accountId" => account_id, "region" => region, "instanceId" => instance_id})
       @http = mock()
-      @response = mock()
       @instance_doc_response = mock()
       @partition_response = mock()
       @partition_response.stubs(:code).returns("200")
-      @response.stubs(:code).returns("200")
       @instance_doc_response.stubs(:code).returns("200")
 
       @http.stubs(:get).with('/latest/meta-data/services/partition').returns(@partition_response)
-      @http.stubs(:get).with('/latest/meta-data/placement/availability-zone').returns(@response)
       @http.stubs(:get).with('/latest/dynamic/instance-identity/document').returns(@instance_doc_response)
       Net::HTTP.stubs(:start).yields(@http)
     end
@@ -36,7 +32,6 @@ class InstanceMetadataTest < InstanceAgentTestCase
     context 'getting the host identifier' do
 
       setup do
-        @response.stubs(:body).returns("us-east-1a")
         @partition_response.stubs(:body).returns(@partition)
         @instance_doc_response.stubs(:body).returns(@instance_document)
       end
@@ -69,7 +64,7 @@ class InstanceMetadataTest < InstanceAgentTestCase
     context 'getting the region' do
 
       setup do
-        @response.stubs(:body).returns("us-east-1a")
+        @instance_doc_response.stubs(:body).returns(@instance_document)
       end
 
       should 'connect to the right host' do
@@ -79,41 +74,12 @@ class InstanceMetadataTest < InstanceAgentTestCase
 
       should 'call the correct URL' do
         @http.expects(:get).
-          with("/latest/meta-data/placement/availability-zone").
-          returns(@response)
+          with("/latest/dynamic/instance-identity/document").
+          returns(@instance_doc_response)
         InstanceMetadata.region
       end
 
       should 'return the region part of the AZ' do
-        @response.stubs(:body).returns("us-east-1a")
-        assert_equal("us-east-1", InstanceMetadata.region)
-      end
-
-      should 'raise InstanceMetadataError if http read times out' do
-        @http.expects(:get).
-          with("/latest/meta-data/placement/availability-zone").
-          raises(Net::ReadTimeout)
-        assert_raised_with_message('Not an EC2 instance and region not provided in the environment variable AWS_REGION. Please specify your region using environment variable AWS_REGION.', InstanceMetadata::InstanceMetadataError) do
-          InstanceMetadata.region
-        end
-      end
-
-      should 'raise InstanceMetadataError if http open times out' do
-        @http.expects(:get).
-          with("/latest/meta-data/placement/availability-zone").
-          raises(Net::OpenTimeout)
-        assert_raised_with_message('Not an EC2 instance and region not provided in the environment variable AWS_REGION. Please specify your region using environment variable AWS_REGION.', InstanceMetadata::InstanceMetadataError) do
-          InstanceMetadata.region
-        end
-      end
-
-      should 'raise an error if the response is not an AZ' do
-        @response.stubs(:body).returns("foobar")
-        assert_raise { InstanceMetadata.region }
-      end
-
-      should 'ignore whitespace in the body' do
-        @response.stubs(:body).returns(" \tus-east-1a   ")
         assert_equal("us-east-1", InstanceMetadata.region)
       end
 
