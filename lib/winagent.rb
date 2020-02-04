@@ -17,8 +17,10 @@ include Win32
 
 class InstanceAgentService < Daemon
 
-  def initialize 
+  def initialize
+    @app_root_folder = File.join(ENV['PROGRAMDATA'], "Amazon/CodeDeploy")
     InstanceAgent::Platform.util = InstanceAgent::WindowsUtil
+
     cert_dir = File.expand_path(File.join(File.dirname(__FILE__), '..\certs'))
     Aws.config[:ssl_ca_bundle] = File.join(cert_dir, 'ca-bundle.crt')
     ENV['AWS_SSL_CA_DIRECTORY'] = File.join(cert_dir, 'ca-bundle.crt')
@@ -32,6 +34,7 @@ class InstanceAgentService < Daemon
 
   def service_main
     read_config
+    @attempt_count = 0
     log(:info, 'started')
      shutdown_flag = false
      while running? && !shutdown_flag
@@ -73,8 +76,7 @@ class InstanceAgentService < Daemon
   end 
   
   def read_config
-    default_root = File.join(ENV['PROGRAMDATA'], "Amazon/CodeDeploy")
-    default_config = File.join(default_root, "conf.yml")
+    default_config = File.join(@app_root_folder, "conf.yml")
     InstanceAgent::Config.config({:config_file => default_config,
             :on_premises_config_file => File.join(default_root, "conf.onpremises.yml")})
     InstanceAgent::Config.load_config
@@ -87,6 +89,16 @@ class InstanceAgentService < Daemon
   
   def with_error_handling
     yield
+  rescue Seahorse::Client::NetworkingError => e
+    @attempt_count = @attempt_count + 1
+    if @attempt_count > 3
+      log(:error, "Failed to recover after certificate issue:" + e.inspect)
+      exit
+    end
+    log(:error, "Custom:" + e.inspect)
+    # try to copy certs from application root folder
+    @certs_backup_folder = File.join(@app_root_folder, "certs/.")
+    FileUtils.cp_r(@certs_backup_folder, @cert_dir)
   rescue SocketError => e
     log(:info, "#{description}: failed to run as the connection failed! #{e.class} - #{e.message} - #{e.backtrace.join("\n")}")
     sleep InstanceAgent::Config.config[:wait_after_connection_problem]
