@@ -148,11 +148,13 @@ EOF
     @http_proxy = nil
     @downgrade = false
     @upgrade = false
+    @target_version_arg = nil
 
     @args = Array.new(ARGV)
     opts = GetoptLong.new(['--sanity-check', GetoptLong::NO_ARGUMENT], ['--help', GetoptLong::NO_ARGUMENT],
                           ['--re-execed', GetoptLong::NO_ARGUMENT], ['--proxy', GetoptLong::OPTIONAL_ARGUMENT],
-                          ['--downgrade', GetoptLong::NO_ARGUMENT], ['--upgrade', GetoptLong::NO_ARGUMENT])
+                          ['--downgrade', GetoptLong::NO_ARGUMENT], ['--upgrade', GetoptLong::NO_ARGUMENT],
+                          ['-v', '--version', GetoptLong::OPTIONAL_ARGUMENT])
     opts.each do |opt, args|
       case opt
       when '--sanity-check'
@@ -169,6 +171,8 @@ EOF
         if (args != '')
           @http_proxy = args
         end
+      when '-v' || '--version'
+        @target_version_arg = args
       end
     end
 
@@ -550,7 +554,10 @@ EOF
   end
 
   running_version = running_version(@type)
-  target_version = target_version(@type)
+  target_version = @target_version_arg
+  if target_version.nil?
+    target_version = target_version(@type)
+  end
   if target_version.include? running_version
     @log.info("Running version, #{running_version}, matches target version, #{target_version}, skipping install")
   else
