@@ -28,9 +28,11 @@ module InstanceAgent
           perform
           @error_count = 0
         rescue Seahorse::Client::NetworkingError => e
-          log(:error, "Failed to execute the command. Your certificates might have been deleted" )
-          # TODO: verify error message is "certificate verify failed"
-          raise e
+          log(:error, "Network error: " + e.inspect)
+          if e.message.include? "certificate verify failed"
+            log(:error, "Failed to execute the command. Your certificates might have been deleted" )
+          end
+          @error_count = @error_count.to_i + 1
         rescue Aws::Errors::MissingCredentialsError
           log(:error, "Missing credentials - please check if this instance was started with an IAM instance profile")
           @error_count = @error_count.to_i + 1

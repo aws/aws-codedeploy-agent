@@ -326,7 +326,8 @@ EOF
   end
 
   def setup_windows_certificates
-    cert_dir = File.expand_path(File.join(File.dirname(__FILE__), '..\certs'))
+    app_root_folder = File.join(ENV['PROGRAMDATA'], "Amazon/CodeDeploy")
+    cert_dir = File.expand_path(File.join(app_root_folder, 'certs'))
     @log.info("Setting up windows certificates from cert directory #{cert_dir}")
     ENV['AWS_SSL_CA_DIRECTORY'] = File.join(cert_dir, 'ca-bundle.crt')
     ENV['SSL_CERT_FILE'] = File.join(cert_dir, 'ca-bundle.crt')
