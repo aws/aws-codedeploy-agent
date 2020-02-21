@@ -58,5 +58,28 @@ class InstanceAgentBaseTest < InstanceAgentTestCase
         assert_nothing_raised { @base.run }
       end
     end
+
+    context 'when certificates are lost' do
+
+      should 'continue to execute' do
+        CERT_VERIFICATION_FAILED_MESSAGE = 'SSL_connect returned=1 errno=0 state=error: certificate verify failed'
+        @base.stubs(:perform).raises(Seahorse::Client::NetworkingError.new(Exception.new(CERT_VERIFICATION_FAILED_MESSAGE)))
+
+        @base.run
+      end
+
+    end
+
+    context 'when network error is thrown' do
+
+      should 'continue to execute' do
+        @base.stubs(:perform).raises(Seahorse::Client::NetworkingError.new(Exception.new('random message')))
+
+        @base.run
+      end
+
+    end
+
   end
+
 end

@@ -1,4 +1,5 @@
-require 'win32/daemon'
+# we can't test cross-platform so remove mentioning of windows libraries for tests https://github.com/chefspec/chefspec/issues/405
+#require 'win32/daemon'
 require 'core_ext'
 require 'aws-sdk-core'
 require 'process_manager'
@@ -13,14 +14,13 @@ require 'instance_agent/platform/windows_util'
 require 'instance_agent/plugins/codedeploy/register_plugin'
 require 'pathname'
 
-include Win32
+#include Win32
 
 class InstanceAgentService < Daemon
 
   def initialize
     @app_root_folder = File.join(ENV['PROGRAMDATA'], "Amazon/CodeDeploy")
     InstanceAgent::Platform.util = InstanceAgent::WindowsUtil
-
     cert_dir = File.join(@app_root_folder, 'certs')
     Aws.config[:ssl_ca_bundle] = File.join(cert_dir, 'ca-bundle.crt')
     ENV['AWS_SSL_CA_DIRECTORY'] = File.join(cert_dir, 'ca-bundle.crt')
@@ -55,7 +55,7 @@ class InstanceAgentService < Daemon
       exit!
     end
   end
-  
+
   def service_stop
     log(:info, 'stopping the agent')
     @polling_mutex.synchronize do
@@ -63,7 +63,7 @@ class InstanceAgentService < Daemon
       log(:info, 'command execution threads shutdown, agent exiting now')
     end
   end
-  
+
   def log(severity, message)
     raise ArgumentError, "Unknown severity #{severity.inspect}" unless InstanceAgent::Log::SEVERITIES.include?(severity.to_s)
     InstanceAgent::Log.send(severity.to_sym, "#{description}: #{message}")
@@ -72,20 +72,20 @@ class InstanceAgentService < Daemon
   def expand_conf_path(key)
     tmp = InstanceAgent::Config.config[key.to_sym]
     InstanceAgent::Config.config(key.to_sym => File.join(ENV['PROGRAMDATA'], tmp)) unless Pathname.new(tmp).absolute?
-  end 
-  
+  end
+
   def read_config
     default_config = File.join(@app_root_folder, "conf.yml")
     InstanceAgent::Config.config({:config_file => default_config,
-            :on_premises_config_file => File.join(@app_root_folder, "conf.onpremises.yml")})
+                                  :on_premises_config_file => File.join(@app_root_folder, "conf.onpremises.yml")})
     InstanceAgent::Config.load_config
 
     expand_conf_path(:root_dir)
     expand_conf_path(:log_dir)
-    
+
     InstanceAgent::Log.init(File.join(InstanceAgent::Config.config[:log_dir], "codedeploy-agent-log.txt"))
   end
-  
+
   def with_error_handling
     yield
   rescue SocketError => e
@@ -99,7 +99,7 @@ class InstanceAgentService < Daemon
       log(:error, "#{description}: error during start or run: #{e.class} - #{e.message} - #{e.backtrace.join("\n")}")
       sleep 5
     end
-  end  
+  end
 end
 
 InstanceAgentService.mainloop unless defined?(Ocra)

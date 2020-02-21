@@ -58,7 +58,8 @@ module AWS
         end
 
         def self.configure_windows_certificate
-          cert_dir = File.expand_path(File.join(File.dirname(__FILE__), '..\..\..\..\certs'))
+          app_root_folder = File.join(ENV['PROGRAMDATA'], "Amazon/CodeDeploy")
+          cert_dir = File.join(app_root_folder, 'certs')
           Aws.config[:ssl_ca_bundle] = File.join(cert_dir, 'windows-ca-bundle.crt')
           ENV['AWS_SSL_CA_DIRECTORY'] = File.join(cert_dir, 'windows-ca-bundle.crt')
           ENV['SSL_CERT_FILE'] = File.join(cert_dir, 'windows-ca-bundle.crt')
