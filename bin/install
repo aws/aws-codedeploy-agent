@@ -55,10 +55,11 @@ begin
 install [--sanity-check] [--proxy http://hostname:port] <package-type>
    --sanity-check [optional]
    --proxy [optional]
-   package-type: 'rpm', 'deb', or 'auto'
+   package-type: 'rpm', 'deb', 'debdpkg' or 'auto'
 
 Installs fetches the latest package version of the specified type and
 installs it. rpms are installed with yum; debs are installed using gdebi.
+The 'debdpkg' option forces the installation of deb packages with the dpkg command.
 
 This program is invoked automatically to update the agent once per day using
 the same package manager the codedeploy-agent is initially installed with.
@@ -385,7 +386,7 @@ end
     else
       #use -n for non-interactive mode
       #use -o to not overwrite config files unless they have not been changed
-      install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dkpg::Options::=--force-confold']
+      install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold']
       install_from_s3(region, bucket, version_file_key, @type, install_cmd)
       do_sanity_check('/usr/sbin/service')
     end
@@ -393,6 +394,25 @@ end
     #use -n for non-interactive mode
     install_cmd = ['/usr/bin/zypper', 'install', '-n']
     install_from_s3(region, bucket, version_file_key, 'rpm', install_cmd)
+  when 'debdpkg'
+    running_agent = `dpkg -s codedeploy-agent`
+    running_agent_info = running_agent.split
+    version_index = running_agent_info.index('Version:')
+    if !version_index.nil?
+      running_version = running_agent_info[version_index + 1]
+    else
+      running_version = "No running version"
+    end
+    @log.info("Running version " + running_version)
+    target_version = get_version_file_from_s3(region, bucket, version_file_key)['deb']
+    if target_version.include? running_version
+      @log.info('Running version matches target version, skipping install')
+    else
+      #use --force-confdef,confold to ignore existing config files
+      install_cmd = ['/usr/bin/dpkg', '--install', '--force-confdef,confold']
+      install_from_s3(region, bucket, version_file_key, "deb", install_cmd)
+      do_sanity_check('/usr/sbin/service')
+    end
   else
     @log.error("Unsupported package type '#{@type}'")
     exit(1)
