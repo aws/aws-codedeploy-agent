@@ -233,7 +233,7 @@ EOF
     elsif (region.split("-")[0] == 'cn')
       URI.parse("https://#{bucket}.s3.#{region}.amazonaws.com.cn/#{key}")
     else
-      URI.parse("https://#{bucket}.s3-#{region}.amazonaws.com/#{key}")
+      URI.parse("https://#{bucket}.s3.#{region}.amazonaws.com/#{key}")
     end
   end
 
