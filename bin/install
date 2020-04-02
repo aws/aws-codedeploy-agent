@@ -5,6 +5,7 @@
 # than 2.0. Testing on multiple Ruby versions is required for
 # changes to this part of the code.
 ##################################################################
+require 'json'
 
 class Proxy
   instance_methods.each do |m|
@@ -198,19 +199,13 @@ EOF
 
   def get_ec2_metadata_region
     begin
-      uri = URI.parse('http://169.254.169.254/latest/meta-data/placement/availability-zone')
-      az = uri.read(:read_timeout => 120)
-      az.strip
+      uri = URI.parse('http://169.254.169.254/latest/dynamic/instance-identity/document')
+      document_string = uri.read(:read_timeout => 120)
+      doc = JSON.parse(document_string.strip)
+      return doc['region'].strip
     rescue
       @log.warn("Could not get region from EC2 metadata service at '#{uri.to_s}'")
       return nil
-    end
-
-    if (az !~ /[a-z]{2}-[a-z]+-\d+[a-z]/)
-      @log.warn("Invalid availability zone name: '#{az}'.")
-      return nil
-    else
-      return az.chop
     end
   end
 
