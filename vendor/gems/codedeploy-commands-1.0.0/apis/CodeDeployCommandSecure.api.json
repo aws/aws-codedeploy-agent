@@ -1,13 +1,13 @@
 {
   "version": "2.0",
   "metadata": {
-    "apiVersion": "2014-10-06",
-    "endpointPrefix": "codedeploy-commands",
+    "apiVersion": "2019-11-11",
+    "endpointPrefix": "codedeploy-commands-secure",
     "jsonVersion": "1.1",
-    "serviceAbbreviation": "CodeDeployCommand",
+    "serviceAbbreviation": "CodeDeployCommandSecure",
     "serviceFullName": "AWS CodeDeploy Command Service",
     "signatureVersion": "v4",
-    "targetPrefix": "CodeDeployCommandService_v20141006",
+    "targetPrefix": "CodeDeployCommandService",
     "protocol": "json"
   },
   "documentation": "Control plane for the CodeDeploy stack. Exposes APIs needed by CodeDeploy clients to run deployment commands.",

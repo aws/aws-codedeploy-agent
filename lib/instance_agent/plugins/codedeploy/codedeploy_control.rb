@@ -47,6 +47,7 @@ module InstanceAgent
 
         def verify_cert_fields
           deploy_control_endpoint = get_client.config.endpoint
+          InstanceAgent::Log.debug("Current deploy control endpoint: #{deploy_control_endpoint}")
           begin
             cert_verifier = InstanceAgent::Plugins::CodeDeployPlugin::CodeDeployControlCertVerifier.new(deploy_control_endpoint)
             cert_verifier.verify_cert

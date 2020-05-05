@@ -10,7 +10,7 @@ gem "codedeploy-commands", "1.0.0", :path => "#{File.expand_path(__FILE__)}/../v
 
 group :test do
   gem 'test-unit'
-  gem 'activesupport', :require => 'active_support'  
+  gem 'activesupport', :require => 'active_support'
   gem 'coveralls', require: false
   gem 'cucumber'
   gem 'fakefs', :require => 'fakefs/safe'

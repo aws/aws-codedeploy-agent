@@ -7,6 +7,9 @@ module Aws
         url = InstanceAgent::Config.config[:deploy_control_endpoint]
         if url.nil?
           url = "https://codedeploy-commands"
+          if InstanceAgent::Config.config[:enable_auth_policy]
+            url.concat "-secure"
+          end
           if InstanceAgent::Config.config[:use_fips_mode]
             url.concat "-fips"
           end
