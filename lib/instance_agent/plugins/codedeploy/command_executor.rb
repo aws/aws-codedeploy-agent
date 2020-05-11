@@ -375,11 +375,11 @@ module InstanceAgent
         private
         def unpack_bundle(cmd, bundle_file, deployment_spec)
           strip_leading_directory = deployment_spec.revision_source == 'GitHub'
+          actual_dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive')
 
           if strip_leading_directory
             # Extract to a temporary directory first so we can move the files around
             dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive-temp')
-            actual_dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive')
             FileUtils.rm_rf(dst)
           else
             dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive')
@@ -407,13 +407,23 @@ module InstanceAgent
             InstanceAgent::Platform.util.extract_tar(bundle_file, dst)
           end
 
+          archive_root_files = Dir.entries(dst)
+          archive_root_files.delete_if { |name| name == '.' || name == '..' }
+
+          # If the top level of the archive is a directory, strip that before giving up
+          if (!strip_leading_directory) && (archive_root_files.size == 1) && File.directory?(archive_root_files[0])
+            log(:info, "Archived directory. Looking inside")
+            strip_leading_directory = true
+
+            dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive-temp')
+            FileUtils.rm_rf(dst)
+            FileUtils.mv(actual_dst, dst)
+          end
+
           if strip_leading_directory
             log(:info, "Stripping leading directory from archive bundle contents.")
 
             # Find leading directory to remove
-            archive_root_files = Dir.entries(dst)
-            archive_root_files.delete_if { |name| name == '.' || name == '..' }
-
             if (archive_root_files.size != 1)
               log(:warn, "Expected archive to have a single root directory containing the actual bundle root, but it had #{archive_root_files.size} entries instead. Skipping leading directory removal and using archive as is.")
               FileUtils.mv(dst, actual_dst)
