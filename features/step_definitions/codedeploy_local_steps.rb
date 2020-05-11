@@ -21,7 +21,7 @@ After("@codedeploy-local") do
   FileUtils.rm_rf(@test_directory) unless @test_directory.nil?
 end
 
-Given(/^I have a sample local (tgz|tar|zip|directory|relative_directory|custom_event_directory|directory_with_destination_files) bundle$/) do |bundle_type|
+Given(/^I have a sample local (tgz|tar|zip|zipped_directory|directory|relative_directory|custom_event_directory|directory_with_destination_files) bundle$/) do |bundle_type|
   case bundle_type
   when 'custom_event_directory'
     @bundle_original_directory_location = StepConstants::SAMPLE_CUSTOM_EVENT_APP_BUNDLE_FULL_PATH
@@ -32,13 +32,15 @@ Given(/^I have a sample local (tgz|tar|zip|directory|relative_directory|custom_e
   end
 
   expect(File.directory?(@bundle_original_directory_location)).to be true
-  @bundle_type = bundle_type.include?('directory') ? 'directory' : bundle_type
+  @bundle_type = bundle_type.include?('zip') ? 'zip' : (bundle_type.include?('directory') ? 'directory' : bundle_type)
 
   case bundle_type
   when 'relative_directory'
     @bundle_location = Pathname.new(@bundle_original_directory_location).relative_path_from Pathname.getwd
   when 'zip'
     @bundle_location = zip_app_bundle(@test_directory)
+  when 'zipped_directory'
+    @bundle_location = zip_app_dir_bundle(@test_directory)
   when 'tar'
     @bundle_location = tar_app_bundle(@test_directory)
   when 'tgz'
@@ -48,6 +50,16 @@ Given(/^I have a sample local (tgz|tar|zip|directory|relative_directory|custom_e
   end
 
   expect(File.file?(@bundle_location)).to be true unless bundle_type.include? 'directory'
+end
+
+def zip_app_dir_bundle(temp_directory_to_create_bundle)
+  zip_file_name = "#{temp_directory_to_create_bundle}/app_dir_bundle.zip"
+  Dir.mktmpdir { |zip_build_dir|
+    FileUtils.cp_r(StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH, zip_build_dir)
+    zip_directory(zip_build_dir, zip_file_name)
+  }
+  FileUtils.cp(zip_file_name, "/tmp")
+  zip_file_name
 end
 
 def tar_app_bundle(temp_directory_to_create_bundle)

@@ -411,10 +411,10 @@ module InstanceAgent
           archive_root_files.delete_if { |name| name == '.' || name == '..' }
 
           # If the top level of the archive is a directory, strip that before giving up
-          if (!strip_leading_directory) && (archive_root_files.size == 1) && File.directory?(archive_root_files[0])
+          if (!strip_leading_directory) && (archive_root_files.size == 1) && File.directory?(File.join(dst, archive_root_files[0]))
             log(:info, "Archived directory. Looking inside")
             strip_leading_directory = true
-
+            puts("*********************")
             dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive-temp')
             FileUtils.rm_rf(dst)
             FileUtils.mv(actual_dst, dst)
