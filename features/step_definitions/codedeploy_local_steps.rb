@@ -58,7 +58,6 @@ def zip_app_dir_bundle(temp_directory_to_create_bundle)
     FileUtils.cp_r(StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH, zip_build_dir)
     zip_directory(zip_build_dir, zip_file_name)
   }
-  FileUtils.cp(zip_file_name, "/tmp")
   zip_file_name
 end
 
