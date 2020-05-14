@@ -52,12 +52,16 @@ Given(/^I have a sample local (tgz|tar|zip|zipped_directory|directory|relative_d
   expect(File.file?(@bundle_location)).to be true unless bundle_type.include? 'directory'
 end
 
+# Create a zip of the bundle with a nested directory containing the actual bundle files
 def zip_app_dir_bundle(temp_directory_to_create_bundle)
   zip_file_name = "#{temp_directory_to_create_bundle}/app_dir_bundle.zip"
   Dir.mktmpdir { |zip_build_dir|
+    # Copy the bundle files into a temporary directory so we can just zip the sample bundle
     FileUtils.cp_r(StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH, zip_build_dir)
     zip_directory(zip_build_dir, zip_file_name)
   }
+  # Confirm appspec.yml is not at top level
+  Zip::File.open(zip_file_name) { |zip| expect(zip.entries.map(&:name).include? "appspec.yml").to be false }
   zip_file_name
 end
 
