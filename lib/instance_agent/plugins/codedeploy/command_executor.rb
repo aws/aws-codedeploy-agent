@@ -415,7 +415,7 @@ module InstanceAgent
             FileUtils.mv(nested_archive_root, dst)
             FileUtils.rmdir(tmp_dst)
 
-            log(:debug, Dir.entries(actual_dst).join("; "))            
+            log(:debug, Dir.entries(dst).join("; "))            
           end
         end
 
