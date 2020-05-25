@@ -401,8 +401,11 @@ module InstanceAgent
           archive_root_files = Dir.entries(dst)
           archive_root_files.delete_if { |name| name == '.' || name == '..' }
 
-          # If the top level of the archive is a directory, strip that before giving up
-          if ((archive_root_files.size == 1) && File.directory?(File.join(dst, archive_root_files[0])))
+          # If the top level of the archive is a directory that contains an appspec,
+          # strip that before giving up
+          if ((archive_root_files.size == 1) && 
+              File.directory?(File.join(dst, archive_root_files[0])) &&
+              Dir.entries(File.join(dst, archive_root_files[0])).grep(/appspec/i).any?)
             log(:info, "Stripping leading directory from archive bundle contents.")
             # Move the unpacked files to a temporary location
             tmp_dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive-temp')
