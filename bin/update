@@ -439,7 +439,7 @@ EOF
 
   REGION = get_region
   BUCKET = "aws-codedeploy-#{REGION}"
-  VERSION_FILE_KEY = 'latest/VERSION'
+  VERSION_FILE_KEY = 'latest/LATEST_VERSION'
 
   NO_AGENT_INSTALLED_REPORTED_WINDOWS_VERSION = 'No Agent Installed'
   def running_agent_version_windows
