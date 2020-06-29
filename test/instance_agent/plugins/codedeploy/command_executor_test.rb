@@ -1,7 +1,7 @@
 require 'test_helper'
 require 'certificate_helper'
 require 'stringio'
-require 'aws-sdk-core/s3'
+require 'aws-sdk-s3'
 
 require 'aws/codedeploy/local/deployer'
 
