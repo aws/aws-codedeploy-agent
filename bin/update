@@ -89,16 +89,16 @@ If --downgrade is specified, the script will only update the agent if an older v
 agent is marked as current. Upgrades will be ignored.
 
 This install script needs Ruby version 2.x installed as a prerequisite.
-Currently recommanded Ruby versions are 2.0.0, 2.1.8, 2.2.4 and 2.3.0, and 2.4.0.
+Currently recommended Ruby versions are 2.0.0, 2.1.8, 2.2.4, 2.3, 2.4, 2.5, 2.6 and 2.7.
 If multiple Ruby versions are installed, the default ruby version will be used.
-If the default ruby version does not satisfy reqirement, the newest version will be used.
+If the default ruby version does not satisfy requirement, the newest version will be used.
 If you do not have a supported Ruby version installed, please install one of them first.
 
 EOF
   end
 
   def supported_ruby_versions
-    ['2.5', '2.4', '2.3', '2.2', '2.1', '2.0']
+    ['2.7', '2.6', '2.5', '2.4', '2.3', '2.2', '2.1', '2.0']
   end
 
   # check ruby version, only version 2.x works
@@ -199,7 +199,7 @@ EOF
     # change interpreter when symlink /usr/bin/ruby2.x exists, but running with non-supported ruby version
     actual_ruby_version = RUBY_VERSION.split('.').map{|s|s.to_i}
     left_bound = '2.0.0'.split('.').map{|s|s.to_i}
-    right_bound = '2.4.1'.split('.').map{|s|s.to_i}
+    right_bound = '2.7.0'.split('.').map{|s|s.to_i}
     if (actual_ruby_version <=> left_bound) < 0
       if(!@reexeced)
         @log.info("The current Ruby version is not 2.x! Restarting the installer with #{ruby_interpreter_path}")
