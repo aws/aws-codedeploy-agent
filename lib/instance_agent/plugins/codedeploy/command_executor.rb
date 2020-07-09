@@ -374,16 +374,7 @@ module InstanceAgent
 
         private
         def unpack_bundle(cmd, bundle_file, deployment_spec)
-          strip_leading_directory = deployment_spec.revision_source == 'GitHub'
-
-          if strip_leading_directory
-            # Extract to a temporary directory first so we can move the files around
-            dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive-temp')
-            actual_dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive')
-            FileUtils.rm_rf(dst)
-          else
-            dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive')
-          end
+          dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive')
 
           if "tar".eql? deployment_spec.bundle_type
             InstanceAgent::Platform.util.extract_tar(bundle_file, dst)
@@ -407,26 +398,27 @@ module InstanceAgent
             InstanceAgent::Platform.util.extract_tar(bundle_file, dst)
           end
 
-          if strip_leading_directory
+          archive_root_files = Dir.entries(dst)
+          archive_root_files.delete_if { |name| name == '.' || name == '..' }
+
+          # If the top level of the archive is a directory that contains an appspec,
+          # strip that before giving up
+          if ((archive_root_files.size == 1) && 
+              File.directory?(File.join(dst, archive_root_files[0])) &&
+              Dir.entries(File.join(dst, archive_root_files[0])).grep(/appspec/i).any?)
             log(:info, "Stripping leading directory from archive bundle contents.")
+            # Move the unpacked files to a temporary location
+            tmp_dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive-temp')
+            FileUtils.rm_rf(tmp_dst)
+            FileUtils.mv(dst, tmp_dst)
 
-            # Find leading directory to remove
-            archive_root_files = Dir.entries(dst)
-            archive_root_files.delete_if { |name| name == '.' || name == '..' }
+            # Move the top level directory to the intended location
+            nested_archive_root = File.join(tmp_dst, archive_root_files[0])
+            log(:debug, "Actual archive root at #{nested_archive_root}. Moving to #{dst}")
+            FileUtils.mv(nested_archive_root, dst)
+            FileUtils.rmdir(tmp_dst)
 
-            if (archive_root_files.size != 1)
-              log(:warn, "Expected archive to have a single root directory containing the actual bundle root, but it had #{archive_root_files.size} entries instead. Skipping leading directory removal and using archive as is.")
-              FileUtils.mv(dst, actual_dst)
-              return
-            end
-
-            nested_archive_root = File.join(dst, archive_root_files[0])
-            log(:debug, "Actual archive root at #{nested_archive_root}. Moving to #{actual_dst}")
-
-            FileUtils.mv(nested_archive_root, actual_dst)
-            FileUtils.rmdir(dst)
-
-            log(:debug, Dir.entries(actual_dst).join("; "))
+            log(:debug, Dir.entries(dst).join("; "))            
           end
         end
 
