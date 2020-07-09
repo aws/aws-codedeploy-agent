@@ -40,6 +40,7 @@ module InstanceAgent
 
           log(:debug, "Configuring deploy control client: Region=#{region.inspect}")
           log(:debug, "Deploy control endpoint override=#{InstanceAgent::Config.config[:deploy_control_endpoint]}")
+          log(:debug, "Enable auth policy = #{InstanceAgent::Config.config[:enable_auth_policy]}")
 
           @deploy_control = InstanceAgent::Plugins::CodeDeployPlugin::CodeDeployControl.new(:region => region, :logger => InstanceAgent::Log, :ssl_ca_directory => ENV['AWS_SSL_CA_DIRECTORY'])
           @deploy_control_client = @deploy_control.get_client

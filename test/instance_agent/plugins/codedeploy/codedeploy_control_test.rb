@@ -83,6 +83,29 @@ class CodeDeployControlTest < InstanceAgentTestCase
             assert_equal "codedeploy-commands-fips.us-west-2.amazonaws.com", codedeploy_control_client.get_client.config.endpoint.host
         end
       end
+
+      context "with enable_auth_policy set" do
+        setup do
+          InstanceAgent::Config.config[:enable_auth_policy] = true
+        end
+
+        should "use secure endpoint" do
+          codedeploy_control_client = CodeDeployControl.new :region => "us-west-2"
+          assert_equal "codedeploy-commands-secure.us-west-2.amazonaws.com", codedeploy_control_client.get_client.config.endpoint.host
+        end
+      end
+
+      context "with both of use_fips_mode and enable_auth_policy set" do
+        setup do
+          InstanceAgent::Config.config[:use_fips_mode] = true
+          InstanceAgent::Config.config[:enable_auth_policy] = true
+        end
+
+        should "use secure Fips endpoint" do
+          codedeploy_control_client = CodeDeployControl.new :region => "us-west-2"
+          assert_equal "codedeploy-commands-secure-fips.us-west-2.amazonaws.com", codedeploy_control_client.get_client.config.endpoint.host
+        end
+      end
         
     end
   end

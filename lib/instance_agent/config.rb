@@ -43,7 +43,8 @@ module InstanceAgent
         :enable_deployments_log => true,
         :use_fips_mode => false,
         :deploy_control_endpoint => nil,
-        :s3_endpoint_override => nil
+        :s3_endpoint_override => nil,
+        :enable_auth_policy => false
       })
     end
 
