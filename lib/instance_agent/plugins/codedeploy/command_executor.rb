@@ -384,17 +384,16 @@ module InstanceAgent
             begin
               InstanceAgent::Platform.util.extract_zip(bundle_file, dst)
             rescue
+              log(:warn, "Encountered non-zero exit code with default system unzip util. Hence falling back to ruby unzip to mitigate any partially unzipped or skipped zip files.")
               Zip::File.open(bundle_file) do |zipfile|
                 zipfile.each do |f|
                   file_dst = File.join(dst, f.name)
                   FileUtils.mkdir_p(File.dirname(file_dst))
-                  zipfile.extract(f, file_dst)
+                  zipfile.extract(f, file_dst) { true }
                 end
               end
             end
           else
-            # If the bundle was a generated through a Sabini Repository
-            # it will be in tar format, and it won't have a bundle type
             InstanceAgent::Platform.util.extract_tar(bundle_file, dst)
           end
 
