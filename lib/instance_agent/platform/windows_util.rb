@@ -100,7 +100,7 @@ module InstanceAgent
 
       if exit_status != 0
         msg = "Error extracting zip archive: #{exit_status}"
-        log(:debug, msg)
+        log(:error, msg)
         raise msg
       end
     end 
