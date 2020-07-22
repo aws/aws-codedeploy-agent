@@ -1,6 +1,7 @@
 require 'openssl'
 require 'fileutils'
 require 'aws-sdk-core'
+require 'aws-sdk-s3'
 require 'zlib'
 require 'zip'
 require 'instance_metadata'

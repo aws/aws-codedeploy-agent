@@ -25,6 +25,43 @@ class Proxy
   end
 end
 
+require 'net/http'
+require 'json'
+
+class IMDSV2
+  def self.region
+    doc['region'].strip
+  end
+
+  private
+  def self.http_request(request)
+    Net::HTTP.start('169.254.169.254', 80, :read_timeout => 120, :open_timeout => 120) do |http|
+      response = http.request(request)
+      if response.code.to_i != 200
+        raise "HTTP error from metadata service: #{response.message}, code #{response.code}"
+      end
+      return response.body
+    end
+  end
+
+  def self.put_request(path)
+    request = Net::HTTP::Put.new(path)
+    request['X-aws-ec2-metadata-token-ttl-seconds'] = '21600'
+    http_request(request)
+  end
+
+  def self.get_request(path, token)
+    request = Net::HTTP::Get.new(path)
+    request['X-aws-ec2-metadata-token'] = token
+    http_request(request)
+  end
+
+  def self.doc
+    token = put_request('/latest/api/token')
+    JSON.parse(get_request('/latest/dynamic/instance-identity/document', token).strip)
+  end
+end
+
 log_file_path = "/tmp/codedeploy-agent.update.log"
 
 require 'logger'
@@ -208,12 +245,9 @@ EOF
 
   def get_ec2_metadata_region
     begin
-      uri = URI.parse('http://169.254.169.254/latest/dynamic/instance-identity/document')
-      document_string = uri.read(:read_timeout => 120)
-      doc = JSON.parse(document_string.strip)
-      return doc['region'].strip
-    rescue
-      @log.warn("Could not get region from EC2 metadata service at '#{uri.to_s}'")
+      return IMDSV2.region
+    rescue => error
+      @log.warn("Could not get region from EC2 metadata service at '#{error.message}'")
       return nil
     end
   end

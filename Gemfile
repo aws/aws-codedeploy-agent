@@ -16,6 +16,7 @@ group :test do
   gem 'fakefs', :require => 'fakefs/safe'
   gem 'mocha'
   gem 'rspec'
+  gem 'webmock', :require => 'webmock/rspec'
   gem 'shoulda'
   gem 'shoulda-matchers'
   gem 'shoulda-context'

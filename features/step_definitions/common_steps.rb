@@ -1,4 +1,5 @@
 require 'aws-sdk-core'
+require 'aws-sdk-s3'
 
 $:.unshift File.join(File.dirname(File.expand_path('../..', __FILE__)), 'features')
 require 'step_definitions/step_constants'

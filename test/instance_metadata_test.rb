@@ -1,51 +1,50 @@
 require 'test_helper'
 require 'json'
+require 'webmock/rspec'
+require 'webmock/test_unit'
 
 class InstanceMetadataTest < InstanceAgentTestCase
+  include WebMock::API
 
   def self.should_check_status_code(&blk)
     should 'raise unless status code is 200' do
-      @instance_doc_response.stubs(:code).returns(503)
+      stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
+          with(headers: {'X-aws-ec2-metadata-token' => @token}).
+          to_return(status: 503, body: @instance_document, headers: {})
       assert_raise(&blk)
     end
   end
 
   context 'The instance metadata service' do
     setup do
+      WebMock.disable_net_connect!(allow_localhost: true)
       region = 'us-east-1'
       account_id = '123456789012'
       instance_id = 'i-deadbeef'
       @partition = 'aws'
       @host_identifier = "arn:#{@partition}:ec2:#{region}:#{account_id}:instance/#{instance_id}"
       @instance_document = JSON.dump({"accountId" => account_id, "region" => region, "instanceId" => instance_id})
-      @http = mock()
-      @instance_doc_response = mock()
-      @partition_response = mock()
-      @partition_response.stubs(:code).returns("200")
-      @instance_doc_response.stubs(:code).returns("200")
+      @instance_document_region_whitespace = JSON.dump({"accountId" => account_id, "region" => " us-east-1  \t", "instanceId" => instance_id})
+      @token = "mock_token"
 
-      @http.stubs(:get).with('/latest/meta-data/services/partition').returns(@partition_response)
-      @http.stubs(:get).with('/latest/dynamic/instance-identity/document').returns(@instance_doc_response)
-      Net::HTTP.stubs(:start).yields(@http)
+      stub_request(:put, 'http://169.254.169.254/latest/api/token').
+          with(headers: {'X-aws-ec2-metadata-token-ttl-seconds' => '21600'}).
+          to_return(status: 200, body: @token, headers: {})
+      stub_request(:get, 'http://169.254.169.254/latest/meta-data/services/partition').
+          with(headers: {'X-aws-ec2-metadata-token' => @token}).
+          to_return(status: 200, body: @partition, headers: {})
+      stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
+          with(headers: {'X-aws-ec2-metadata-token' => @token}).
+          to_return(status: 200, body: @instance_document, headers: {})
     end
 
     context 'getting the host identifier' do
 
-      setup do
-        @partition_response.stubs(:body).returns(@partition)
-        @instance_doc_response.stubs(:body).returns(@instance_document)
-      end
-
-      should 'connect to the right host' do
-        Net::HTTP.expects(:start).with('169.254.169.254', 80, :read_timeout => InstanceMetadata::HTTP_TIMEOUT/2, :open_timeout => InstanceMetadata::HTTP_TIMEOUT/2).yields(@http)
-        InstanceMetadata.host_identifier
-      end
-
       should 'call the correct URL' do
-        @http.expects(:get).
-          with("/latest/dynamic/instance-identity/document").
-          returns(@instance_doc_response)
         InstanceMetadata.host_identifier
+        assert_requested(:put, 'http://169.254.169.254/latest/api/token', times: 4)
+        assert_requested(:get, 'http://169.254.169.254/latest/meta-data/services/partition', times: 1)
+        assert_requested(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document', times: 3)
       end
 
       should 'return the body' do
@@ -53,7 +52,9 @@ class InstanceMetadataTest < InstanceAgentTestCase
       end
 
       should 'strip whitesace in the body' do
-        @instance_doc_response.stubs(:body).returns(" \t#{@instance_document}   ")
+        stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
+            with(headers: {'X-aws-ec2-metadata-token' => @token}).
+            to_return(status: 200, body: " \t#{@instance_document}   ", headers: {})
         assert_equal(@host_identifier, InstanceMetadata.host_identifier)
       end
 
@@ -63,23 +64,20 @@ class InstanceMetadataTest < InstanceAgentTestCase
 
     context 'getting the region' do
 
-      setup do
-        @instance_doc_response.stubs(:body).returns(@instance_document)
-      end
-
-      should 'connect to the right host' do
-        Net::HTTP.expects(:start).with('169.254.169.254', 80, :read_timeout => InstanceMetadata::HTTP_TIMEOUT/2, :open_timeout => InstanceMetadata::HTTP_TIMEOUT/2).yields(@http)
-        InstanceMetadata.region
-      end
-
       should 'call the correct URL' do
-        @http.expects(:get).
-          with("/latest/dynamic/instance-identity/document").
-          returns(@instance_doc_response)
         InstanceMetadata.region
+        assert_requested(:put, 'http://169.254.169.254/latest/api/token', times: 1)
+        assert_requested(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document', times: 1)
       end
 
       should 'return the region part of the AZ' do
+        assert_equal("us-east-1", InstanceMetadata.region)
+      end
+
+      should 'strip whitesace in the body' do
+        stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
+            with(headers: {'X-aws-ec2-metadata-token' => @token}).
+            to_return(status: 200, body: @instance_document_region_whitespace , headers: {})
         assert_equal("us-east-1", InstanceMetadata.region)
       end
 

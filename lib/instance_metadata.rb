@@ -14,22 +14,16 @@ class InstanceMetadata
   end
 
   def self.partition
-    http_get('/latest/meta-data/services/partition').strip
+    get_metadata_wrapper('/latest/meta-data/services/partition').strip
   end
 
   def self.region
-    doc['region']
+    doc['region'].strip
   end
 
   def self.instance_id
     begin
-      Net::HTTP.start(IP_ADDRESS, PORT) do |http|
-        response = http.get('/latest/meta-data/instance-id')
-        if response.code.to_i != 200
-          return nil
-        end
-        return response.body
-      end
+      get_metadata_wrapper('/latest/meta-data/instance-id')
     rescue
       return nil
     end
@@ -39,19 +33,35 @@ class InstanceMetadata
   end
 
   private
-  def self.http_get(path)
-    Net::HTTP.start(IP_ADDRESS, PORT, :read_timeout => HTTP_TIMEOUT/2, :open_timeout => HTTP_TIMEOUT/2) do |http|
-      response = http.get(path)
+  def self.get_metadata_wrapper(path)
+    token = put_request('/latest/api/token')
+    get_request(path, token)
+  end
+
+  def self.http_request(request)
+    Net::HTTP.start('169.254.169.254', 80, :read_timeout => 120, :open_timeout => 120) do |http|
+      response = http.request(request)
       if response.code.to_i != 200
-        InstanceAgent::Log.send(:debug, "HTTP error from metadata service, code #{response.code}")
-        raise "HTTP error from metadata service, code #{response.code}"
+        raise "HTTP error from metadata service: #{response.message}, code #{response.code}"
       end
       return response.body
     end
   end
 
-  private
+  def self.put_request(path)
+    request = Net::HTTP::Put.new(path)
+    request['X-aws-ec2-metadata-token-ttl-seconds'] = '21600'
+    http_request(request)
+  end
+
+  def self.get_request(path, token)
+    request = Net::HTTP::Get.new(path)
+    request['X-aws-ec2-metadata-token'] = token
+    http_request(request)
+  end
+
   def self.doc
-    JSON.parse(http_get('/latest/dynamic/instance-identity/document').strip)
+    token = put_request('/latest/api/token')
+    JSON.parse(get_request('/latest/dynamic/instance-identity/document', token).strip)
   end
 end
