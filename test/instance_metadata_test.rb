@@ -9,7 +9,6 @@ class InstanceMetadataTest < InstanceAgentTestCase
   def self.should_check_status_code(&blk)
     should 'raise unless status code is 200' do
       stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
-          with(headers: {'X-aws-ec2-metadata-token' => @token}).
           to_return(status: 503, body: @instance_document, headers: {})
       assert_raise(&blk)
     end
@@ -51,6 +50,26 @@ class InstanceMetadataTest < InstanceAgentTestCase
         assert_equal(@host_identifier, InstanceMetadata.host_identifier)
       end
 
+      should 'return the body if IMDSv2 http request status code is not 200' do
+        stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
+            with(headers: {'X-aws-ec2-metadata-token' => @token}).
+            to_return(status: 503, body: @instance_document, headers: {})
+        stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
+            with(headers: {'Accept'=>'*/*', 'Accept-Encoding'=>'gzip;q=1.0,deflate;q=0.6,identity;q=0.3', 'User-Agent'=>'Ruby'}).
+            to_return(status: 200, body: @instance_document, headers: {})
+        assert_equal(@host_identifier, InstanceMetadata.host_identifier)
+      end
+
+      should 'return the body if IMDSv2 http request errors out' do
+        stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
+            with(headers: {'X-aws-ec2-metadata-token' => @token}).
+            to_raise(StandardError)
+        stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
+            with(headers: {'Accept'=>'*/*', 'Accept-Encoding'=>'gzip;q=1.0,deflate;q=0.6,identity;q=0.3', 'User-Agent'=>'Ruby'}).
+            to_return(status: 200, body: @instance_document, headers: {})
+        assert_equal(@host_identifier, InstanceMetadata.host_identifier)
+      end
+
       should 'strip whitesace in the body' do
         stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
             with(headers: {'X-aws-ec2-metadata-token' => @token}).
@@ -71,6 +90,26 @@ class InstanceMetadataTest < InstanceAgentTestCase
       end
 
       should 'return the region part of the AZ' do
+        assert_equal("us-east-1", InstanceMetadata.region)
+      end
+
+      should 'return the region if IMDSv2 http request status code is not 200' do
+        stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
+            with(headers: {'X-aws-ec2-metadata-token' => @token}).
+            to_return(status: 503, body: @instance_document, headers: {})
+        stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
+            with(headers: {'Accept'=>'*/*', 'Accept-Encoding'=>'gzip;q=1.0,deflate;q=0.6,identity;q=0.3', 'User-Agent'=>'Ruby'}).
+            to_return(status: 200, body: @instance_document, headers: {})
+        assert_equal("us-east-1", InstanceMetadata.region)
+      end
+
+      should 'return the region if IMDSv2 http request errors out' do
+        stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
+            with(headers: {'X-aws-ec2-metadata-token' => @token}).
+            to_raise(StandardError)
+        stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
+            with(headers: {'Accept'=>'*/*', 'Accept-Encoding'=>'gzip;q=1.0,deflate;q=0.6,identity;q=0.3', 'User-Agent'=>'Ruby'}).
+            to_return(status: 200, body: @instance_document, headers: {})
         assert_equal("us-east-1", InstanceMetadata.region)
       end
 

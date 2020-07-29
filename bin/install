@@ -25,8 +25,28 @@ class Proxy
   end
 end
 
+log_file_path = "/tmp/codedeploy-agent.update.log"
+
+require 'logger'
+
+if($stdout.isatty)
+  # if we are being run in a terminal, log to stdout and the log file.
+  @log = Logger.new(Proxy.new(File.open(log_file_path, 'a+'), $stdout))
+else
+  # keep at most 2MB of old logs rotating out 1MB at a time
+  @log = Logger.new(log_file_path, 2, 1048576)
+  # make sure anything coming out of ruby ends up in the log file
+  $stdout.reopen(log_file_path, 'a+')
+  $stderr.reopen(log_file_path, 'a+')
+end
+
+@log.level = Logger::INFO
+
 require 'net/http'
 require 'json'
+
+TOKEN_PATH = '/latest/api/token'
+DOCUMENT_PATH = '/latest/dynamic/instance-identity/document'
 
 class IMDSV2
   def self.region
@@ -50,34 +70,24 @@ class IMDSV2
     http_request(request)
   end
 
-  def self.get_request(path, token)
+  def self.get_request(path, token = nil)
     request = Net::HTTP::Get.new(path)
-    request['X-aws-ec2-metadata-token'] = token
+    unless token.nil?
+      request['X-aws-ec2-metadata-token'] = token
+    end
     http_request(request)
   end
 
   def self.doc
-    token = put_request('/latest/api/token')
-    JSON.parse(get_request('/latest/dynamic/instance-identity/document', token).strip)
+    begin
+      token = put_request(TOKEN_PATH)
+      JSON.parse(get_request(DOCUMENT_PATH, token).strip)
+    rescue
+      @log.info("IMDSv2 http request failed, falling back to IMDSv1.")
+      JSON.parse(get_request(DOCUMENT_PATH).strip)
+    end
   end
 end
-
-log_file_path = "/tmp/codedeploy-agent.update.log"
-
-require 'logger'
-
-if($stdout.isatty)
-  # if we are being run in a terminal, log to stdout and the log file.
-  @log = Logger.new(Proxy.new(File.open(log_file_path, 'a+'), $stdout))
-else
-  # keep at most 2MB of old logs rotating out 1MB at a time
-  @log = Logger.new(log_file_path, 2, 1048576)
-  # make sure anything coming out of ruby ends up in the log file
-  $stdout.reopen(log_file_path, 'a+')
-  $stderr.reopen(log_file_path, 'a+')
-end
-
-@log.level = Logger::INFO
 
 begin
   require 'fileutils'
