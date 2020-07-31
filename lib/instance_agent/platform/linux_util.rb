@@ -133,21 +133,11 @@ module InstanceAgent
       log(:debug, "Command status: #{$?}")
       log(:debug, "Command output: #{output}")
 
-      if !validZipExitStatus(exit_status)
+      if exit_status != 0
         msg = "Error extracting zip archive: #{exit_status}"
         log(:error, msg)
         raise msg
       end
-    end
-
-    private
-    def self.validZipExitStatus(exit_status)
-      exit_status == 0 || isWarningStatus(exit_status)
-    end
-
-    private
-    def self.isWarningStatus(exit_status)
-      exit_status == 1
     end
    
     private
