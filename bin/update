@@ -87,6 +87,16 @@ class IMDSV2
       JSON.parse(get_request(DOCUMENT_PATH).strip)
     end
   end
+
+  private
+  def self.get_metadata_wrapper(path)
+    token = put_request('/latest/api/token')
+    get_request(path, token)
+  end
+
+  def self.domain
+    get_metadata_wrapper('/latest/meta-data/services/domain').strip
+  end
 end
 
 require 'set'
@@ -342,18 +352,14 @@ EOF
   end
 
   def get_s3_uri(key)
-    if (REGION == 'us-east-1')
-      URI.parse("https://#{BUCKET}.s3.amazonaws.com/#{key}")
-    elsif (REGION.split("-")[0] == 'cn')
-      URI.parse("https://#{BUCKET}.s3.#{REGION}.amazonaws.com.cn/#{key}")
-    else
-      URI.parse("https://#{BUCKET}.s3.#{REGION}.amazonaws.com/#{key}")
-    end
+    domain = IMDSV2.domain
+    endpoint = "https://#{BUCKET}.s3.#{REGION}.#{domain}/#{key}"
+    @log.info("Endpoint: #{endpoint}")
+    URI.parse(endpoint)
   end
 
   def get_package_from_s3(key, package_file)
     @log.info("Downloading package from BUCKET #{BUCKET} and key #{key}...")
-
     uri = get_s3_uri(key)
 
     # stream package file to disk

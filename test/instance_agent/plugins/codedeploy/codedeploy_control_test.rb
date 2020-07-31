@@ -13,6 +13,8 @@ class CodeDeployControlTest < InstanceAgentTestCase
         ENV['AWS_REGION'] = nil
         ENV['DEPLOYMENT_CREATOR'] = "User"
         ENV['DEPLOYMENT_TYPE'] = "IN_PLACE"
+        InstanceMetadata.stubs(:region).returns('us-west-2')
+        InstanceMetadata.stubs(:domain).returns('amazonaws.com')
       end
 
       context "with region, endpoint and credentials" do

@@ -32,7 +32,11 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
         :deploy_control_client => @deploy_control_client,
         :hook_mapping => @test_hook_mapping})
       @aws_region = 'us-east-1'
+      @partition = 'aws'
+      @domain = 'amazonaws.com'
       InstanceMetadata.stubs(:region).returns(@aws_region)
+      InstanceMetadata.stubs(:partition).returns(@partition)
+      InstanceMetadata.stubs(:domain).returns(@domain)
     end
 
     context "deployment_system method" do
@@ -249,6 +253,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           @mock_file.stubs(:close)
           @http.stubs(:request_get)
           @s3 = mock
+          @s3.stubs(:config).returns("hello")
           Aws::S3::Client.stubs(:new).returns(@s3)
         end
 
@@ -318,33 +323,40 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
 
         context "when creating S3 options" do
           
-          should "use right region" do
-            assert_equal 'us-east-1', @command_executor.s3_options[:region]
-          end
-          
           should "use right signature version" do 
             assert_equal 'v4', @command_executor.s3_options[:signature_version]
           end
-          
-          should "use right endpoint when using Fips" do
-            InstanceAgent::Config.config[:use_fips_mode] = true
-            assert_equal 'https://s3-fips.us-east-1.amazonaws.com', @command_executor.s3_options[:endpoint]
-            InstanceAgent::Config.config[:use_fips_mode] = false
+
+          context "when override endpoint provided" do
+            setup do
+              InstanceAgent::Config.config[:s3_endpoint_override] = "https://example.override.endpoint.com"
+            end
+            should "use the override endpoint" do
+              assert_equal "https://example.override.endpoint.com", @command_executor.s3_options[:endpoint].to_s
+            end
           end
-          
-          should "use right endpoint when using endpoint override" do
-            s3_endpoint_override_url = 'htpp://testendpointoverride'
-            InstanceAgent::Config.config[:s3_endpoint_override] = s3_endpoint_override_url
-            assert_equal s3_endpoint_override_url, @command_executor.s3_options[:endpoint].to_s
-            InstanceAgent::Config.config[:s3_endpoint_override] = nil
+ 
+          context "when no override endpoint provided and not using fips" do
+            setup do
+              InstanceAgent::Config.config[:s3_endpoint_override] = nil
+              InstanceAgent::Config.config[:use_fips_mode] = false
+            end
+            should "use correct region and custom endpoint" do
+              assert_equal 'us-east-1', @command_executor.s3_options[:region]
+              assert_false @command_executor.s3_options.include? :endpoint
+            end
           end
-          
-          should "use no endpoint when neither using Fips nor Endpoint override" do
-            InstanceAgent::Config.config[:s3_endpoint_override] = nil
-            InstanceAgent::Config.config[:use_fips_mode] = false
-            assert_false @command_executor.s3_options.include? :endpoint
-          end
-          
+
+          context "when no override endpoint provided and using fips" do
+            setup do
+              InstanceAgent::Config.config[:s3_endpoint_override] = nil
+              InstanceAgent::Config.config[:use_fips_mode] = true
+            end
+            should "use correct region and custom endpoint" do
+              assert_equal 'fips-us-east-1', @command_executor.s3_options[:region]
+              assert_false @command_executor.s3_options.include? :endpoint
+            end
+          end      
         end
         
         context "downloading bundle from S3" do

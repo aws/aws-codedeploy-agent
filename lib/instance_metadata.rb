@@ -22,6 +22,10 @@ class InstanceMetadata
     get_metadata_wrapper(PARTITION_PATH).strip
   end
 
+  def self.domain
+    get_metadata_wrapper('/latest/meta-data/services/domain').strip
+  end
+
   def self.region
     doc['region'].strip
   end

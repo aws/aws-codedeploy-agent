@@ -21,6 +21,7 @@ class InstanceMetadataTest < InstanceAgentTestCase
       account_id = '123456789012'
       instance_id = 'i-deadbeef'
       @partition = 'aws'
+      @domain = 'amazonaws.com'
       @host_identifier = "arn:#{@partition}:ec2:#{region}:#{account_id}:instance/#{instance_id}"
       @instance_document = JSON.dump({"accountId" => account_id, "region" => region, "instanceId" => instance_id})
       @instance_document_region_whitespace = JSON.dump({"accountId" => account_id, "region" => " us-east-1  \t", "instanceId" => instance_id})
@@ -32,6 +33,9 @@ class InstanceMetadataTest < InstanceAgentTestCase
       stub_request(:get, 'http://169.254.169.254/latest/meta-data/services/partition').
           with(headers: {'X-aws-ec2-metadata-token' => @token}).
           to_return(status: 200, body: @partition, headers: {})
+      stub_request(:get, 'http://169.254.169.254/latest/meta-data/services/domain').
+          with(headers: {'X-aws-ec2-metadata-token' => @token}).
+          to_return(status: 200, body: @domain, headers: {})
       stub_request(:get, 'http://169.254.169.254/latest/dynamic/instance-identity/document').
           with(headers: {'X-aws-ec2-metadata-token' => @token}).
           to_return(status: 200, body: @instance_document, headers: {})

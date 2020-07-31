@@ -4,19 +4,19 @@ module Aws
   module Plugins
     class DeployControlEndpoint < Seahorse::Client::Plugin
       option(:endpoint) do |cfg|
+        service = 'codedeploy-commands'
+        region = InstanceMetadata.region
+        domain = InstanceMetadata.domain
         url = InstanceAgent::Config.config[:deploy_control_endpoint]
         if url.nil?
-          url = "https://codedeploy-commands"
           if InstanceAgent::Config.config[:enable_auth_policy]
-            url.concat "-secure"
+            service += '-secure'
           end
           if InstanceAgent::Config.config[:use_fips_mode]
-            url.concat "-fips"
+            service += '-fips'
           end
-          url.concat ".#{cfg.region}.amazonaws.com"
-          if "cn" == cfg.region.split("-")[0]
-            url.concat(".cn")
-          end
+          url = "https://#{service}.#{region}.#{domain}"
+          ProcessManager::Log.info("ADCS endpoint: #{url}")
         end
         url
       end

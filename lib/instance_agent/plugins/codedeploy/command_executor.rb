@@ -240,16 +240,31 @@ module InstanceAgent
         private
         def download_from_s3(deployment_spec, bucket, key, version, etag)
           log(:info, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
-                    
-          s3 = Aws::S3::Client.new(s3_options)
+
+          options = s3_options
+          s3 = Aws::S3::Client.new(options)
+          ProcessManager::Log.info("s3 client configuration below:")
+          ProcessManager::Log.info(s3.config)
 
           File.open(artifact_bundle(deployment_spec), 'wb') do |file|
 
+          begin
             if !version.nil?
               object = s3.get_object({:bucket => bucket, :key => key, :version_id => version}, :target => file)
             else
               object = s3.get_object({:bucket => bucket, :key => key}, :target => file)
             end
+          rescue Seahorse::Client::NetworkingError => e
+            if e.message.include? "unable to connect to"
+              if InstanceAgent::Config.config[:use_fips_mode]
+                raise $!, "#{$!}. Check that Fips exists in #{options[:region]}. Or, try using s3 endpoint override.", $!.backtrace
+              else
+                raise $!, "#{$!}. Try using s3 endpoint override.", $!.backtrace
+              end
+            else
+              raise
+            end
+          end
 
             if(!etag.nil? && !(etag.gsub(/"/,'').eql? object.etag.gsub(/"/,'')))
               msg = "Expected deployment artifact bundle etag #{etag} but was actually #{object.etag}"
@@ -269,11 +284,11 @@ module InstanceAgent
           region = ENV['AWS_REGION'] || InstanceMetadata.region
           options[:region] = region
           if !InstanceAgent::Config.config[:s3_endpoint_override].to_s.empty?
+            ProcessManager::Log.info("using s3 override endpoint #{InstanceAgent::Config.config[:s3_endpoint_override]}")
             options[:endpoint] = URI(InstanceAgent::Config.config[:s3_endpoint_override])
-          elsif InstanceAgent::Config.config[:use_fips_mode]
-            #S3 Fips pseudo-regions are not supported by the SDK yet 
-            #source for the URL: https://aws.amazon.com/compliance/fips/
-            options[:endpoint] = "https://s3-fips.#{region}.amazonaws.com"
+          elsif InstanceAgent::Config.config[:use_fips_mode] # need to test fips mode and non fips mode
+            ProcessManager::Log.info("using fips endpoint")
+            options[:region] = "fips-#{region}"             
           end 
           proxy_uri = nil
           if InstanceAgent::Config.config[:proxy_uri]
