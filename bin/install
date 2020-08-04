@@ -83,7 +83,6 @@ class IMDSV2
       token = put_request(TOKEN_PATH)
       JSON.parse(get_request(DOCUMENT_PATH, token).strip)
     rescue
-      @log.info("IMDSv2 http request failed, falling back to IMDSv1.")
       JSON.parse(get_request(DOCUMENT_PATH).strip)
     end
   end
