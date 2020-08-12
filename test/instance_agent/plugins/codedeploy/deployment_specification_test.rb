@@ -25,7 +25,7 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
       @agent_actions_overrides = {"AgentOverrides" => @agent_actions_overrides_map}
       @bundle_type = 'tar'
       InstanceAgent::Config.init
-    end 
+    end
 
     context 'With Github Revision' do
       setup do
@@ -598,6 +598,22 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
               raise e.message
             end
           end
+        end
+      end
+
+      context "with app_spec_path" do
+        should "use the variable set by the AppSpecFilename variable" do
+          @deployment_spec["AppSpecFilename"] = "foo.yaml"
+          @packed_message = generate_signed_message_for(@deployment_spec)
+          parsed_deployment_spec = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(@packed_message)
+          assert_equal "foo.yaml", parsed_deployment_spec.app_spec_path
+        end
+
+        should "fallback to appspec.yml if AppSpecFilename is not set" do
+          @deployment_spec.delete("AppSpecFilename")
+          @packed_message = generate_signed_message_for(@deployment_spec)
+          parsed_deployment_spec = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(@packed_message)
+          assert_equal "appspec.yml", parsed_deployment_spec.app_spec_path
         end
       end
 
