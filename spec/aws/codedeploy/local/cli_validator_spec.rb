@@ -86,7 +86,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
     end
 
-    context 'when loction is directory but appspec is missing' do
+    context 'when location is directory but appspec is missing' do
       let(:args) do
         {"--bundle-location"=>FAKE_DIRECTORY,
          "--type"=>'directory'}
@@ -101,7 +101,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
     end
 
-    context 'when loction is directory and --appspec-filename is specified (but not existing)' do
+    context 'when location is directory and --appspec-filename is specified (but not existing)' do
       let(:args) do
         {"--bundle-location"=>FAKE_DIRECTORY,
          "--type"=>'directory',
