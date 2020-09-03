@@ -73,14 +73,25 @@ class OnPremiseConfigTest < InstanceAgentTestCase
       end
   
       context "config file with session configuration" do
+        credentials_path = "/etc/codedeploy-agent/conf/.aws_credentials"
         linux_file = <<-END
         region: us-east-test
         iam_session_arn: test:arn
-        aws_credentials_file: /etc/codedeploy-agent/conf/.aws_credentials
+        aws_credentials_file: #{credentials_path}
         END
+        access_key_id = "fake-access-key-id-#{rand 1000}"
+        credentials_file = <<-END
+[default]
+aws_access_key_id = #{access_key_id}
+aws_secret_access_key = fake-secret-access-key
+aws_session_token = fake-session-token
+END
   
         setup do
           File.stubs(:read).with(linux_path).returns(linux_file)
+          File.stubs(:read).with(credentials_path).returns(credentials_file)
+          File.stubs(:exist?).with(credentials_path).returns(true)
+          File.stubs(:readable?).with(credentials_path).returns(true)
         end
   
         should "set the ENV variables correctly" do
@@ -88,6 +99,7 @@ class OnPremiseConfigTest < InstanceAgentTestCase
           assert_equal 'us-east-test', ENV['AWS_REGION']
           assert_equal 'test:arn', ENV['AWS_HOST_IDENTIFIER']
           assert_equal '/etc/codedeploy-agent/conf/.aws_credentials', ENV['AWS_CREDENTIALS_FILE']
+          assert_equal access_key_id, Aws.config[:credentials].credentials.access_key_id
         end
       end
       
