@@ -40,8 +40,12 @@ module AWS
           end
 
           if (type == 'directory' && (uri.scheme != 'https' && uri.scheme != 's3' && File.directory?(location)))
-            unless File.exists? "#{location}/appspec.yml"
-              raise ValidationError.new("Expecting appspec file at location #{location}/appspec.yml but it is not found there. Please either run the CLI from within a directory containing the appspec.yml file or specify a bundle location containing an appspec.yml file in its root directory")
+            appspec_filename = args['--appspec-filename']
+            if !appspec_filename.nil? && !File.exists?("#{location}/#{appspec_filename}")
+              raise ValidationError.new("Expecting appspec file at location #{location}/#{appspec_filename} but it is not found there. Please either run the CLI from within a directory containing the #{appspec_filename} file or specify a bundle location containing an #{appspec_filename} file in its root directory")
+            end
+            if !File.exists?("#{location}/appspec.yml") && !File.exists?("#{location}/appspec.yaml")
+              raise ValidationError.new("Expecting appspec file at location #{location}/appspec.yml or #{location}/appspec.yaml but it is not found there. Please either run the CLI from within a directory containing the appspec.yml or appspec.yaml file or specify a bundle location containing an appspec.yml or appspec.yaml file in its root directory")
             end
           end
 
@@ -60,7 +64,7 @@ module AWS
         end
 
         def any_new_revision_event_or_install_before_download_bundle(events)
-          events_using_new_revision.push('Install').any? do |event_not_allowed_before_download_bundle| 
+          events_using_new_revision.push('Install').any? do |event_not_allowed_before_download_bundle|
             events.take_while{|e| e != 'DownloadBundle'}.include? event_not_allowed_before_download_bundle
           end
         end
