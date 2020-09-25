@@ -51,7 +51,7 @@ module ProcessManager
 
       def self.status
         if pid = find_pid
-          if ProcessManager::process_running?(pid)
+          if pid > 0 and ProcessManager::process_running?(pid)
             pid
           else
             clean_stale_pid

@@ -1,7 +1,7 @@
 require 'test_helper'
 require 'certificate_helper'
 require 'stringio'
-require 'aws-sdk-core/s3'
+require 'aws-sdk-s3'
 
 require 'aws/codedeploy/local/deployer'
 
@@ -726,8 +726,8 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
       #non 1:1 mapping tests
       context "one command hooks to multiple lifecycle events" do
         setup do
-          @command.command_name = "test_command"
-          @test_hook_mapping = { "test_command" => ["lifecycle_event_1","lifecycle_event_2"]}
+          @command.command_name = "TestCommand"
+          @test_hook_mapping = { "TestCommand" => ["lifecycle_event_1","lifecycle_event_2"]}
           @deploy_control_client = mock
           @command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new({
             :deploy_control_client => @deploy_control_client,

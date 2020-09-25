@@ -1,6 +1,7 @@
 require 'openssl'
 require 'fileutils'
 require 'aws-sdk-core'
+require 'aws-sdk-s3'
 require 'zlib'
 require 'zip'
 require 'instance_metadata'
@@ -12,6 +13,7 @@ require 'instance_agent/plugins/codedeploy/command_poller'
 require 'instance_agent/plugins/codedeploy/deployment_specification'
 require 'instance_agent/plugins/codedeploy/hook_executor'
 require 'instance_agent/plugins/codedeploy/installer'
+require 'instance_agent/string_utils'
 
 module InstanceAgent
   module Plugins
@@ -47,8 +49,8 @@ module InstanceAgent
 
         def self.command(name, &blk)
           @command_methods ||= Hash.new
-
-          method = Seahorse::Util.underscore(name).to_sym
+          raise "Received command is not in PascalCase form: #{name.to_s}" unless StringUtils.is_pascal_case(name.to_s)
+          method = StringUtils.underscore(name.to_s)
           @command_methods[name] = method
 
           define_method(method, &blk)

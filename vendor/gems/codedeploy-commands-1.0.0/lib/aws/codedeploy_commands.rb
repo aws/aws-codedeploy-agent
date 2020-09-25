@@ -1,6 +1,7 @@
 gem_root = File.dirname(File.dirname(File.dirname(__FILE__)))
 
 require 'aws-sdk-core'
+require "#{gem_root}/lib/aws/add_service_wrapper"
 require "#{gem_root}/lib/aws/plugins/certificate_authority"
 require "#{gem_root}/lib/aws/plugins/deploy_control_endpoint"
 require "#{gem_root}/lib/aws/plugins/deploy_agent_version"
