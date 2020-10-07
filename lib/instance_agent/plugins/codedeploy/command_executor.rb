@@ -239,7 +239,7 @@ module InstanceAgent
 
         private
         def download_from_s3(deployment_spec, bucket, key, version, etag)
-          log(:debug, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
+          log(:info, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
                     
           s3 = Aws::S3::Client.new(s3_options)
 
@@ -257,7 +257,7 @@ module InstanceAgent
               raise RuntimeError, msg
             end
           end
-          log(:debug, "Download complete from bucket #{bucket} and key #{key}")
+          log(:info, "Download complete from bucket #{bucket} and key #{key}")
         end
 
         public
@@ -345,7 +345,7 @@ module InstanceAgent
 
             if retries < 3
               time_to_sleep = (10 * (3 ** retries)) # 10 sec, 30 sec, 90 sec
-              log(:debug, "Retrying download in #{time_to_sleep} seconds.")
+              log(:info, "Retrying download in #{time_to_sleep} seconds.")
               sleep(time_to_sleep)
               retries += 1
               retry
@@ -359,6 +359,7 @@ module InstanceAgent
         def handle_local_file(deployment_spec, local_location)
           # Symlink local file to the location where download is expected to go
           bundle_file = artifact_bundle(deployment_spec)
+          log(:info, "Handle local file #{bundle_file}")
           begin
             File.symlink local_location, bundle_file
           rescue
@@ -371,6 +372,7 @@ module InstanceAgent
         def handle_local_directory(deployment_spec, local_location)
           # Copy local directory to the location where a file would have been extracted
           # We copy instead of symlinking in order to preserve revision history
+          log(:info, "Handle local directory #{local_location}")
           FileUtils.cp_r local_location, archive_root_dir(deployment_spec)
         end
 
