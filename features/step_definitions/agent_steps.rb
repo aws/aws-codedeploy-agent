@@ -3,6 +3,9 @@ require 'base64'
 require 'tempfile'
 require 'zip'
 require 'fileutils'
+require 'aws-sdk-core'
+require 'aws-sdk-codedeploy'
+require 'aws-sdk-iam'
 
 $:.unshift File.join(File.dirname(File.expand_path('../..', __FILE__)), 'lib')
 $:.unshift File.join(File.dirname(File.expand_path('../..', __FILE__)), 'features')
@@ -86,6 +89,16 @@ After("@codedeploy-agent") do
   FileUtils.rm_rf(@working_directory) unless @working_directory.nil?
 end
 
+Before("@override-aws-config") do
+  # agent may override config like Aws.config[:credentials]. We don't want to leak agent's config to test runner.
+  @aws_config = Aws.config
+  Aws.config = Aws.config.clone
+end
+
+After("@override-aws-config") do
+  Aws.config = @aws_config
+end
+
 Given(/^I have a CodeDeploy application$/) do
   @application_name = "codedeploy-integ-testapp-#{SecureRandom.hex(10)}"
   @codedeploy_client.create_application(:application_name => @application_name)
@@ -140,7 +153,7 @@ Given(/^I have a deployment group containing my host$/) do
   create_deployment_group
 end
 
-When(/^I create a deployment for the application and deployment group with the test S(\d+) revision$/) do |arg1|
+When(/^I create a deployment for the application and deployment group with the test S3 revision$/) do
   @deployment_id = @codedeploy_client.create_deployment({:application_name => @application_name,
                             :deployment_group_name => @deployment_group_name,
                             :revision => { :revision_type => "S3",

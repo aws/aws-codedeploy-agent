@@ -1,5 +1,6 @@
 # language: en
 @codedeploy-agent
+@override-aws-config
 Feature: Deploy using AWS CodeDeploy Agent
 
   Scenario: Doing a sample deployment

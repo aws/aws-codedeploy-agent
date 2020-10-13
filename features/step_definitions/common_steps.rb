@@ -4,36 +4,24 @@ require 'aws-sdk-s3'
 $:.unshift File.join(File.dirname(File.expand_path('../..', __FILE__)), 'features')
 require 'step_definitions/step_constants'
 
-@bucket_creation_count = 0;
 Given(/^I have a sample bundle uploaded to s3$/) do
-=begin
-This fails if the s3 upload is attempted after assume_role is called in the first integration test. 
-This is because once you call assume role the next time it instantiates a client it is using different permissions. In my opinion thats a bug because it doesn't match the documentation for the AWS SDK.
-https://docs.aws.amazon.com/sdkforruby/api/index.html
+  s3 = Aws::S3::Client.new
 
-Their documentation says an assumed role is the LAST permission it will try to rely on but it looks like its always the first. But the s3 upload is the only place that this mattered so I simply forced this code so it doesn't do it again since the bundle is identical for both tests.
-=end
-  if @bucket_creation_count == 0
-    s3 = Aws::S3::Client.new
+  begin
+    s3.create_bucket({
+      bucket: StepConstants::APP_BUNDLE_BUCKET, # required
+      create_bucket_configuration: {
+        location_constraint: Aws.config[:region],
+      }
+    })
+  rescue Aws::S3::Errors::BucketAlreadyOwnedByYou
+    #Already created the bucket
+  end
 
-    begin
-      s3.create_bucket({
-        bucket: StepConstants::APP_BUNDLE_BUCKET, # required
-        create_bucket_configuration: {
-          location_constraint: Aws.config[:region],
-        }
-      })
-    rescue Aws::S3::Errors::BucketAlreadyOwnedByYou
-      #Already created the bucket
+  Dir.mktmpdir do |temp_directory_to_create_zip_file|
+    File.open(zip_app_bundle(temp_directory_to_create_zip_file), 'rb') do |file|
+      s3.put_object(bucket: StepConstants::APP_BUNDLE_BUCKET, key: StepConstants::APP_BUNDLE_KEY, body: file)
     end
-
-    Dir.mktmpdir do |temp_directory_to_create_zip_file|
-      File.open(zip_app_bundle(temp_directory_to_create_zip_file), 'rb') do |file|
-        s3.put_object(bucket: StepConstants::APP_BUNDLE_BUCKET, key: StepConstants::APP_BUNDLE_KEY, body: file)
-      end
-    end
-
-    @bucket_creation_count += 1
   end
 
   @bundle_type = 'zip'

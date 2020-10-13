@@ -52,6 +52,7 @@ Feature: Local Deploy using AWS CodeDeploy Local CLI
     And the expected files should have have been locally deployed to my host
     And the scripts should have been executed during local deployment
 
+  @override-aws-config
   Scenario: Doing a sample local deployment using an s3 bundle
     Given I have a sample bundle uploaded to s3
     When I create a local deployment with my bundle
