@@ -21,7 +21,12 @@ require 'step_definitions/step_constants'
 
 DEPLOYMENT_ROLE_NAME = "#{StepConstants::CODEDEPLOY_TEST_PREFIX}deployment-role"
 INSTANCE_ROLE_NAME = "#{StepConstants::CODEDEPLOY_TEST_PREFIX}instance-role"
+INSTANCE_USER_NAME = "#{StepConstants::CODEDEPLOY_TEST_PREFIX}instance-user"
 DEPLOYMENT_ROLE_POLICY = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":[\"codedeploy.amazonaws.com\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
+S3_READONLY_ACCESS_ARN = "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
+CODEDEPLOY_ROLE_ARN = "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
+ISOLATED_ENV_KEYS = %w(AWS_REGION AWS_ACCESS_KEY AWS_SECRET_KEY AWS_HOST_IDENTIFIER AWS_CREDENTIALS_FILE
+                       AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_CREDENTIAL_FILE)
 
 def instance_name
   @instance_name ||= SecureRandom.uuid
@@ -89,14 +94,28 @@ After("@codedeploy-agent") do
   FileUtils.rm_rf(@working_directory) unless @working_directory.nil?
 end
 
-Before("@override-aws-config") do
-  # agent may override config like Aws.config[:credentials]. We don't want to leak agent's config to test runner.
+Before("@isolate-agent-config") do
+  # If not reset DeploymentLog, log may leak to the log file of the last scenario
+  class InstanceAgent::DeploymentLog
+    def self.reset
+      Singleton.send :__init__, self
+    end
+  end
+  InstanceAgent::DeploymentLog.reset
+  # agent may override config like Aws.config[:credentials] and ENV['AWS_ACCESS_KEY']. We don't want to leak agent's config to test runner.
   @aws_config = Aws.config
   Aws.config = Aws.config.clone
+  @env_vars = {}
+  ISOLATED_ENV_KEYS.each do |key|
+    @env_vars[key] = ENV[key]
+  end
 end
 
-After("@override-aws-config") do
+After("@isolate-agent-config") do
   Aws.config = @aws_config
+  ISOLATED_ENV_KEYS.each do |key|
+    ENV[key] = @env_vars[key]
+  end
 end
 
 Given(/^I have a CodeDeploy application$/) do
@@ -104,27 +123,77 @@ Given(/^I have a CodeDeploy application$/) do
   @codedeploy_client.create_application(:application_name => @application_name)
 end
 
-Given(/^I register my host in CodeDeploy$/) do
+Given(/^I register my host in CodeDeploy using (IAM user|IAM session|environment variables)$/) do |method|
+  case method
+  when "IAM user"
+    register_on_premises_with_iam_user
+  when "IAM session"
+    register_on_premises_with_iam_session
+  when "environment variables"
+    raise "Not implemented yet"
+  end
+end
+
+def register_on_premises_with_iam_user
+  user = create_instance_user
+  access_key = recreate_instance_user_access_key
+  begin
+    @codedeploy_client.register_on_premises_instance(:instance_name => instance_name, :iam_user_arn => user.arn)
+  rescue Aws::CodeDeploy::Errors::IamUserArnAlreadyRegisteredException
+    # One IAM user cannot be used used to register more than one instance. Clean up old instances.
+    next_token = nil
+    loop do
+      resp = @codedeploy_client.list_on_premises_instances({:registration_status => "Registered", :next_token => next_token})
+      instance_names = resp.instance_names
+      next_token = resp.next_token
+      @codedeploy_client.batch_get_on_premises_instances({:instance_names => instance_names}).instance_infos.select do | instance |
+        instance.iam_user_arn == user.arn
+      end.each do | instance |
+        @codedeploy_client.deregister_on_premises_instance({:instance_name => instance.instance_name})
+        next_token = nil
+      end
+      break if next_token.nil?
+    end
+    @codedeploy_client.register_on_premises_instance(:instance_name => instance_name, :iam_user_arn => user.arn)
+  end
+  @codedeploy_client.add_tags_to_on_premises_instances(:instance_names => [instance_name], :tags => [{:key => instance_name}])
+  configure_agent_for_on_premise({:iam_user_arn => user.arn,
+                                  :access_key_id => access_key.access_key_id,
+                                  :secret_access_key => access_key.secret_access_key})
+end
+
+def register_on_premises_with_iam_session
   iam_session_arn = create_iam_assume_role_session
   @codedeploy_client.register_on_premises_instance(:instance_name => instance_name, :iam_session_arn => iam_session_arn)
   @codedeploy_client.add_tags_to_on_premises_instances(:instance_names => [instance_name], :tags => [{:key => instance_name}])
-
-  configure_agent_for_on_premise(iam_session_arn)
+  configure_agent_for_on_premise({:iam_session_arn => iam_session_arn})
 end
 
-def configure_agent_for_on_premise(iam_session_arn)
-  on_premise_configuration_content = <<-CONFIG
+def configure_agent_for_on_premise(options={})
+  if !options[:iam_session_arn] == !options[:iam_user_arn]
+    raise "Exactly one of :iam_session_arn and :iam_user_arn is required"
+  end
+  if options[:iam_session_arn]
+    on_premise_configuration_content = <<-CONFIG
 ---
 region: #{Aws.config[:region]}
-aws_credentials_file: #{create_aws_credentials_file}
-iam_session_arn: #{iam_session_arn}
+aws_credentials_file: #{create_aws_credentials_session_file}
+iam_session_arn: #{options[:iam_session_arn]}
   CONFIG
-
+  else
+    on_premise_configuration_content = <<-CONFIG
+---
+region: #{Aws.config[:region]}
+aws_access_key_id: #{options[:access_key_id]}
+aws_secret_access_key: #{options[:secret_access_key]}
+iam_user_arn: #{options[:iam_user_arn]}
+    CONFIG
+  end
   File.open(InstanceAgent::Config.config[:on_premises_config_file], 'w') { |file| file.write(on_premise_configuration_content) }
   InstanceAgent::Plugins::CodeDeployPlugin::OnPremisesConfig.configure
 end
 
-def create_aws_credentials_file
+def create_aws_credentials_session_file
   aws_credentials_content = <<-CREDENTIALS
 ---
 [default]
@@ -213,7 +282,7 @@ def create_deployment_role
     @iam_client.create_role({:role_name => DEPLOYMENT_ROLE_NAME,
                              :assume_role_policy_document => DEPLOYMENT_ROLE_POLICY}).role.arn
     @iam_client.attach_role_policy({:role_name => DEPLOYMENT_ROLE_NAME,
-                                    :policy_arn => "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"})
+                                    :policy_arn => CODEDEPLOY_ROLE_ARN})
   rescue Aws::IAM::Errors::EntityAlreadyExists
     #Using the existing role
   end
@@ -224,14 +293,32 @@ def create_deployment_role
   end
 end
 
+def create_instance_user
+  begin
+    user = @iam_client.create_user({:user_name => INSTANCE_USER_NAME}).user
+    @iam_client.wait_until(:user_exists, user_name: INSTANCE_USER_NAME)
+    @iam_client.attach_user_policy({:user_name => INSTANCE_USER_NAME,
+                                    :policy_arn => S3_READONLY_ACCESS_ARN})
+  rescue Aws::IAM::Errors::EntityAlreadyExists
+    user = @iam_client.get_user({:user_name => INSTANCE_USER_NAME}).user
+  end
+  user
+end
+
+def recreate_instance_user_access_key
+  @iam_client.list_access_keys({:user_name => INSTANCE_USER_NAME}).access_key_metadata.each do |key|
+    @iam_client.delete_access_key({:user_name => key.user_name,
+                                    :access_key_id => key.access_key_id})
+  end
+  @iam_client.create_access_key({:user_name => INSTANCE_USER_NAME}).access_key
+end
+
 def create_instance_role
   begin
     @iam_client.create_role({:role_name => INSTANCE_ROLE_NAME,
                              :assume_role_policy_document => instance_role_policy}).role.arn
     @iam_client.attach_role_policy({:role_name => INSTANCE_ROLE_NAME,
-                                    :policy_arn => "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"})
-    @iam_client.attach_role_policy({:role_name => INSTANCE_ROLE_NAME,
-                                    :policy_arn => "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"})
+                                    :policy_arn => S3_READONLY_ACCESS_ARN})
   rescue Aws::IAM::Errors::EntityAlreadyExists
     #Using the existing role
   end
