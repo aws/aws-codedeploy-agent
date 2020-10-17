@@ -20,4 +20,3 @@ Feature: Deploy using AWS CodeDeploy Agent
       | credential method     |
       | IAM user              |
       | IAM session           |
-#      | environment variables |

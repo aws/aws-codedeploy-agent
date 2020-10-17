@@ -123,14 +123,12 @@ Given(/^I have a CodeDeploy application$/) do
   @codedeploy_client.create_application(:application_name => @application_name)
 end
 
-Given(/^I register my host in CodeDeploy using (IAM user|IAM session|environment variables)$/) do |method|
+Given(/^I register my host in CodeDeploy using (IAM user|IAM session)$/) do |method|
   case method
   when "IAM user"
     register_on_premises_with_iam_user
   when "IAM session"
     register_on_premises_with_iam_session
-  when "environment variables"
-    raise "Not implemented yet"
   end
 end
 
