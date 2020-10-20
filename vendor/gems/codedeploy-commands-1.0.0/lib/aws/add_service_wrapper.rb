@@ -43,7 +43,6 @@ module Aws
             module_name: module_name,
             api: api_hash,
             paginators: options[:paginators],
-            paginators: options[:paginators],
             waiters: options[:waiters],
             resources: options[:resources],
             gem_dependencies: { 'aws-sdk-core' => '3' },
