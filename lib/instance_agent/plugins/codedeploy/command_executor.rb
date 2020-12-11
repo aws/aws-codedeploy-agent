@@ -240,8 +240,7 @@ module InstanceAgent
         private
         def download_from_s3(deployment_spec, bucket, key, version, etag)
           log(:info, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
-
-          options = s3_options
+          options = s3_options()
           s3 = Aws::S3::Client.new(options)
           ProcessManager::Log.info("s3 client configuration below:")
           ProcessManager::Log.info(s3.config)
@@ -283,13 +282,15 @@ module InstanceAgent
 
           region = ENV['AWS_REGION'] || InstanceMetadata.region
           options[:region] = region
+
           if !InstanceAgent::Config.config[:s3_endpoint_override].to_s.empty?
             ProcessManager::Log.info("using s3 override endpoint #{InstanceAgent::Config.config[:s3_endpoint_override]}")
             options[:endpoint] = URI(InstanceAgent::Config.config[:s3_endpoint_override])
-          elsif InstanceAgent::Config.config[:use_fips_mode] # need to test fips mode and non fips mode
+          elsif InstanceAgent::Config.config[:use_fips_mode]
             ProcessManager::Log.info("using fips endpoint")
-            options[:region] = "fips-#{region}"             
-          end 
+            # This is not a true region but a way to signal to the S3 client that a FIPS enpoint should be used; added in SDK3.
+            options[:region] = "fips-#{region}"
+          end
           proxy_uri = nil
           if InstanceAgent::Config.config[:proxy_uri]
             proxy_uri = URI(InstanceAgent::Config.config[:proxy_uri])

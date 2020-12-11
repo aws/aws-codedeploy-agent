@@ -13,6 +13,7 @@ class CodeDeployControlTest < InstanceAgentTestCase
         ENV['AWS_REGION'] = nil
         ENV['DEPLOYMENT_CREATOR'] = "User"
         ENV['DEPLOYMENT_TYPE'] = "IN_PLACE"
+        InstanceMetadata.stubs(:imds_supported?).returns(true)
         InstanceMetadata.stubs(:region).returns('us-west-2')
         InstanceMetadata.stubs(:domain).returns('amazonaws.com')
       end
@@ -53,7 +54,7 @@ class CodeDeployControlTest < InstanceAgentTestCase
         end
       end
 
-      context "with ADCS endpoint set in an environment variable" do
+      context "with CodeDeploy endpoint set in an environment variable" do
         setup do
           InstanceAgent::Config.config[:deploy_control_endpoint] = "https://tempuri"
         end
@@ -106,6 +107,24 @@ class CodeDeployControlTest < InstanceAgentTestCase
         should "use secure Fips endpoint" do
           codedeploy_control_client = CodeDeployControl.new :region => "us-west-2"
           assert_equal "codedeploy-commands-secure-fips.us-west-2.amazonaws.com", codedeploy_control_client.get_client.config.endpoint.host
+        end
+      end
+
+      context "without IMDS" do
+        setup do
+          InstanceMetadata.stubs(:imds_supported?).returns(false)
+          InstanceMetadata.stubs(:region).returns(nil)
+          InstanceMetadata.stubs(:domain).returns(nil)
+        end
+
+        should "use the config defined settings" do
+          codedeploy_control_client = CodeDeployControl.new :region => "us-east-1"
+          assert_equal "codedeploy-commands.us-east-1.amazonaws.com", codedeploy_control_client.get_client.config.endpoint.host
+        end
+
+        should "resolve non .com domains" do
+          codedeploy_control_client = CodeDeployControl.new :region => "cn-north-1"
+          assert_equal "codedeploy-commands.cn-north-1.amazonaws.com.cn", codedeploy_control_client.get_client.config.endpoint.host
         end
       end
         
