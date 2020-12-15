@@ -353,8 +353,8 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
               InstanceAgent::Config.config[:use_fips_mode] = true
             end
             should "use correct region and custom endpoint" do
-              assert_equal 'fips-us-east-1', @command_executor.s3_options[:region]
-              assert_false @command_executor.s3_options.include? :endpoint
+              assert_equal 'us-east-1', @command_executor.s3_options[:region]
+              assert_true @command_executor.s3_options.include? :endpoint
             end
           end      
         end
