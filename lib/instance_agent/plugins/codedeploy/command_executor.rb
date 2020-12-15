@@ -289,8 +289,11 @@ module InstanceAgent
             options[:endpoint] = URI(InstanceAgent::Config.config[:s3_endpoint_override])
           elsif InstanceAgent::Config.config[:use_fips_mode]
             ProcessManager::Log.info("using fips endpoint")
-            # This is not a true region but a way to signal to the S3 client that a FIPS enpoint should be used; added in SDK3.
-            options[:region] = "fips-#{region}"
+            # There was a recent change to S3 client to decompose the region and use a FIPS endpoint is "fips-" is appended
+            # to the region. However, this is such a recent change that we cannot rely on the latest version of the SDK to be loaded.
+            # For now, the endpoint will be set directly if FIPS is active but can switch to the S3 method once we have broader support.
+            # options[:region] = "fips-#{region}"
+            options[:endpoint] = "https://s3-fips.#{region}.amazonaws.com"
           end
           proxy_uri = nil
           if InstanceAgent::Config.config[:proxy_uri]
