@@ -13,6 +13,7 @@ module InstanceAgent
         attr_accessor :external_account, :repository, :commit_id, :anonymous, :external_auth_token
         attr_accessor :file_exists_behavior
         attr_accessor :local_location, :all_possible_lifecycle_events
+        attr_accessor :app_spec_path
         class << self
           attr_accessor :cert_store
         end
@@ -46,6 +47,12 @@ module InstanceAgent
           @deployment_group_id = data["DeploymentGroupId"]
           @deployment_creator = data["DeploymentCreator"] || "user"
           @deployment_type = data["DeploymentType"] || "IN_PLACE"
+
+          if property_set?(data, "AppSpecFilename")
+            @app_spec_path = data["AppSpecFilename"]
+          else
+            @app_spec_path = "appspec.yml"
+          end
 
           raise 'Must specify a revison' unless data["Revision"]
           @revision_source = data["Revision"]["RevisionType"]
@@ -99,7 +106,7 @@ module InstanceAgent
         end
         # Decrypts the envelope /deployment specs
         # Params:
-        # envelope: deployment specification thats to be cheked and decrypted
+        # envelope: deployment specification that's to be checked and decrypted
         def self.parse(envelope)
           raise 'Provided deployment spec was nil' if envelope.nil?
 

@@ -562,9 +562,71 @@ describe AWS::CodeDeploy::Local::Deployer do
           AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
         end
       end
+
+      context 'when appspec-filename is not in the args' do
+        let(:args) do
+          {"deploy"=>true,
+           '--file-exists-behavior'=>InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR,
+           "--location"=>true,
+           "--bundle-location"=>SAMPLE_FILE_BUNDLE,
+           "--type"=>'tgz',
+           '--deployment-group'=>DEPLOYMENT_GROUP_ID,
+           '--deployment-group-name'=>SAMPLE_DEPLOYMENT_GROUP_NAME,
+           "--help"=>false,
+           "--version"=>false}
+        end
+        it 'generates a spec with the provided value' do
+          allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+          executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
+
+          expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
+              with(:hook_mapping => EXPECTED_HOOK_MAPPING).
+              and_return(executor)
+
+          AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
+            expect(executor).to receive(:execute_command).with(
+                OpenStruct.new(:command_name => name),
+                deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File', 'tgz',
+                                AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS, deployment_group_name:SAMPLE_DEPLOYMENT_GROUP_NAME, application_name: nil)).once.ordered
+          end
+          AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
+        end
+      end
+
+      context 'when appspec-filename is in the args' do
+        let(:args) do
+          {"deploy"=>true,
+           '--file-exists-behavior'=>InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR,
+           "--location"=>true,
+           "--appspec-filename"=>"appspec-override.yaml",
+           "--bundle-location"=>SAMPLE_FILE_BUNDLE,
+           "--type"=>'tgz',
+           '--deployment-group'=>DEPLOYMENT_GROUP_ID,
+           '--deployment-group-name'=>SAMPLE_DEPLOYMENT_GROUP_NAME,
+           "--help"=>false,
+           "--version"=>false}
+        end
+        it 'generates a spec with the provided value' do
+          allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+          executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
+
+          expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
+              with(:hook_mapping => EXPECTED_HOOK_MAPPING).
+              and_return(executor)
+
+          AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.each do |name|
+            expect(executor).to receive(:execute_command).with(
+                OpenStruct.new(:command_name => name),
+                deployment_spec(SAMPLE_FILE_BUNDLE, 'Local File', 'tgz',
+                                AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS, deployment_group_name:SAMPLE_DEPLOYMENT_GROUP_NAME, application_name: nil, appspec_filename: "appspec-override.yaml")).once.ordered
+          end
+          AWS::CodeDeploy::Local::Deployer.new(@config_file_location).execute_events(args)
+        end
+      end
+
     end
 
-    def deployment_spec(location, revision_type, bundle_type, all_possible_lifecycle_events, s3revision_includes_version=false, s3revision_includes_etag=false, deployment_group_id=DEPLOYMENT_GROUP_ID, file_exists_behavior=InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR, deployment_group_name:nil, application_name:nil)
+    def deployment_spec(location, revision_type, bundle_type, all_possible_lifecycle_events, s3revision_includes_version=false, s3revision_includes_etag=false, deployment_group_id=DEPLOYMENT_GROUP_ID, file_exists_behavior=InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR, deployment_group_name:nil, application_name:nil, appspec_filename: nil)
       revision_data_key = revision_data(revision_type, location, bundle_type, s3revision_includes_version, s3revision_includes_etag).keys.first
       revision_data_value = revision_data(revision_type, location, bundle_type, s3revision_includes_version, s3revision_includes_etag).values.first
       OpenStruct.new({
@@ -572,6 +634,7 @@ describe AWS::CodeDeploy::Local::Deployer do
         :payload => {
           "ApplicationId" =>  location,
           "ApplicationName" => application_name || location,
+          "AppSpecFilename" => appspec_filename || "appspec.yml",
           "DeploymentGroupId" => deployment_group_id,
           "DeploymentGroupName" => deployment_group_name || "LocalFleet",
           "DeploymentId" => TEST_DEPLOYMENT_ID,
@@ -579,7 +642,6 @@ describe AWS::CodeDeploy::Local::Deployer do
           "Revision" => {"RevisionType" => revision_type,
                          revision_data_key => revision_data_value},
           "AllPossibleLifecycleEvents" => all_possible_lifecycle_events
-
         }.to_json.to_s
       })
     end

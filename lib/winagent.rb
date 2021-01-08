@@ -10,7 +10,6 @@ require 'instance_agent/config'
 require 'instance_agent/log'
 require 'instance_agent/platform'
 require 'instance_agent/platform/windows_util'
-require 'instance_agent/plugins/codedeploy/register_plugin'
 require 'pathname'
 
 include Win32
@@ -101,5 +100,12 @@ class InstanceAgentService < Daemon
     end
   end  
 end
+
+# InstanceAgentService loads in a set of configurations that are assumed by the CodeDeploy plugin registery to be in place when the
+# the classes are loaded. This happens to be true for the Linux agent as `GLI::App.pre` loads up the config before resolving additional
+# gem dependencies. However, Aws.add_service requires that the service be defined when the gem is loaded so there is not an efficient way
+# to resolve this at runtime; thus, the config must be resolved before the CodeDeployCommand class is loaded.
+InstanceAgentService.new.read_config unless defined?(Ocra)
+require 'instance_agent/plugins/codedeploy/register_plugin'
 
 InstanceAgentService.mainloop unless defined?(Ocra)

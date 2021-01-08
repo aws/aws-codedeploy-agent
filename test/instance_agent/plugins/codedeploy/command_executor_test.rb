@@ -1,7 +1,7 @@
 require 'test_helper'
 require 'certificate_helper'
 require 'stringio'
-require 'aws-sdk-s3'
+require 'aws-sdk-core/s3'
 
 require 'aws/codedeploy/local/deployer'
 
@@ -148,10 +148,8 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           File.stubs(:open).with(@last_successful_install_file_location)
 
           @app_spec = mock("parsed application specification")
-          File.
-          stubs(:read).
-          with("#@archive_root_dir/appspec.yml").
-          returns("APP SPEC")
+          File.stubs(:exist?).with("#@archive_root_dir/appspec.yml").returns(true)
+          File.stubs(:read).with("#@archive_root_dir/appspec.yml").returns("APP SPEC")
           ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC").returns(@app_spec)
         end
 
@@ -233,6 +231,91 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           assert_raised_with_message("You specified a lifecycle event which is not a default one and doesn't exist in your appspec.yml file: CustomHookNotInAppspec", ArgumentError) do
             @command_executor.execute_command(@command, deployment_spec)
           end
+        end
+
+        should 'honor the AppSpecFilename command variable' do
+          deployment_spec = generate_signed_message_for({
+            "DeploymentId" => @deployment_id.to_s,
+            "DeploymentGroupId" => @deployment_group_id,
+            "ApplicationName" => @application_name,
+            "DeploymentGroupName" => @deployment_group_name,
+            "DeploymentCreator" => @deployment_creator,
+            "DeploymentType" => @deployment_type,
+            "AgentActionOverrides" => @agent_actions_overrides,
+            "AppSpecFilename" => "appspec-override.yaml",
+            "Revision" => {
+               "RevisionType" => "S3",
+               "S3Revision" => @s3Revision
+              }
+            })
+
+            File.expects(:exist?).with("#@archive_root_dir/appspec-override.yaml").returns(true)
+            File.expects(:read).with("#@archive_root_dir/appspec-override.yaml").returns("APP SPEC")
+            @command_executor.execute_command(@command, deployment_spec)
+        end
+
+        should 'fallback to appspec.yaml if provided AppSpecFilename variable points to a file which does\'t exist' do
+          deployment_spec = generate_signed_message_for({
+            "DeploymentId" => @deployment_id.to_s,
+            "DeploymentGroupId" => @deployment_group_id,
+            "ApplicationName" => @application_name,
+            "DeploymentGroupName" => @deployment_group_name,
+            "DeploymentCreator" => @deployment_creator,
+            "DeploymentType" => @deployment_type,
+            "AgentActionOverrides" => @agent_actions_overrides,
+            "AppSpecFilename" => "appspec-override.yaml",
+            "Revision" => {
+              "RevisionType" => "S3",
+              "S3Revision" => @s3Revision
+            }
+          })
+
+          File.expects(:exist?).with("#@archive_root_dir/appspec-override.yaml").returns(false)
+          File.expects(:exist?).with("#@archive_root_dir/appspec.yaml").returns(true)
+          File.expects(:read).with("#@archive_root_dir/appspec.yaml").returns("APP SPEC")
+          @command_executor.execute_command(@command, deployment_spec)
+        end
+        should 'fallback to appspec.yaml if both AppSpecFilename variable and appspec.yaml don\'t exist' do
+          deployment_spec = generate_signed_message_for({
+            "DeploymentId" => @deployment_id.to_s,
+            "DeploymentGroupId" => @deployment_group_id,
+            "ApplicationName" => @application_name,
+            "DeploymentGroupName" => @deployment_group_name,
+            "DeploymentCreator" => @deployment_creator,
+            "DeploymentType" => @deployment_type,
+            "AgentActionOverrides" => @agent_actions_overrides,
+            "AppSpecFilename" => "appspec-override.yaml",
+            "Revision" => {
+              "RevisionType" => "S3",
+              "S3Revision" => @s3Revision
+            }
+          })
+
+          File.expects(:exist?).with("#@archive_root_dir/appspec-override.yaml").returns(false)
+          File.expects(:exist?).with("#@archive_root_dir/appspec.yaml").returns(false)
+          File.expects(:read).with("#@archive_root_dir/appspec.yml").returns("APP SPEC")
+          @command_executor.execute_command(@command, deployment_spec)
+        end
+
+        should 'fallback to appspec.yaml if appspec.yml is not there and no AppSpecFilename arg is specified' do
+          deployment_spec = generate_signed_message_for({
+            "DeploymentId" => @deployment_id.to_s,
+            "DeploymentGroupId" => @deployment_group_id,
+            "ApplicationName" => @application_name,
+            "DeploymentGroupName" => @deployment_group_name,
+            "DeploymentCreator" => @deployment_creator,
+            "DeploymentType" => @deployment_type,
+            "AgentActionOverrides" => @agent_actions_overrides,
+            "Revision" => {
+              "RevisionType" => "S3",
+              "S3Revision" => @s3Revision
+            }
+          })
+
+          File.expects(:exist?).with("#@archive_root_dir/appspec.yml").returns(false)
+          File.expects(:exist?).with("#@archive_root_dir/appspec.yaml").returns(true)
+          File.expects(:read).with("#@archive_root_dir/appspec.yaml").returns("APP SPEC")
+          @command_executor.execute_command(@command, deployment_spec)
         end
       end
 
@@ -317,36 +400,36 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
         end
 
         context "when creating S3 options" do
-          
+
           should "use right region" do
             assert_equal 'us-east-1', @command_executor.s3_options[:region]
           end
-          
-          should "use right signature version" do 
+
+          should "use right signature version" do
             assert_equal 'v4', @command_executor.s3_options[:signature_version]
           end
-          
+
           should "use right endpoint when using Fips" do
             InstanceAgent::Config.config[:use_fips_mode] = true
             assert_equal 'https://s3-fips.us-east-1.amazonaws.com', @command_executor.s3_options[:endpoint]
             InstanceAgent::Config.config[:use_fips_mode] = false
           end
-          
+
           should "use right endpoint when using endpoint override" do
             s3_endpoint_override_url = 'htpp://testendpointoverride'
             InstanceAgent::Config.config[:s3_endpoint_override] = s3_endpoint_override_url
             assert_equal s3_endpoint_override_url, @command_executor.s3_options[:endpoint].to_s
             InstanceAgent::Config.config[:s3_endpoint_override] = nil
           end
-          
+
           should "use no endpoint when neither using Fips nor Endpoint override" do
             InstanceAgent::Config.config[:s3_endpoint_override] = nil
             InstanceAgent::Config.config[:use_fips_mode] = false
             assert_false @command_executor.s3_options.include? :endpoint
           end
-          
+
         end
-        
+
         context "downloading bundle from S3" do
           setup do
             File.expects(:open).with(File.join(@deployment_root_dir, 'bundle.tar'), 'wb').yields(@mock_file)
@@ -598,7 +681,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             :deployment_group_id => @deployment_group_id,
             :deployment_creator => @deployment_creator,
             :deployment_type => @deployment_type,
-            :deployment_root_dir => @deployment_root_dir, 
+            :deployment_root_dir => @deployment_root_dir,
             :last_successful_deployment_dir => nil,
             :most_recent_deployment_dir => nil,
             :app_spec_path => 'appspec.yml'}
@@ -726,8 +809,8 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
       #non 1:1 mapping tests
       context "one command hooks to multiple lifecycle events" do
         setup do
-          @command.command_name = "TestCommand"
-          @test_hook_mapping = { "TestCommand" => ["lifecycle_event_1","lifecycle_event_2"]}
+          @command.command_name = "test_command"
+          @test_hook_mapping = { "test_command" => ["lifecycle_event_1","lifecycle_event_2"]}
           @deploy_control_client = mock
           @command_executor = InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor.new({
             :deploy_control_client => @deploy_control_client,

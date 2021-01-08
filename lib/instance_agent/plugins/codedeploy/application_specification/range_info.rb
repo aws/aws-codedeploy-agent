@@ -100,7 +100,7 @@ module InstanceAgent
             if (@low_sensitivity != @high_sensitivity)
               range = range + "-s" + @high_sensitivity.to_s
             end
-            if @categories
+            if !@categories.nil?
               range = range + ":"
               index = 0
               while index < @categories.length
