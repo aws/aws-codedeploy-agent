@@ -28,6 +28,7 @@ Please do the build steps mentioned above before running the integration test.
 The integration test creates the following
 * An IAM role "codedeploy-agent-integ-test-deployment-role" if it doesn't exist
 * An IAM role "codedeploy-agent-integ-test-instance-role" if it doesn't exist
+* An IAM user "codedeploy-agent-integ-test-instance-user" if it doesn't exist. (Access key will be recreated.)
 * A CodeDeploy application
 * Startup the codedeploy agent on your host
 * A CodeDeploy deployment group with your host in it
