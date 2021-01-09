@@ -156,7 +156,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           stubs(:read).
           with("#@archive_root_dir/appspec.yml").
           returns("APP SPEC")
-          ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC").returns(@app_spec)
+          ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC", {}).returns(@app_spec)
         end
 
         should "create an appropriate Installer" do
@@ -205,7 +205,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           app_spec_hooks = {'UnknownHook' => nil}
           app_spec.expects(:hooks).returns(app_spec_hooks)
           File.stubs(:read).with("#@archive_root_dir/appspec.yml").returns("APP SPEC")
-          ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC").returns(app_spec)
+          ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC", {}).returns(app_spec)
           unknown_hooks = app_spec_hooks.merge(@test_hook_mapping)
           assert_raised_with_message("appspec.yml file contains unknown lifecycle events: #{unknown_hooks.keys}", ArgumentError) do
             @command_executor.execute_command(@command, deployment_spec)
@@ -233,7 +233,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           app_spec_hooks = InstanceAgent::Plugins::CodeDeployPlugin::CommandPoller::DEFAULT_HOOK_MAPPING.merge({'ExampleLifecycleEvent' => nil, 'SecondLifecycleEvent' => nil})
           app_spec.expects(:hooks).twice.returns(app_spec_hooks)
           File.stubs(:read).with("#@archive_root_dir/appspec.yml").returns("APP SPEC")
-          ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC").returns(app_spec)
+          ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC", {}).returns(app_spec)
           assert_raised_with_message("You specified a lifecycle event which is not a default one and doesn't exist in your appspec.yml file: CustomHookNotInAppspec", ArgumentError) do
             @command_executor.execute_command(@command, deployment_spec)
           end

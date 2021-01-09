@@ -227,7 +227,19 @@ module InstanceAgent
                 http://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file.html
             MESSAGE
           end
-          @app_spec =  InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::ApplicationSpecification.parse(File.read(app_spec_location))
+          @app_spec =  InstanceAgent::Plugins::CodeDeployPlugin::ApplicationSpecification::ApplicationSpecification.parse(File.read(app_spec_location), deployment_spec)
+        end
+
+        private
+        def deployment_spec
+          {
+            :application_name => @application_name,
+            :deployment_id => @deployment_id,
+            :deployment_group_name => @deployment_group_name,
+            :deployment_group_id => @deployment_group_id,
+            :deployment_root_dir => @current_deployment_root_dir,
+            :last_successful_deployment_dir => @last_successful_deployment_dir
+          }
         end
 
         private

@@ -2,6 +2,8 @@ require 'instance_agent/plugins/codedeploy/application_specification/script_info
 require 'instance_agent/plugins/codedeploy/application_specification/file_info'
 require 'instance_agent/plugins/codedeploy/application_specification/linux_permission_info'
 require 'instance_agent/plugins/codedeploy/application_specification/mode_info'
+require 'ostruct'
+require 'erb'
 
 module InstanceAgent
   module Plugins
@@ -23,7 +25,10 @@ module InstanceAgent
             @permissions = parse_permissions(yaml_hash['permissions'] || [])
           end
 
-          def self.parse(app_spec_string)
+          def self.parse(app_spec_template_string, deployment_spec)
+            # make deployment_spec keys available to the yaml template
+            app_spec_string = ERB.new(app_spec_template_string || '').result(OpenStruct.new(deployment_spec).instance_eval { binding })
+
             new(YAML.load(app_spec_string))
           end
 
