@@ -5,8 +5,6 @@
 # than 2.0. Testing on multiple Ruby versions is required for
 # changes to this part of the code.
 ##################################################################
-require 'json'
-
 class Proxy
   instance_methods.each do |m|
     undef_method m unless m =~ /(^__|^send$|^object_id$)/
@@ -42,6 +40,106 @@ else
 end
 
 @log.level = Logger::INFO
+
+require 'net/http'
+
+# This class is copied (almost directly) from lib/instance_metadata.rb
+# It is not loaded as the InstanceMetadata makes additional assumptions
+# about the runtime that cannot be satisfied at install time, hence the
+# trimmed copy.
+class IMDS
+  IP_ADDRESS = '169.254.169.254'
+  TOKEN_PATH = '/latest/api/token'
+  BASE_PATH = '/latest/meta-data'
+  IDENTITY_DOCUMENT_PATH = '/latest/dynamic/instance-identity/document'
+  DOMAIN_PATH = '/latest/meta-data/services/domain'
+
+  def self.imds_supported?
+    imds_v2? || imds_v1?
+  end
+
+  def self.imds_v1?
+    begin
+      get_request(BASE_PATH) { |response|
+        return response.kind_of? Net::HTTPSuccess
+      }
+    rescue
+      false
+    end
+  end
+
+  def self.imds_v2?
+    begin
+      put_request(TOKEN_PATH) { |token_response|
+        (token_response.kind_of? Net::HTTPSuccess) && get_request(BASE_PATH, token_response.body) { |response|
+          return response.kind_of? Net::HTTPSuccess
+        }
+      }
+    rescue
+      false
+    end
+  end
+
+  def self.region
+    begin
+      identity_document()['region'].strip
+    rescue
+      nil
+    end
+  end
+
+  def self.domain
+    begin
+      get_instance_metadata(DOMAIN_PATH).strip
+    rescue
+      nil
+    end
+  end
+
+  def self.identity_document
+    # JSON is lazy loaded to ensure we dont break older ruby runtimes
+    require 'json'
+    JSON.parse(get_instance_metadata(IDENTITY_DOCUMENT_PATH).strip)
+  end
+
+  private
+  def self.get_instance_metadata(path)
+    begin
+      token = put_request(TOKEN_PATH)
+      get_request(path, token)
+    rescue
+      get_request(path)
+    end
+  end
+
+  private
+  def self.http_request(request)
+    Net::HTTP.start(IP_ADDRESS, 80, :read_timeout => 10, :open_timeout => 10) do |http|
+      response = http.request(request)
+      if block_given?
+        yield(response) 
+      elsif response.kind_of? Net::HTTPSuccess
+        response.body
+      else
+        raise "HTTP error from metadata service: #{response.message}, code #{response.code}"
+      end
+    end
+  end
+
+  def self.put_request(path, &block)
+    request = Net::HTTP::Put.new(path)
+    request['X-aws-ec2-metadata-token-ttl-seconds'] = '21600'
+    http_request(request, &block)
+  end
+
+  def self.get_request(path, token = nil, &block)
+    request = Net::HTTP::Get.new(path)
+    unless token.nil?
+      request['X-aws-ec2-metadata-token'] = token
+    end
+    http_request(request, &block)
+  end
+end
 
 require 'set'
 VALID_TYPES = Set.new ['rpm','zypper','deb','msi']
@@ -161,6 +259,7 @@ EOF
         @sanity_check = true
       when '--help'
         usage
+        exit(0)
       when '--re-execed'
         @reexeced = true
       when '--downgrade'
@@ -256,6 +355,7 @@ EOF
 
   parse_args()
 
+  # Be helpful when 'help' was used but not '--help'
   if @type == 'help'
     usage
     exit(0)
@@ -273,16 +373,17 @@ EOF
     return exit_ok
   end
 
-  def get_ec2_metadata_region
-    begin
-      uri = URI.parse('http://169.254.169.254/latest/dynamic/instance-identity/document')
-      document_string = uri.read(:read_timeout => 120)
-      doc = JSON.parse(document_string.strip)
-      return doc['region'].strip
-    rescue
-      @log.warn("Could not get region from EC2 metadata service at '#{uri.to_s}'")
-      return nil
+  def get_ec2_metadata_property(property)
+    if IMDS.imds_supported?
+      begin
+        return IMDS.send(property)
+      rescue => error
+        @log.warn("Could not get #{property} from EC2 metadata service at '#{error.message}'")
+      end
+    else
+      @log.warn("EC2 metadata service unavailable...")
     end
+    return nil
   end
 
   def get_region
@@ -291,26 +392,39 @@ EOF
     return region if region
 
     @log.info('Checking EC2 metadata service for region information...')
-    region = get_ec2_metadata_region
+    region = get_ec2_metadata_property(:region)
     return region if region
 
     @log.info('Using fail-safe default region: us-east-1')
     return 'us-east-1'
   end
 
-  def get_s3_uri(key)
-    if (REGION == 'us-east-1')
-      URI.parse("https://#{BUCKET}.s3.amazonaws.com/#{key}")
-    elsif (REGION.split("-")[0] == 'cn')
-      URI.parse("https://#{BUCKET}.s3.#{REGION}.amazonaws.com.cn/#{key}")
-    else
-      URI.parse("https://#{BUCKET}.s3.#{REGION}.amazonaws.com/#{key}")
+  def get_domain(fallback_region = nil)
+    @log.info('Checking AWS_DOMAIN environment variable for domain information...')
+    domain = ENV['AWS_DOMAIN']
+    return domain if domain
+
+    @log.info('Checking EC2 metadata service for domain information...')
+    domain = get_ec2_metadata_property(:domain)
+    return domain if domain
+
+    domain = 'amazonaws.com'
+    if !fallback_region.nil? && fallback_region.split("-")[0] == 'cn'
+      domain = 'amazonaws.com.cn'
     end
+
+    @log.info("Using fail-safe default domain: #{domain}")
+    return domain
+  end
+
+  def get_s3_uri(key)
+    endpoint = "https://#{BUCKET}.s3.#{REGION}.#{DOMAIN}/#{key}"
+    @log.info("Endpoint: #{endpoint}")
+    URI.parse(endpoint)
   end
 
   def get_package_from_s3(key, package_file)
     @log.info("Downloading package from BUCKET #{BUCKET} and key #{key}...")
-
     uri = get_s3_uri(key)
 
     # stream package file to disk
@@ -437,8 +551,10 @@ EOF
     exit(1)
   end
 
-  REGION = get_region
+  REGION = get_region()
+  DOMAIN = get_domain(REGION)
   BUCKET = "aws-codedeploy-#{REGION}"
+
   VERSION_FILE_KEY = 'latest/LATEST_VERSION'
 
   NO_AGENT_INSTALLED_REPORTED_WINDOWS_VERSION = 'No Agent Installed'

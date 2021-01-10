@@ -1,6 +1,7 @@
 require 'openssl'
 require 'fileutils'
 require 'aws-sdk-core'
+require 'aws-sdk-s3'
 require 'zlib'
 require 'zip'
 require 'instance_metadata'
@@ -12,6 +13,7 @@ require 'instance_agent/plugins/codedeploy/command_poller'
 require 'instance_agent/plugins/codedeploy/deployment_specification'
 require 'instance_agent/plugins/codedeploy/hook_executor'
 require 'instance_agent/plugins/codedeploy/installer'
+require 'instance_agent/string_utils'
 
 module InstanceAgent
   module Plugins
@@ -47,8 +49,8 @@ module InstanceAgent
 
         def self.command(name, &blk)
           @command_methods ||= Hash.new
-
-          method = Seahorse::Util.underscore(name).to_sym
+          raise "Received command is not in PascalCase form: #{name.to_s}" unless StringUtils.is_pascal_case(name.to_s)
+          method = StringUtils.underscore(name.to_s)
           @command_methods[name] = method
 
           define_method(method, &blk)
@@ -238,17 +240,31 @@ module InstanceAgent
 
         private
         def download_from_s3(deployment_spec, bucket, key, version, etag)
-          log(:debug, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
-
-          s3 = Aws::S3::Client.new(s3_options)
+          log(:info, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
+          options = s3_options()
+          s3 = Aws::S3::Client.new(options)
+          ProcessManager::Log.info("s3 client configuration below:")
+          ProcessManager::Log.info(s3.config)
 
           File.open(artifact_bundle(deployment_spec), 'wb') do |file|
 
+          begin
             if !version.nil?
               object = s3.get_object({:bucket => bucket, :key => key, :version_id => version}, :target => file)
             else
               object = s3.get_object({:bucket => bucket, :key => key}, :target => file)
             end
+          rescue Seahorse::Client::NetworkingError => e
+            if e.message.include? "unable to connect to"
+              if InstanceAgent::Config.config[:use_fips_mode]
+                raise $!, "#{$!}. Check that Fips exists in #{options[:region]}. Or, try using s3 endpoint override.", $!.backtrace
+              else
+                raise $!, "#{$!}. Try using s3 endpoint override.", $!.backtrace
+              end
+            else
+              raise
+            end
+          end
 
             if(!etag.nil? && !(etag.gsub(/"/,'').eql? object.etag.gsub(/"/,'')))
               msg = "Expected deployment artifact bundle etag #{etag} but was actually #{object.etag}"
@@ -256,7 +272,7 @@ module InstanceAgent
               raise RuntimeError, msg
             end
           end
-          log(:debug, "Download complete from bucket #{bucket} and key #{key}")
+          log(:info, "Download complete from bucket #{bucket} and key #{key}")
         end
 
         public
@@ -267,11 +283,16 @@ module InstanceAgent
 
           region = ENV['AWS_REGION'] || InstanceMetadata.region
           options[:region] = region
+
           if !InstanceAgent::Config.config[:s3_endpoint_override].to_s.empty?
+            ProcessManager::Log.info("using s3 override endpoint #{InstanceAgent::Config.config[:s3_endpoint_override]}")
             options[:endpoint] = URI(InstanceAgent::Config.config[:s3_endpoint_override])
           elsif InstanceAgent::Config.config[:use_fips_mode]
-            #S3 Fips pseudo-regions are not supported by the SDK yet
-            #source for the URL: https://aws.amazon.com/compliance/fips/
+            ProcessManager::Log.info("using fips endpoint")
+            # There was a recent change to S3 client to decompose the region and use a FIPS endpoint is "fips-" is appended
+            # to the region. However, this is such a recent change that we cannot rely on the latest version of the SDK to be loaded.
+            # For now, the endpoint will be set directly if FIPS is active but can switch to the S3 method once we have broader support.
+            # options[:region] = "fips-#{region}"
             options[:endpoint] = "https://s3-fips.#{region}.amazonaws.com"
           end
           proxy_uri = nil
@@ -344,7 +365,7 @@ module InstanceAgent
 
             if retries < 3
               time_to_sleep = (10 * (3 ** retries)) # 10 sec, 30 sec, 90 sec
-              log(:debug, "Retrying download in #{time_to_sleep} seconds.")
+              log(:info, "Retrying download in #{time_to_sleep} seconds.")
               sleep(time_to_sleep)
               retries += 1
               retry
@@ -358,6 +379,7 @@ module InstanceAgent
         def handle_local_file(deployment_spec, local_location)
           # Symlink local file to the location where download is expected to go
           bundle_file = artifact_bundle(deployment_spec)
+          log(:info, "Handle local file #{bundle_file}")
           begin
             File.symlink local_location, bundle_file
           rescue
@@ -370,6 +392,7 @@ module InstanceAgent
         def handle_local_directory(deployment_spec, local_location)
           # Copy local directory to the location where a file would have been extracted
           # We copy instead of symlinking in order to preserve revision history
+          log(:info, "Handle local directory #{local_location}")
           FileUtils.cp_r local_location, archive_root_dir(deployment_spec)
         end
 

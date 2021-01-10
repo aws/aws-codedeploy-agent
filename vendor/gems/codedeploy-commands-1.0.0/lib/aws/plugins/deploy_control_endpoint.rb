@@ -4,20 +4,32 @@ module Aws
   module Plugins
     class DeployControlEndpoint < Seahorse::Client::Plugin
       option(:endpoint) do |cfg|
+
+        # Allow the customer to manually configure the endpoint
         url = InstanceAgent::Config.config[:deploy_control_endpoint]
+
         if url.nil?
-          url = "https://codedeploy-commands"
+          service = 'codedeploy-commands'
           if InstanceAgent::Config.config[:enable_auth_policy]
-            url.concat "-secure"
+            service += '-secure'
           end
           if InstanceAgent::Config.config[:use_fips_mode]
-            url.concat "-fips"
+            service += '-fips'
           end
-          url.concat ".#{cfg.region}.amazonaws.com"
-          if "cn" == cfg.region.split("-")[0]
-            url.concat(".cn")
+
+          if InstanceMetadata.imds_supported?
+            region = InstanceMetadata.region
+            domain = InstanceMetadata.domain
+          else
+            region = cfg.region
+            domain = 'amazonaws.com'
+            domain += '.cn' if region.split("-")[0] == 'cn'
           end
+
+          url = "https://#{service}.#{region}.#{domain}"
         end
+
+        ProcessManager::Log.info("CodeDeploy endpoint: #{url}")
         url
       end
     end
