@@ -54,6 +54,7 @@ Synopsis
   [--application-name <value>]
   [--events <value>]
   [--agent-configuration-file <value>]
+  [--appspec-filename <value>]
 
 Options
 *******
@@ -82,6 +83,9 @@ Options
 
   -c, --agent-configuration-file <value>
   The location of a configuration file to use for the deployment, if you store it in a location other than the default. A configuration file specifies alternatives to other default values and behaviors for a deployment. By default, configuration files are stored as /etc/codedeploy-agent/conf/codedeployagent.yml (Amazon Linux, RHEL, or Ubuntu Server instances) or C:/ProgramData/Amazon/CodeDeploy/conf.yml (Windows Server).
+
+  -A, --appspec-filename <value>
+  The name of the appspec file to use for the deployment, if you set it to a name other than the default. By default, appspec files are named "appspec.yml" or "appspec.yaml".
 
   -h, --help
   Displays a summary of help content.

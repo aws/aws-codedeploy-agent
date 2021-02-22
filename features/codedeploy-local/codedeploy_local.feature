@@ -93,3 +93,17 @@ Feature: Local Deploy using AWS CodeDeploy Local CLI
     When I create a local deployment with my bundle with file-exists-behavior RETAIN
     Then the local deployment command should succeed
     And the expected existing file should end up like file-exists-behavior RETAIN specifies
+
+  Scenario: Doing a sample local deployment using a directory bundle with a custom appspec filename
+    Given I have a sample local directory bundle
+    And I have a custom appspec filename appspec_override.yaml
+    When I create a local deployment with my bundle
+    Then the local deployment command should succeed
+    And the expected files should have have been locally deployed to my host
+    And the scripts should have been executed during local deployment
+
+  Scenario: Doing a sample local deployment using a directory bundle with a non-existent custom appspec filename
+    Given I have a sample local directory bundle
+    And I have a custom appspec filename appspec_nonexistent.yaml
+    When I create a local deployment with my bundle
+    Then the local deployment command should fail

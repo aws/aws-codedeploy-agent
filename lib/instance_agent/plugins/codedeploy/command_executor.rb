@@ -1,6 +1,7 @@
 require 'openssl'
 require 'fileutils'
 require 'aws-sdk-core'
+require 'aws-sdk-s3'
 require 'zlib'
 require 'zip'
 require 'instance_metadata'
@@ -12,6 +13,7 @@ require 'instance_agent/plugins/codedeploy/command_poller'
 require 'instance_agent/plugins/codedeploy/deployment_specification'
 require 'instance_agent/plugins/codedeploy/hook_executor'
 require 'instance_agent/plugins/codedeploy/installer'
+require 'instance_agent/string_utils'
 
 module InstanceAgent
   module Plugins
@@ -47,8 +49,8 @@ module InstanceAgent
 
         def self.command(name, &blk)
           @command_methods ||= Hash.new
-
-          method = Seahorse::Util.underscore(name).to_sym
+          raise "Received command is not in PascalCase form: #{name.to_s}" unless StringUtils.is_pascal_case(name.to_s)
+          method = StringUtils.underscore(name.to_s)
           @command_methods[name] = method
 
           define_method(method, &blk)
@@ -154,7 +156,7 @@ module InstanceAgent
                 :deployment_root_dir => deployment_root_dir(deployment_spec),
                 :last_successful_deployment_dir => last_successful_deployment_dir(deployment_spec.deployment_group_id),
                 :most_recent_deployment_dir => most_recent_deployment_dir(deployment_spec.deployment_group_id),
-                :app_spec_path => deployment_spec.app_spec_path)
+                :app_spec_path => app_spec_path)
                 script_log.concat_log(hook_command.execute)
               end
               script_log.log
@@ -183,7 +185,7 @@ module InstanceAgent
           return unless File.exist? last_successful_install_file_location
           File.open last_successful_install_file_location do |f|
             return f.read.chomp
-          end
+          end 
         end
 
         private
@@ -192,30 +194,29 @@ module InstanceAgent
           return unless File.exist? most_recent_install_file_location
           File.open most_recent_install_file_location do |f|
             return f.read.chomp
-          end
+          end 
         end
 
         private
         def default_app_spec(deployment_spec)
-          app_spec_location = app_spec_real_path(deployment_spec)
-          validate_app_spec_hooks(app_spec_location, deployment_spec.all_possible_lifecycle_events)
+          default_app_spec_location = File.join(archive_root_dir(deployment_spec), app_spec_path)
+          log(:debug, "Checking for app spec in #{default_app_spec_location}")
+          validate_app_spec_hooks(ApplicationSpecification::ApplicationSpecification.parse(File.read(default_app_spec_location)), deployment_spec.all_possible_lifecycle_events)
         end
 
         private
-        def validate_app_spec_hooks(app_spec_location, all_possible_lifecycle_events)
-          app_spec = ApplicationSpecification::ApplicationSpecification.parse(File.read(app_spec_location))
-          app_spec_filename = File.basename(app_spec_location)
+        def validate_app_spec_hooks(app_spec, all_possible_lifecycle_events)
           unless all_possible_lifecycle_events.nil?
             app_spec_hooks_plus_hooks_from_mapping = app_spec.hooks.keys.to_set.merge(@hook_mapping.keys).to_a
             unless app_spec_hooks_plus_hooks_from_mapping.to_set.subset?(all_possible_lifecycle_events.to_set)
               unknown_lifecycle_events = app_spec_hooks_plus_hooks_from_mapping - all_possible_lifecycle_events
-              raise ArgumentError.new("#{app_spec_filename} file contains unknown lifecycle events: #{unknown_lifecycle_events}")
+              raise ArgumentError.new("appspec.yml file contains unknown lifecycle events: #{unknown_lifecycle_events}")
             end
 
             app_spec_hooks_plus_hooks_from_default_mapping = app_spec.hooks.keys.to_set.merge(InstanceAgent::Plugins::CodeDeployPlugin::CommandPoller::DEFAULT_HOOK_MAPPING.keys).to_a
             custom_hooks_not_found_in_appspec = custom_lifecycle_events(all_possible_lifecycle_events) - app_spec_hooks_plus_hooks_from_default_mapping
             unless (custom_hooks_not_found_in_appspec).empty?
-              raise ArgumentError.new("You specified a lifecycle event which is not a default one and doesn't exist in your #{app_spec_filename} file: #{custom_hooks_not_found_in_appspec.join(',')}")
+              raise ArgumentError.new("You specified a lifecycle event which is not a default one and doesn't exist in your appspec.yml file: #{custom_hooks_not_found_in_appspec.join(',')}")
             end
           end
 
@@ -238,17 +239,32 @@ module InstanceAgent
 
         private
         def download_from_s3(deployment_spec, bucket, key, version, etag)
-          log(:debug, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
 
-          s3 = Aws::S3::Client.new(s3_options)
+          log(:info, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
+          options = s3_options()
+          s3 = Aws::S3::Client.new(options)
+          ProcessManager::Log.info("s3 client configuration below:")
+          ProcessManager::Log.info(s3.config)
 
           File.open(artifact_bundle(deployment_spec), 'wb') do |file|
 
+          begin
             if !version.nil?
               object = s3.get_object({:bucket => bucket, :key => key, :version_id => version}, :target => file)
             else
               object = s3.get_object({:bucket => bucket, :key => key}, :target => file)
             end
+          rescue Seahorse::Client::NetworkingError => e
+            if e.message.include? "unable to connect to"
+              if InstanceAgent::Config.config[:use_fips_mode]
+                raise $!, "#{$!}. Check that Fips exists in #{options[:region]}. Or, try using s3 endpoint override.", $!.backtrace
+              else
+                raise $!, "#{$!}. Try using s3 endpoint override.", $!.backtrace
+              end
+            else
+              raise
+            end
+          end
 
             if(!etag.nil? && !(etag.gsub(/"/,'').eql? object.etag.gsub(/"/,'')))
               msg = "Expected deployment artifact bundle etag #{etag} but was actually #{object.etag}"
@@ -256,7 +272,7 @@ module InstanceAgent
               raise RuntimeError, msg
             end
           end
-          log(:debug, "Download complete from bucket #{bucket} and key #{key}")
+          log(:info, "Download complete from bucket #{bucket} and key #{key}")
         end
 
         public
@@ -267,17 +283,19 @@ module InstanceAgent
 
           region = ENV['AWS_REGION'] || InstanceMetadata.region
           options[:region] = region
+
           if !InstanceAgent::Config.config[:s3_endpoint_override].to_s.empty?
+            ProcessManager::Log.info("using s3 override endpoint #{InstanceAgent::Config.config[:s3_endpoint_override]}")
             options[:endpoint] = URI(InstanceAgent::Config.config[:s3_endpoint_override])
           elsif InstanceAgent::Config.config[:use_fips_mode]
-            #S3 Fips pseudo-regions are not supported by the SDK yet
-            #source for the URL: https://aws.amazon.com/compliance/fips/
-            options[:endpoint] = "https://s3-fips.#{region}.amazonaws.com"
+            ProcessManager::Log.info("using fips endpoint")
+            # This is not a true region but a way to signal to the S3 client that a FIPS enpoint should be used; added in SDK3.
+            options[:region] = "fips-#{region}"
           end
           proxy_uri = nil
           if InstanceAgent::Config.config[:proxy_uri]
             proxy_uri = URI(InstanceAgent::Config.config[:proxy_uri])
-          end
+          end          
           options[:http_proxy] = proxy_uri
 
           if InstanceAgent::Config.config[:log_aws_wire]
@@ -289,10 +307,10 @@ module InstanceAgent
                 64 * 1024 * 1024)
             options[:http_wire_trace] = true
           end
-
-          options
-        end
-
+          
+          options          
+        end  
+        
         private
         def download_from_github(deployment_spec, account, repo, commit, anonymous, token)
 
@@ -344,7 +362,7 @@ module InstanceAgent
 
             if retries < 3
               time_to_sleep = (10 * (3 ** retries)) # 10 sec, 30 sec, 90 sec
-              log(:debug, "Retrying download in #{time_to_sleep} seconds.")
+              log(:info, "Retrying download in #{time_to_sleep} seconds.")
               sleep(time_to_sleep)
               retries += 1
               retry
@@ -358,6 +376,7 @@ module InstanceAgent
         def handle_local_file(deployment_spec, local_location)
           # Symlink local file to the location where download is expected to go
           bundle_file = artifact_bundle(deployment_spec)
+          log(:info, "Handle local file #{bundle_file}")
           begin
             File.symlink local_location, bundle_file
           rescue
@@ -370,6 +389,7 @@ module InstanceAgent
         def handle_local_directory(deployment_spec, local_location)
           # Copy local directory to the location where a file would have been extracted
           # We copy instead of symlinking in order to preserve revision history
+          log(:info, "Handle local directory #{local_location}")
           FileUtils.cp_r local_location, archive_root_dir(deployment_spec)
         end
 
@@ -403,7 +423,7 @@ module InstanceAgent
 
           # If the top level of the archive is a directory that contains an appspec,
           # strip that before giving up
-          if ((archive_root_files.size == 1) &&
+          if ((archive_root_files.size == 1) && 
               File.directory?(File.join(dst, archive_root_files[0])) &&
               Dir.entries(File.join(dst, archive_root_files[0])).grep(/appspec/i).any?)
             log(:info, "Stripping leading directory from archive bundle contents.")
@@ -418,7 +438,7 @@ module InstanceAgent
             FileUtils.mv(nested_archive_root, dst)
             FileUtils.rmdir(tmp_dst)
 
-            log(:debug, Dir.entries(dst).join("; "))
+            log(:debug, Dir.entries(dst).join("; "))            
           end
         end
 
@@ -434,7 +454,7 @@ module InstanceAgent
           File.open(most_recent_install_file_path(deployment_spec.deployment_group_id), 'w+') do |f|
             f.write deployment_root_dir(deployment_spec)
           end
-        end
+        end  
 
         private
         def cleanup_old_archives(deployment_spec)
@@ -446,7 +466,7 @@ module InstanceAgent
 
           full_path_deployment_archives = deployment_archives.map{ |f| File.join(ProcessManager::Config.config[:root_dir], deployment_group, f)}
           full_path_deployment_archives.delete(deployment_root_dir(deployment_spec))
-
+          
           extra = full_path_deployment_archives.size - @archives_to_retain + 1
           return unless extra > 0
 
@@ -459,7 +479,7 @@ module InstanceAgent
 
           # Absolute path takes care of relative root directories
           directories = oldest_extra.map{ |f| File.absolute_path(f) }
-          log(:debug, "Delete Files #{directories}")
+          log(:debug,"Delete Files #{directories}" )
           InstanceAgent::Platform.util.delete_dirs_command(directories)
 
         end
@@ -472,24 +492,6 @@ module InstanceAgent
         private
         def app_spec_path
           'appspec.yml'
-        end
-
-        # Checks for existence the possible extensions of the app_spec_path (.yml and .yaml)
-        private
-        def app_spec_real_path(deployment_spec)
-          app_spec_param_location = File.join(archive_root_dir(deployment_spec), deployment_spec.app_spec_path)
-          app_spec_yaml_location = File.join(archive_root_dir(deployment_spec), "appspec.yaml")
-          app_spec_yml_location = File.join(archive_root_dir(deployment_spec), "appspec.yml")
-          if File.exist? app_spec_param_location
-            log(:debug, "Using appspec file #{app_spec_param_location}")
-            app_spec_param_location
-          elsif File.exist? app_spec_yaml_location
-            log(:debug, "Using appspec file #{app_spec_yaml_location}")
-            app_spec_yaml_location
-          else
-            log(:debug, "Using appspec file #{app_spec_yml_location}")
-            app_spec_yml_location
-          end
         end
 
         private
