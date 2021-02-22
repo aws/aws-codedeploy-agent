@@ -78,7 +78,8 @@ Then(/^the expected files in directory (\S+) should have have been deployed(| tw
   expect(files_and_directories_in_deployment_id_folder).to include(*%w(logs deployment-archive))
 
   files_and_directories_in_deployment_archive_folder = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{deployment_id}/deployment-archive")
-  expect(files_and_directories_in_deployment_archive_folder.size).to eq(2)
+  # most sample apps contain 2 files that should be present, except the linux sample app which contains an additional appspec file with a custom filename
+  expect(files_and_directories_in_deployment_archive_folder.size).to be_between(2, 3)
   expect(files_and_directories_in_deployment_archive_folder).to include(*%w(appspec.yml scripts))
 
   files_in_scripts_folder = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{deployment_id}/deployment-archive/scripts")
