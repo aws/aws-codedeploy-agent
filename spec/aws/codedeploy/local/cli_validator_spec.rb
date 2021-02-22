@@ -86,7 +86,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
     end
 
-    context 'when loction is directory but appspec is missing' do
+    context 'when location is directory but appspec is missing' do
       let(:args) do
         {"--bundle-location"=>FAKE_DIRECTORY,
          "--type"=>'directory'}
@@ -96,7 +96,23 @@ describe AWS::CodeDeploy::Local::CLIValidator do
         allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
         allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
         expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(false)
-        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "Expecting appspec file at location #{FAKE_DIRECTORY}/appspec.yml but it is not found there. Please either run the CLI from within a directory containing the appspec.yml file or specify a bundle location containing an appspec.yml file in its root directory")
+        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yaml").and_return(false)
+        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "Expecting appspec file at location #{FAKE_DIRECTORY}/appspec.yml or #{FAKE_DIRECTORY}/appspec.yaml but it is not found there. Please either run the CLI from within a directory containing the appspec.yml or appspec.yaml file or specify a bundle location containing an appspec.yml or appspec.yaml file in its root directory")
+      end
+    end
+
+    context 'when location is directory and --appspec-filename is specified (but not existing)' do
+      let(:args) do
+        {"--bundle-location"=>FAKE_DIRECTORY,
+         "--type"=>'directory',
+         "--appspec-filename"=>"appspec-override.yaml"}
+      end
+
+      it 'throws a ValidationError' do
+        allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
+        allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
+        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec-override.yaml").and_return(false)
+        expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "Expecting appspec file at location #{FAKE_DIRECTORY}/appspec-override.yaml but it is not found there. Please either run the CLI from within a directory containing the appspec-override.yaml file or specify a bundle location containing an appspec-override.yaml file in its root directory")
       end
     end
 
@@ -225,7 +241,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
         allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
         expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
         expect(validator.validate(args)).to equal(args)
-      end 
+      end
     end
   end
 end
