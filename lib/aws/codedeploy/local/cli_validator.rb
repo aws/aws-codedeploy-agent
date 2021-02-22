@@ -44,7 +44,7 @@ module AWS
             if !appspec_filename.nil? && !File.exists?("#{location}/#{appspec_filename}")
               raise ValidationError.new("Expecting appspec file at location #{location}/#{appspec_filename} but it is not found there. Please either run the CLI from within a directory containing the #{appspec_filename} file or specify a bundle location containing an #{appspec_filename} file in its root directory")
             end
-            if !File.exists?("#{location}/appspec.yml") && !File.exists?("#{location}/appspec.yaml")
+            if appspec_filename.nil? && !File.exists?("#{location}/appspec.yml") && !File.exists?("#{location}/appspec.yaml")
               raise ValidationError.new("Expecting appspec file at location #{location}/appspec.yml or #{location}/appspec.yaml but it is not found there. Please either run the CLI from within a directory containing the appspec.yml or appspec.yaml file or specify a bundle location containing an appspec.yml or appspec.yaml file in its root directory")
             end
           end
