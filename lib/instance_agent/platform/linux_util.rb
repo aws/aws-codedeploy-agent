@@ -51,11 +51,8 @@ module InstanceAgent
     def self.extract_zip(bundle_file, dst)
       log(:debug, "extract_zip - dst : #{dst}")
       FileUtils.mkdir_p(dst)
-      working_dir = FileUtils.pwd()
       absolute_bundle_path = File.expand_path(bundle_file)
-      FileUtils.cd(dst)
-      execute_zip_command("unzip -qo #{absolute_bundle_path}")
-      FileUtils.cd(working_dir)
+      execute_zip_command("unzip -qo #{absolute_bundle_path} -d #{dst}")
     end    
 
     def self.extract_tgz(bundle_file, dst)
