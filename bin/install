@@ -14,6 +14,17 @@ class Proxy
     @targets = targets
   end
 
+  def path
+    @targets.map do |target|
+      if target.respond_to?(:path)
+        target.__send__(:path)
+      else
+        # default to to_s since it's just used as a label for log statements.
+        target.__send__(:to_s)
+      end
+    end
+  end
+
   protected
 
   def method_missing(name, *args, &block)
