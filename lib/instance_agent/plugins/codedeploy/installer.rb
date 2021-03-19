@@ -59,18 +59,16 @@ module InstanceAgent
         def generate_instructions(application_specification)
           InstanceAgent::Plugins::CodeDeployPlugin::InstallInstruction.generate_instructions() do |i|
             application_specification.files.each do |fi|
-
-              absolute_source_path = File.join(deployment_archive_dir,
-              fi.source)
-
+              absolute_source_path = File.join(deployment_archive_dir, fi.source)
+              file_exists_behavior = application_specification.respond_to?(:file_exists_behavior) && application_specification.file_exists_behavior ? application_specification.file_exists_behavior : @file_exists_behavior
               log(:debug, "generating instructions for copying #{fi.source} to #{fi.destination}")
               if File.directory?(absolute_source_path)
                 fill_in_missing_ancestors(i, fi.destination)
-                generate_directory_copy(i, absolute_source_path, fi.destination)
+                generate_directory_copy(i, absolute_source_path, fi.destination, file_exists_behavior)
               else
                 file_destination = File.join(fi.destination, File.basename(absolute_source_path))
                 fill_in_missing_ancestors(i, file_destination)
-                generate_normal_copy(i, absolute_source_path, file_destination)
+                generate_normal_copy(i, absolute_source_path, file_destination, file_exists_behavior)
               end
             end
 
@@ -98,7 +96,7 @@ module InstanceAgent
         end
 
         private
-        def generate_directory_copy(i, absolute_source_path, destination)
+        def generate_directory_copy(i, absolute_source_path, destination, file_exists_behavior)
           unless File.directory?(destination)
             i.mkdir(destination)
           end
@@ -109,17 +107,17 @@ module InstanceAgent
             absolute_entry_path = File.join(absolute_source_path, entry)
             entry_destination = File.join(destination, entry)
             if File.directory?(absolute_entry_path)
-              generate_directory_copy(i, absolute_entry_path, entry_destination)
+              generate_directory_copy(i, absolute_entry_path, entry_destination, file_exists_behavior)
             else
-              generate_normal_copy(i, absolute_entry_path, entry_destination)
+              generate_normal_copy(i, absolute_entry_path, entry_destination, file_exists_behavior)
             end
           end
         end
 
         private
-        def generate_normal_copy(i, absolute_source_path, destination)
+        def generate_normal_copy(i, absolute_source_path, destination, file_exists_behavior)
           if File.exists?(destination)
-            case @file_exists_behavior
+            case file_exists_behavior
             when "DISALLOW"
               raise "The deployment failed because a specified file already exists at this location: #{destination}"
             when "OVERWRITE"
@@ -127,7 +125,7 @@ module InstanceAgent
             when "RETAIN"
               # neither generate copy command or fail the deployment
             else
-              raise "The deployment failed because an invalid option was specified for fileExistsBehavior: #{@file_exists_behavior}. Valid options include OVERWRITE, RETAIN, and DISALLOW."
+              raise "The deployment failed because an invalid option was specified for fileExistsBehavior: #{file_exists_behavior}. Valid options include OVERWRITE, RETAIN, and DISALLOW."
             end
           else
             i.copy(absolute_source_path, destination)

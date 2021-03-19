@@ -57,7 +57,7 @@ def write_zip_entries(entries, path, input_dir, zip_io)
 end
 
 
-Then(/^the expected files in directory (\S+) should have have been deployed(| twice) to my host during deployment with deployment group id (\S+) and deployment ids (.+)$/) do |expected_scripts_directory, maybe_twice, deployment_group_id, deployment_ids_space_separated|
+Then(/^the expected files \((\d+)\) in directory (\S+) should have have been deployed(| twice) to my host during deployment with deployment group id (\S+) and deployment ids (.+)$/) do |expected_file_count, expected_scripts_directory, maybe_twice, deployment_group_id, deployment_ids_space_separated|
   deployment_ids = deployment_ids_space_separated.split(' ')
   directories_in_deployment_root_folder = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.directories_and_files_inside(InstanceAgent::Config.config[:root_dir])
   expect(directories_in_deployment_root_folder.size).to be >= 3
@@ -79,7 +79,7 @@ Then(/^the expected files in directory (\S+) should have have been deployed(| tw
 
   files_and_directories_in_deployment_archive_folder = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{deployment_id}/deployment-archive")
   # most sample apps contain 2 files that should be present, except the linux sample app which contains an additional appspec file with a custom filename
-  expect(files_and_directories_in_deployment_archive_folder.size).to be_between(2, 3)
+  expect(files_and_directories_in_deployment_archive_folder.size).to be(expected_file_count.to_i)
   expect(files_and_directories_in_deployment_archive_folder).to include(*%w(appspec.yml scripts))
 
   files_in_scripts_folder = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{deployment_group_id}/#{deployment_id}/deployment-archive/scripts")

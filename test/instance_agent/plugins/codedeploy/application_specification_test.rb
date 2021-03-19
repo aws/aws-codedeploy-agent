@@ -72,6 +72,22 @@ module InstanceAgent
               end
             end
 
+            context "With invalid file_exists_behavior" do
+              setup do
+                @app_spec_string = <<-END
+              version: 0.0
+              file_exists_behavior: invalid
+              os: linux
+                END
+              end
+
+              should "raise an exception" do
+                assert_raised_with_message('The deployment failed because an invalid file_exists_behavior value (invalid) was entered in the application specification file. Make sure your AppSpec file specifies one of DISALLOW,OVERWRITE,RETAIN as the file_exists_behavior, and then try again.',AppSpecValidationException) do
+                  make_app_spec()
+                end
+              end
+            end
+
             context "With missing os" do
               setup do
                 @app_spec_string = <<-END

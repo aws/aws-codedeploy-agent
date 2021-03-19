@@ -13,7 +13,7 @@ Feature: Deploy using AWS CodeDeploy Agent
     Then the overall deployment should eventually be in progress
     And the deployment should contain all the instances I tagged
     And the overall deployment should eventually succeed
-    And the expected files should have have been deployed to my host
+    And the expected files (6) should have have been deployed to my host
     And the scripts should have been executed
 
     Examples:
