@@ -405,12 +405,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
         end
 
         context "when creating S3 options" do
-
-<<<<<<< HEAD
-          should "use right signature version" do
-=======
           should "use right signature version" do 
->>>>>>> 3515520... CDVSA-185 making appspec filename configurable and support yml and yaml extensions
             assert_equal 'v4', @command_executor.s3_options[:signature_version]
           end
 
