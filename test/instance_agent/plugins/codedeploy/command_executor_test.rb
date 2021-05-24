@@ -405,8 +405,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
         end
 
         context "when creating S3 options" do
-
-          should "use right signature version" do
+          should "use right signature version" do 
             assert_equal 'v4', @command_executor.s3_options[:signature_version]
           end
 
