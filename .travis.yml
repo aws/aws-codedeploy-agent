@@ -1,6 +1,9 @@
 language: ruby
 rvm:
   - 2.3.0
+script:
+  - rubocop
+  - rake
 after_success: coveralls
 notifications:
   email:
