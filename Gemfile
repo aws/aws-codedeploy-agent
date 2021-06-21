@@ -20,5 +20,4 @@ group :test do
   gem 'shoulda'
   gem 'shoulda-matchers'
   gem 'shoulda-context'
-  gem 'rubocop', require: false
 end
