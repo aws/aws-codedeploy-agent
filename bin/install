@@ -543,7 +543,7 @@ end
     else
       #use -n for non-interactive mode
       #use -o to not overwrite config files unless they have not been changed
-      install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dkpg::Options::=--force-confold']
+      install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold']
       install_from_s3(s3_bucket, target_version, install_cmd)
       do_sanity_check('/usr/sbin/service')
     end
