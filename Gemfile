@@ -20,4 +20,6 @@ group :test do
   gem 'shoulda'
   gem 'shoulda-matchers'
   gem 'shoulda-context'
+  gem 'simplecov', require: false
+  gem 'simplecov-lcov', require: false
 end
