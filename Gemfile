@@ -11,7 +11,7 @@ gem "codedeploy-commands", "1.0.0", :path => "#{File.expand_path(__FILE__)}/../v
 group :test do
   gem 'test-unit'
   gem 'activesupport', :require => 'active_support'
-  gem 'coveralls-ruby-reborn', require: false
+  gem 'coveralls_reborn', require: false
   gem 'cucumber'
   gem 'fakefs', :require => 'fakefs/safe'
   gem 'mocha'
