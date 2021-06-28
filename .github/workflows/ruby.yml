@@ -9,9 +9,9 @@ name: Ruby
 
 on:
   push:
-    branches: [ workflow-branch ]
+    branches: [ master ]
   pull_request:
-    branches: [ workflow-branch ]
+    branches: [ master ]
 
 jobs:
   test:
