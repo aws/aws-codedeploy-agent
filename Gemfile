@@ -11,7 +11,7 @@ gem "codedeploy-commands", "1.0.0", :path => "#{File.expand_path(__FILE__)}/../v
 group :test do
   gem 'test-unit'
   gem 'activesupport', :require => 'active_support'
-  gem 'coveralls', require: false
+  gem 'coveralls_reborn', require: false
   gem 'cucumber'
   gem 'fakefs', :require => 'fakefs/safe'
   gem 'mocha'
@@ -20,4 +20,6 @@ group :test do
   gem 'shoulda'
   gem 'shoulda-matchers'
   gem 'shoulda-context'
+  gem 'simplecov', require: false
+  gem 'simplecov-lcov', require: false
 end
