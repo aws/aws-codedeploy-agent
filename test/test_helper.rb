@@ -2,8 +2,6 @@
 $:.unshift "lib"
 Gem.use_paths(nil, Gem.path << "vendor")
 
-require 'coveralls'
-Coveralls.wear!
 require 'thread'
 require 'rubygems'
 require "bundler"
