@@ -11,3 +11,6 @@ deployment/
 .idea/
 .DS_STORE
 *.iml
+pkg/
+vendor-thirdparty/
+.bundle/
