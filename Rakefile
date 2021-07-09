@@ -108,17 +108,6 @@ task :package do
   sh "cp -rf init.d #{bundle_dir}/etc/"
   sh "cp -f LICENSE #{bundle_dir}/opt/#{config[:program_name]}/"
 
-  # Vendor folder needs an extra effort, we also need to package the gems installed
-  gem_lib_folder = "vendor-thirdparty"
-
-  rubygemlibs = "#{gem_lib_folder}/ruby/#{rubygem_folder}"
-  Dir.glob("#{rubygemlibs}/gems/*") do |path|
-    sh "cp -r #{path} #{bundle_dir}/opt/#{config[:program_name]}/#{VENDOR}/gems"
-  end
-  Dir.glob("#{rubygemlibs}/specifications/*") do |path|
-    sh "cp -r #{path} #{bundle_dir}/opt/#{config[:program_name]}/#{VENDOR}/specifications"
-  end
-
   sh "sed '/group :test/,$d' Gemfile > #{bundle_dir}/opt/#{config[:program_name]}/Gemfile"
   sh "sed '/add_development_dependency/d' codedeploy_agent.gemspec > #{bundle_dir}/opt/#{config[:program_name]}/codedeploy_agent.gemspec"
 
