@@ -14,3 +14,4 @@ deployment/
 pkg/
 vendor-thirdparty/
 .bundle/
+.rakeTasks
