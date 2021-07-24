@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Run the CodeDeploy agent in the foreground so that it
+# can be controlled by MacOS's launchd. This does away with
+# most of the Gli command-line handling stuff, since this has
+# only one way of being invoked (i.e. launchd).
+#
+# Mostly copied from the official CLI entrypoint in `lib/codedeploy-agent.rb`
+agent_dir = '/opt/aws/codedeploy'
+$LOAD_PATH.unshift "#{agent_dir}/lib"
+
+require 'instance_agent'
+
+# Always use the config file from the installation root:
+InstanceAgent::Config.config(
+  config_file: "#{agent_dir}/conf/codedeployagent.yml"
+)
+
+InstanceAgent::Platform.util = InstanceAgent::LinuxUtil
+InstanceAgent::Config.load_config
+
+# The `.new` here ensures that the master runs in the foreground instead of as
+# a daemon.
+InstanceAgent::Runner::Master.new.start
