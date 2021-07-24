@@ -157,17 +157,31 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
             end
           end
 
-          should "generate a copy command if the file already exists and @file_exists_behavior is set to 'OVERWRITE'" do
-            @app_spec
-              .stubs(:files)
-              .returns([stub(:source => "src1",
-                             :destination => "dst1")])
-            File.stubs(:exists?).with("dst1/src1").returns(true)
-            @instruction_builder
-              .expects(:copy)
-              .with("deploy-archive-dir/src1", "dst1/src1")
-            @installer.file_exists_behavior = "OVERWRITE"
-            @installer.install(@deployment_group_id, @app_spec)
+          context "if the file already exists and @file_exists_behavior is set to 'OVERWRITE'" do
+            setup do
+              @app_spec
+                  .stubs(:files)
+                  .returns([stub(:source => "src1",
+                                 :destination => "dst1")])
+              File.stubs(:exists?).with("dst1/src1").returns(true)
+              @installer.file_exists_behavior = "OVERWRITE"
+            end
+
+            should "generate a copy command if destination is a regular file" do
+              File.stubs(:directory?).with("dst1/src1").returns(false)
+              @instruction_builder
+                  .expects(:copy)
+                  .with("deploy-archive-dir/src1", "dst1/src1")
+              @installer.install(@deployment_group_id, @app_spec)
+            end
+
+            should "raise an error if destination is directory" do
+              File.stubs(:directory?).with("dst1/src1").returns(true)
+              File.stubs(:symlink?).with("dst1/src1").returns(false)
+              assert_raised_with_message("The deployment failed because a directory already exists at this location: dst1/src1") do
+                @installer.install(@deployment_group_id, @app_spec)
+              end
+            end
           end
 
           should "neither generate a copy command nor raise an error if the file already exists and @file_exists_behavior is set to 'RETAIN'" do
