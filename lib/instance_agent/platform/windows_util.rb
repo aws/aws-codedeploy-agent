@@ -74,7 +74,7 @@ module InstanceAgent
     private 
     def self.delete_folder (dir)
       if dir != nil && dir != "/"
-        output = `rd /s /q "#{dir}" 2>&1`
+        output = execute_ps_command("Remove-Item #{dir} -Recurse -Force 2>&1")
         exit_status = $?.exitstatus
         log(:debug, "Command status: #{$?}")
         log(:debug, "Command output: #{output}")
@@ -88,6 +88,12 @@ module InstanceAgent
       end
     end  
   
+    private
+    def self.execute_ps_command(ps_command)
+      exec_command = 'powershell.exe -ExecutionPolicy Bypass -Command ' + ps_command
+      exec_command
+    end
+
     private
     def self.execute_zip_command(cmd)
       log(:debug, "Executing #{cmd}")
