@@ -3,7 +3,7 @@ require 'rake/packagetask'
 require 'rake/testtask'
 require 'rspec/core/rake_task'
 require 'rubygems'
-require 'yaml'
+require 'cucumber'
 
 # Run all units tests in test/
 desc "Run unit tests in test/"

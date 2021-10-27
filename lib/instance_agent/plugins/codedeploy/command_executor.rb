@@ -407,8 +407,15 @@ module InstanceAgent
           elsif "zip".eql? deployment_spec.bundle_type
             begin
               InstanceAgent::Platform.util.extract_zip(bundle_file, dst)
-            rescue
-              log(:warn, "Encountered non-zero exit code with default system unzip util. Hence falling back to ruby unzip to mitigate any partially unzipped or skipped zip files.")
+            rescue Exception => e
+              if e.message == "Error extracting zip archive: 50"
+                FileUtils.remove_dir(dst)
+                # http://infozip.sourceforge.net/FAQ.html#error-codes
+                msg = "The disk is (or was) full during extraction."
+                log(:warn, msg)
+                raise msg
+              end
+              log(:warn, "#{e.message}, with default system unzip util. Hence falling back to ruby unzip to mitigate any partially unzipped or skipped zip files.")
               Zip::File.open(bundle_file) do |zipfile|
                 zipfile.each do |f|
                   file_dst = File.join(dst, f.name)
