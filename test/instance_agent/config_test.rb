@@ -14,6 +14,7 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         :group=>nil,
         :program_name => "codedeploy-agent",
         :wait_after_throttle_error => 60,
+        :wait_between_runs => 30,
         :verbose => false,
         :config_file => nil,
         :wait_after_connection_problem => 5,
