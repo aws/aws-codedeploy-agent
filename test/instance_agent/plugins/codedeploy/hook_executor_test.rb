@@ -158,6 +158,10 @@ class HookExecutorTest < InstanceAgentTestCase
         should "do nothing" do
           @hook_executor.execute
         end
+
+        should "be a noop command" do
+          assert_true @hook_executor.is_noop?
+        end
       end
 
       context "running with a single basic script" do
@@ -166,6 +170,10 @@ class HookExecutorTest < InstanceAgentTestCase
           YAML.stubs(:load).returns(@app_spec)
           @script_location = File.join(@deployment_root_dir, 'deployment-archive', 'test')
           @hook_executor = create_full_hook_executor
+        end
+
+        should "not be a noop" do
+          assert_false @hook_executor.is_noop?
         end
 
         context "when hook script doesn't exist" do
@@ -177,6 +185,10 @@ class HookExecutorTest < InstanceAgentTestCase
             assert_raised_with_message("Script does not exist at specified location: #{File.expand_path(@deployment_root_dir)}/deployment-archive/test", ScriptError)do
               @hook_executor.execute
             end
+          end
+
+          should "not be a noop" do
+            assert_false @hook_executor.is_noop?
           end
         end
 

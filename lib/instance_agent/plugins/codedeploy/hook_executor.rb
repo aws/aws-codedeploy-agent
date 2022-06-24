@@ -108,6 +108,10 @@ module InstanceAgent
                       'DEPLOYMENT_GROUP_ID' => @deployment_group_id}
         end
 
+        def is_noop?
+          return @app_spec.nil? || @app_spec.hooks[@lifecycle_event].nil? || @app_spec.hooks[@lifecycle_event].empty?
+        end
+
         def execute
           return if @app_spec.nil?
           if (hooks = @app_spec.hooks[@lifecycle_event]) &&
