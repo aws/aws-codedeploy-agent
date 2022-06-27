@@ -56,6 +56,29 @@ module InstanceAgent
           define_method(method, &blk)
         end
 
+        def is_command_noop?(command_name, deployment_spec)
+          deployment_spec = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(deployment_spec)
+
+          # DownloadBundle and Install are never noops.
+          return false if command_name == "Install" || command_name == "DownloadBundle"
+          return true if @hook_mapping[command_name].nil?
+
+          @hook_mapping[command_name].each do |lifecycle_event|
+            # Although we're not executing any commands here, the HookExecutor handles
+            # selecting the correct version of the appspec (last successful or current deployment) for us.
+            hook_executor = create_hook_executor(lifecycle_event, deployment_spec)
+
+            is_noop = hook_executor.is_noop?
+            if is_noop
+              log(:info, "Lifecycle event #{lifecycle_event} is a noop")
+            end
+            return false unless is_noop
+          end
+
+          log(:info, "Noop check completed for command #{command_name}, all lifecycle events are noops.")
+          return true
+        end
+
         def execute_command(command, deployment_specification)
           method_name = command_method(command.command_name)
           log(:debug, "Command #{command.command_name} maps to method #{method_name}")
@@ -146,17 +169,7 @@ module InstanceAgent
               #run the scripts
               script_log = InstanceAgent::Plugins::CodeDeployPlugin::ScriptLog.new
               lifecycle_events.each do |lifecycle_event|
-                hook_command = HookExecutor.new(:lifecycle_event => lifecycle_event,
-                :application_name => deployment_spec.application_name,
-                :deployment_id => deployment_spec.deployment_id,
-                :deployment_group_name => deployment_spec.deployment_group_name,
-                :deployment_group_id => deployment_spec.deployment_group_id,
-                :deployment_creator => deployment_spec.deployment_creator,
-                :deployment_type => deployment_spec.deployment_type,
-                :deployment_root_dir => deployment_root_dir(deployment_spec),
-                :last_successful_deployment_dir => last_successful_deployment_dir(deployment_spec.deployment_group_id),
-                :most_recent_deployment_dir => most_recent_deployment_dir(deployment_spec.deployment_group_id),
-                :app_spec_path => deployment_spec.app_spec_path)
+                hook_command = create_hook_executor(lifecycle_event, deployment_spec)
                 script_log.concat_log(hook_command.execute)
               end
               script_log.log
@@ -195,6 +208,21 @@ module InstanceAgent
           File.open most_recent_install_file_location do |f|
             return f.read.chomp
           end
+        end
+
+        private
+        def create_hook_executor(lifecycle_event, deployment_spec)
+          HookExecutor.new(:lifecycle_event => lifecycle_event,
+            :application_name => deployment_spec.application_name,
+            :deployment_id => deployment_spec.deployment_id,
+            :deployment_group_name => deployment_spec.deployment_group_name,
+            :deployment_group_id => deployment_spec.deployment_group_id,
+            :deployment_creator => deployment_spec.deployment_creator,
+            :deployment_type => deployment_spec.deployment_type,
+            :deployment_root_dir => deployment_root_dir(deployment_spec),
+            :last_successful_deployment_dir => last_successful_deployment_dir(deployment_spec.deployment_group_id),
+            :most_recent_deployment_dir => most_recent_deployment_dir(deployment_spec.deployment_group_id),
+            :app_spec_path => deployment_spec.app_spec_path)
         end
 
         private

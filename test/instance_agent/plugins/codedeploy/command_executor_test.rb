@@ -111,6 +111,10 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @command_executor.execute_command(@command, @deployment_spec)
           end
         end
+
+        should "be a noop" do
+          assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+        end
       end
 
       context "when executing a valid command" do
@@ -123,6 +127,10 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           FileUtils.expects(:mkdir_p).with(@deployment_root_dir)
 
           @command_executor.execute_command(@command, @deployment_spec)
+        end
+
+        should "not be a noop command" do
+          assert_false @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
         end
 
         context "when failed to create root directory" do
@@ -155,6 +163,10 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           File.stubs(:exist?).with("#@archive_root_dir/appspec.yml").returns(true)
           File.stubs(:read).with("#@archive_root_dir/appspec.yml").returns("APP SPEC")
           ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC").returns(@app_spec)
+        end
+
+        should "not be a noop command" do
+          assert_false @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
         end
 
         should "create an appropriate Installer" do
@@ -338,6 +350,10 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           @s3 = mock
           @s3.stubs(:config).returns("hello")
           Aws::S3::Client.stubs(:new).returns(@s3)
+        end
+
+        should "not be a noop" do 
+          assert_false @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
         end
 
         context "when GitHub revision specified" do
@@ -710,6 +726,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
           end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+          end
         end
 
         context "AfterBlockTraffic" do
@@ -722,6 +744,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
+          end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
           end
         end
 
@@ -736,6 +764,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
           end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+          end
         end
 
         context "BeforeInstall" do
@@ -748,6 +782,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
+          end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
           end
         end
 
@@ -762,6 +802,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
           end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+          end
         end
 
         context "ApplicationStart" do
@@ -774,6 +820,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
+          end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
           end
         end
 
@@ -788,6 +840,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
           end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+          end
         end
 
         context "AfterAllowTraffic" do
@@ -801,6 +859,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
           end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+          end
         end
 
         context "ValidateService" do
@@ -813,6 +877,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
+          end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
           end
         end
       end
@@ -848,6 +918,15 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           @mock_hook_executor.expects(:execute).twice
 
           @command_executor.execute_command(@command, @deployment_spec)
+        end
+
+        should "not be a noop" do
+          HookExecutor.expects(:new).with(@hook_executor_constructor_hash_1).returns(@mock_hook_executor)
+          HookExecutor.expects(:new).with(@hook_executor_constructor_hash_2).returns(@mock_hook_executor)
+
+          @mock_hook_executor.expects(:is_noop?).twice.returns(true, false)
+
+          assert_false @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
         end
 
         context "when the first script is forced to fail" do
