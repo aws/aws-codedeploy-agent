@@ -283,8 +283,8 @@ module InstanceAgent
         def log_script(message, script_log_file)
           @hook_logging_mutex.synchronize do
             @script_log.append_to_log(message)
-            script_log_file.write(Time.now.to_s[0..-7] + ' ' + message)
-            InstanceAgent::DeploymentLog.instance.log("[#{@deployment_id}]#{message.strip}") if InstanceAgent::Config.config[:enable_deployments_log]
+            script_log_file.write(Time.now.to_s[0..-7] + " [#{@deployment_id}@#{@lifecycle_event}] " + message)
+            InstanceAgent::DeploymentLog.instance.log("[#{@deployment_id}@#{@lifecycle_event}] #{message.strip}") if InstanceAgent::Config.config[:enable_deployments_log]
             script_log_file.flush
           end
         end
