@@ -168,7 +168,25 @@ module InstanceAgent
           :host_command_identifier => command.host_command_identifier)
           status = output.command_status
           log(:debug, "Command Status = #{status}")
+
+          if status == "Failed" then
+            log(:info, "Received Failed for command #{command.command_name}, checking whether command is a noop...")
+            complete_if_noop_command(command)
+          end
           true unless status == "Succeeded" || status == "Failed"
+        end
+
+        private
+        def complete_if_noop_command(command)
+          spec = get_deployment_specification(command)
+
+          if @plugin.is_command_noop?(command.command_name, spec) then
+            log(:debug, 'Calling PutHostCommandComplete: "Succeeded"')
+            @deploy_control_client.put_host_command_complete(
+            :command_status => 'Succeeded',
+            :diagnostics => {:format => "JSON", :payload => gather_diagnostics()},
+            :host_command_identifier => command.host_command_identifier)
+          end
         end
 
         private

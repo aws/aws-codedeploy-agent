@@ -255,7 +255,7 @@ class CommandPollerTest < InstanceAgentTestCase
         end
       end
 
-      should 'call PollHostCommandAcknowledgement with host_command_identifier returned by PollHostCommand' do
+      should 'call PutHostCommandAcknowledgement with host_command_identifier returned by PollHostCommand' do
         @deploy_control_client.expects(:put_host_command_acknowledgement).
           with(:diagnostics => nil,
                :host_command_identifier => @command.host_command_identifier).
@@ -264,7 +264,7 @@ class CommandPollerTest < InstanceAgentTestCase
         @poller.acknowledge_and_process_command(@command)
       end
 
-      should 'return when Succeeded command status is given by PollHostCommandAcknowledgement' do
+      should 'return when Succeeded command status is given by PutHostCommandAcknowledgement' do
         @deploy_control_client.expects(:put_host_command_acknowledgement).
           with(:diagnostics => nil,
                :host_command_identifier => @command.host_command_identifier).
@@ -280,20 +280,41 @@ class CommandPollerTest < InstanceAgentTestCase
         @poller.acknowledge_and_process_command(@command)
       end
 
-      should 'return when Failed command status is given by PollHostCommandAcknowledgement' do
-        @deploy_control_client.expects(:put_host_command_acknowledgement).
-          with(:diagnostics => nil,
-               :host_command_identifier => @command.host_command_identifier).
-          returns(stub(:command_status => "Failed"))
+      context 'when Failed command status is given by PutHostCommandAcknowledgement' do
+        setup do
+          @deploy_control_client.expects(:put_host_command_acknowledgement).
+            with(:diagnostics => nil,
+                :host_command_identifier => @command.host_command_identifier).
+            returns(stub(:command_status => "Failed"))
 
-        @get_deployment_specification_state.become('never')
-        @deploy_control_client.expects(:get_deployment_specification).never.
-          when(@get_deployment_specification_state.is('never'))
-        @put_host_command_complete_state.become('never')
-        @deploy_control_client.expects(:put_host_command_complete).never.
-          when(@put_host_command_complete_state.is('never'))
+          @deploy_control_client.expects(:get_deployment_specification).
+            with(:deployment_execution_id => @command.deployment_execution_id,
+               :host_identifier => @host_identifier).
+            returns(@get_deploy_specification_output)
+        end
 
-        @poller.acknowledge_and_process_command(@command)
+        should "return when the command is not a noop" do
+          @executor.expects(:is_command_noop?).
+            with(@command.command_name, @deployment_specification.generic_envelope).returns(false)
+
+          @put_host_command_complete_state.become('never')
+          @deploy_control_client.expects(:put_host_command_complete).never.
+            when(@put_host_command_complete_state.is('never'))
+
+          @poller.acknowledge_and_process_command(@command)
+        end
+
+        should "PutHostCommandComplete when the command is a noop" do
+          @executor.expects(:is_command_noop?).
+            with(@command.command_name, @deployment_specification.generic_envelope).returns(true)
+
+          @deploy_control_client.expects(:put_host_command_complete).
+            with(:command_status => "Succeeded",
+                :diagnostics => {:format => "JSON", :payload => gather_diagnostics("")},
+                :host_command_identifier => @command.host_command_identifier)
+
+          @poller.acknowledge_and_process_command(@command)
+        end
       end
 
       should 'call GetDeploymentSpecification with the host ID and execution ID of the command' do
