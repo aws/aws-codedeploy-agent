@@ -6,7 +6,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
   include InstanceAgent::Plugins::CodeDeployPlugin
 
-  def create_hook_executor(map = {})
+  def create_hook_executor(revision_envs = nil)
     HookExecutor.new ({:lifecycle_event => @lifecycle_event,
                         :application_name => @application_name,
                         :deployment_id => @deployment_id,
@@ -17,8 +17,8 @@ class HookExecutorTest < InstanceAgentTestCase
                         :deployment_root_dir => @deployment_root_dir,
                         :last_successful_deployment_dir => @last_successful_deployment_dir,
                         :most_recent_deployment_dir => @most_recent_deployment_dir,
-                        :app_spec_path => @app_spec_path}
-                        .merge(map))
+                        :app_spec_path => @app_spec_path,
+                        :revision_envs => revision_envs})
   end
 
   context "testing hook executor" do
@@ -246,7 +246,7 @@ class HookExecutorTest < InstanceAgentTestCase
               setup do
                 revision_envs = {"TEST_ENVIRONMENT_VARIABLE" => "ONE", "ANOTHER_ENV_VARIABLE" => "TWO"}
                 @child_env.merge!(revision_envs)
-                @hook_executor = create_hook_executor(:revision_envs => revision_envs)
+                @hook_executor = create_hook_executor(revision_envs)
               end
 
               should "call popen with the environment variables" do

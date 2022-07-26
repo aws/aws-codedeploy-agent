@@ -231,11 +231,21 @@ module InstanceAgent
           case deployment_spec.revision_source
           when 'S3'
             return get_s3_envs(deployment_spec)
-          when 'GitHub', 'Local File', 'Local Directory'
+          when 'GitHub'
+            return get_github_envs(deployment_spec)
+          when 'Local File', 'Local Directory'
             return {}
           else
             raise "Unknown revision type '#{deployment_spec.revision_source}'"
           end
+        end
+
+        private
+        def get_github_envs(deployment_spec)
+          # TODO(CDAGENT-387): expose the repository name and account, but we'll likely need to go through AppSec before doing so.
+          return {
+            "BUNDLE_COMMIT" => deployment_spec.commit_id
+          }
         end
 
         private
