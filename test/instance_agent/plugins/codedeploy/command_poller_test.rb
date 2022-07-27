@@ -9,9 +9,9 @@ class CommandPollerTest < InstanceAgentTestCase
     {'error_code' => InstanceAgent::Plugins::CodeDeployPlugin::ScriptError::UNKNOWN_ERROR_CODE, 'script_name' => "", 'message' => error.message, 'log' => ""}.to_json
   end
 
-  def gather_diagnostics(script_output)
+  def gather_diagnostics(script_output, msg = "")
     script_output ||= ""
-    {'error_code' => InstanceAgent::Plugins::CodeDeployPlugin::ScriptError::SUCCEEDED_CODE, 'script_name' => "", 'message' => "Succeeded", 'log' => script_output}.to_json
+    {'error_code' => InstanceAgent::Plugins::CodeDeployPlugin::ScriptError::SUCCEEDED_CODE, 'script_name' => "", 'message' => "Succeeded: #{msg}", 'log' => script_output}.to_json
   end
 
   context 'The command poller' do
@@ -310,7 +310,7 @@ class CommandPollerTest < InstanceAgentTestCase
 
           @deploy_control_client.expects(:put_host_command_complete).
             with(:command_status => "Succeeded",
-                :diagnostics => {:format => "JSON", :payload => gather_diagnostics("")},
+                :diagnostics => {:format => "JSON", :payload => gather_diagnostics("", "CompletedNoopCommand")},
                 :host_command_identifier => @command.host_command_identifier)
 
           @poller.acknowledge_and_process_command(@command)

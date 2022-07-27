@@ -184,7 +184,7 @@ module InstanceAgent
             log(:debug, 'Calling PutHostCommandComplete: "Succeeded"')
             @deploy_control_client.put_host_command_complete(
             :command_status => 'Succeeded',
-            :diagnostics => {:format => "JSON", :payload => gather_diagnostics()},
+            :diagnostics => {:format => "JSON", :payload => gather_diagnostics("CompletedNoopCommand")},
             :host_command_identifier => command.host_command_identifier)
           end
         end
@@ -221,9 +221,9 @@ module InstanceAgent
         end
 
         private
-        def gather_diagnostics()
+        def gather_diagnostics(msg = "")
           begin
-            raise ScriptError.new(ScriptError::SUCCEEDED_CODE, "", ScriptLog.new), 'Succeeded'
+            raise ScriptError.new(ScriptError::SUCCEEDED_CODE, "", ScriptLog.new), "Succeeded: #{msg}"
           rescue ScriptError => e
             script_error = e
           end
