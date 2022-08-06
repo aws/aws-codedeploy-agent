@@ -397,7 +397,7 @@ EOF
          package_file.write(s3.read)
       end
     rescue *exceptions  => e
-      @log.error("Could not find package to download at '#{uri.to_s}' - Retrying... Attempt: '#{retries.to_s}'")
+      @log.warn("Could not find package to download at '#{uri.to_s}' - Retrying... Attempt: '#{retries.to_s}'")
       if (retries < 5)
         sleep 2 ** retries
         retries += 1
@@ -415,14 +415,23 @@ end
     uri = s3_bucket.object_uri(key)
     @log.info("Endpoint: #{uri}")
 
+    retries ||= 0
+    exceptions = [OpenURI::HTTPError, OpenSSL::SSL::SSLError, Errno::ETIMEDOUT]
     begin
       require 'json'
 
       version_string = uri.read(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy)
       JSON.parse(version_string)
-    rescue OpenURI::HTTPError => e
-      @log.error("Could not find version file to download at '#{uri.to_s}'")
-      exit(1)
+    rescue *exceptions => e
+      @log.warn("Could not find version file to download at '#{uri.to_s}' - Retrying... Attempt: '#{retries.to_s}'")
+      if (retries < 5)
+        sleep 2 ** retries
+        retries += 1
+        retry
+      else
+        @log.error("Could not download CodeDeploy Agent version file. Exiting Install script.")
+        exit(1)
+      end
     end
   end
 
