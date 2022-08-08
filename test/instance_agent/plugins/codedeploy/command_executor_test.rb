@@ -16,6 +16,15 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
         return spec
       end
 
+      def s3_env_vars()
+        return {
+          "BUNDLE_BUCKET" => @s3Revision["Bucket"],
+          "BUNDLE_KEY" => @s3Revision["Key"],
+          "BUNDLE_VERSION" => @s3Revision["Version"],
+          "BUNDLE_ETAG" => @s3Revision["Etag"]
+        }
+      end
+
   context 'The CodeDeploy Plugin Command Executor' do
     setup do
       @test_hook_mapping = { "BeforeBlockTraffic"=>["BeforeBlockTraffic"],
@@ -711,7 +720,8 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             :deployment_root_dir => @deployment_root_dir,
             :last_successful_deployment_dir => nil,
             :most_recent_deployment_dir => nil,
-            :app_spec_path => 'appspec.yml'}
+            :app_spec_path => 'appspec.yml',
+            :revision_envs => s3_env_vars()}
           @mock_hook_executor = mock
         end
 
@@ -906,7 +916,8 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             :deployment_type => @deployment_type,
             :last_successful_deployment_dir => nil,
             :most_recent_deployment_dir => nil,
-            :app_spec_path => 'appspec.yml'}
+            :app_spec_path => 'appspec.yml',
+            :revision_envs => s3_env_vars()}
           @hook_executor_constructor_hash_1 = hook_executor_constructor_hash.merge({:lifecycle_event => "lifecycle_event_1"})
           @hook_executor_constructor_hash_2 = hook_executor_constructor_hash.merge({:lifecycle_event => "lifecycle_event_2"})
           @mock_hook_executor = mock

@@ -222,7 +222,30 @@ module InstanceAgent
             :deployment_root_dir => deployment_root_dir(deployment_spec),
             :last_successful_deployment_dir => last_successful_deployment_dir(deployment_spec.deployment_group_id),
             :most_recent_deployment_dir => most_recent_deployment_dir(deployment_spec.deployment_group_id),
-            :app_spec_path => deployment_spec.app_spec_path)
+            :app_spec_path => deployment_spec.app_spec_path,
+            :revision_envs => get_revision_envs(deployment_spec))
+        end
+
+        private
+        def get_revision_envs(deployment_spec)
+          case deployment_spec.revision_source
+          when 'S3'
+            return get_s3_envs(deployment_spec)
+          when 'GitHub', 'Local File', 'Local Directory'
+            return {}
+          else
+            raise "Unknown revision type '#{deployment_spec.revision_source}'"
+          end
+        end
+
+        private
+        def get_s3_envs(deployment_spec)
+          return {
+            "BUNDLE_BUCKET" => deployment_spec.bucket,
+            "BUNDLE_KEY" => deployment_spec.key,
+            "BUNDLE_VERSION" => deployment_spec.version,
+            "BUNDLE_ETAG" => deployment_spec.etag
+          }
         end
 
         private

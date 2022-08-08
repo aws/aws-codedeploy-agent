@@ -6,7 +6,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
   include InstanceAgent::Plugins::CodeDeployPlugin
 
-  def create_full_hook_executor
+  def create_hook_executor(map = {})
     HookExecutor.new ({:lifecycle_event => @lifecycle_event,
                         :application_name => @application_name,
                         :deployment_id => @deployment_id,
@@ -17,7 +17,8 @@ class HookExecutorTest < InstanceAgentTestCase
                         :deployment_root_dir => @deployment_root_dir,
                         :last_successful_deployment_dir => @last_successful_deployment_dir,
                         :most_recent_deployment_dir => @most_recent_deployment_dir,
-                        :app_spec_path => @app_spec_path})
+                        :app_spec_path => @app_spec_path}
+                        .merge(map))
   end
 
   context "testing hook executor" do
@@ -91,13 +92,13 @@ class HookExecutorTest < InstanceAgentTestCase
         should "fail if app spec not found" do 
             File.stubs(:exists?).with(){|value| value.is_a?(String) && value.end_with?("/app_spec")}.returns(false)
             assert_raised_with_message("The CodeDeploy agent did not find an AppSpec file within the unpacked revision directory at revision-relative path \"app_spec\". The revision was unpacked to directory \"deployment/root/dir/deployment-archive\", and the AppSpec file was expected but not found at path \"deployment/root/dir/deployment-archive/app_spec\". Consult the AWS CodeDeploy Appspec documentation for more information at http://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file.html", RuntimeError)do
-              @hook_executor =  create_full_hook_executor
+              @hook_executor =  create_hook_executor
             end
         end
 
         should "parse an app spec from the current deployments directory" do
           File.expects(:read).with(File.join(@deployment_root_dir, 'deployment-archive', @app_spec_path))
-          @hook_executor =  create_full_hook_executor
+          @hook_executor =  create_hook_executor
         end
 
         context "hook is before download bundle" do
@@ -107,7 +108,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
           should "parse an app spec from the last successful deployment's directory" do
             File.expects(:read).with(File.join(@last_successful_deployment_dir, 'deployment-archive', @app_spec_path))
-            @hook_executor = create_full_hook_executor
+            @hook_executor = create_hook_executor
           end
         end
 
@@ -118,7 +119,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
           should "parse an app spec from the last successful deployment's directory" do
             File.expects(:read).with(File.join(@last_successful_deployment_dir, 'deployment-archive', @app_spec_path))
-            @hook_executor = create_full_hook_executor
+            @hook_executor = create_hook_executor
           end
         end
 
@@ -131,7 +132,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
           should "parse an app spec from the most recent deployment's directory" do
             File.expects(:read).with(File.join(@most_recent_deployment_dir, 'deployment-archive', @app_spec_path))
-            @hook_executor = create_full_hook_executor
+            @hook_executor = create_hook_executor
           end
         end
       end
@@ -152,7 +153,7 @@ class HookExecutorTest < InstanceAgentTestCase
         setup do
           @app_spec = {"version" => 0.0, "os" => "linux", "hooks" => {}}
           YAML.stubs(:load).returns(@app_spec)
-          @hook_executor = create_full_hook_executor
+          @hook_executor = create_hook_executor
         end
 
         should "do nothing" do
@@ -169,7 +170,7 @@ class HookExecutorTest < InstanceAgentTestCase
           @app_spec = {"version" => 0.0, "os" => "linux", "hooks" => {'ValidateService'=>[{'location'=>'test'}]}}
           YAML.stubs(:load).returns(@app_spec)
           @script_location = File.join(@deployment_root_dir, 'deployment-archive', 'test')
-          @hook_executor = create_full_hook_executor
+          @hook_executor = create_hook_executor
         end
 
         should "not be a noop" do
@@ -241,11 +242,25 @@ class HookExecutorTest < InstanceAgentTestCase
               InstanceAgent::ThreadJoiner.stubs(:new).returns(@thread_joiner)
             end
 
+            context "extra child environment variables are added" do
+              setup do
+                revision_envs = {"TEST_ENVIRONMENT_VARIABLE" => "ONE", "ANOTHER_ENV_VARIABLE" => "TWO"}
+                @child_env.merge!(revision_envs)
+                @hook_executor = create_hook_executor(:revision_envs => revision_envs)
+              end
+
+              should "call popen with the environment variables" do
+                Open3.stubs(:popen3).with(@child_env, @script_location, :pgroup => true).yields([@mock_pipe,@mock_pipe,@mock_pipe,@wait_thr])
+                @value.stubs(:exitstatus).returns(0)
+                @hook_executor.execute()
+              end
+            end
+
             context 'scripts fail for unknown reason' do
               setup do
                 @app_spec =  { "version" => 0.0, "os" => "linux", "hooks" => {'ValidateService'=> [{"location"=>"test", "timeout"=>"30"}]}}
                 YAML.stubs(:load).returns(@app_spec)
-                @hook_executor = create_full_hook_executor
+                @hook_executor = create_hook_executor
                 @popen_error = Errno::ENOENT
                 Open3.stubs(:popen3).with(@child_env, @script_location, :pgroup => true).raises(@popen_error, 'su')
               end
@@ -262,7 +277,7 @@ class HookExecutorTest < InstanceAgentTestCase
               setup do
                 @app_spec =  { "version" => 0.0, "os" => "linux", "hooks" => {'ValidateService'=> [{"location"=>"test", "timeout"=>"30"}]}}
                 YAML.stubs(:load).returns(@app_spec)
-                @hook_executor = create_full_hook_executor
+                @hook_executor = create_hook_executor
                 @thread_joiner.expects(:joinOrFail).with(@wait_thr).yields
                 InstanceAgent::ThreadJoiner.expects(:new).with(30).returns(@thread_joiner)
                 @wait_thr.stubs(:pid).returns(1234)
@@ -307,7 +322,7 @@ class HookExecutorTest < InstanceAgentTestCase
                 Open3.stubs(:popen3).with(@child_env, @script_location, :pgroup => true).yields([@mock_pipe,@mock_pipe,@mock_pipe,@wait_thr])
                 @app_spec = {"version" => 0.0, "os" => "linux", "hooks" => {'ValidateService'=>[{'location'=>'test', 'timeout'=>"#{timeout}"}]}}
                 YAML.stubs(:load).returns(@app_spec)
-                @hook_executor = create_full_hook_executor
+                @hook_executor = create_hook_executor
               end
 
               context "STDOUT left open" do
@@ -341,7 +356,7 @@ class HookExecutorTest < InstanceAgentTestCase
               setup do
                 @app_spec =  { "version" => 0.0, "os" => "linux", "hooks" => {'ValidateService'=> [{"location"=>"test", "runas"=>"user"}]}}
                 YAML.stubs(:load).returns(@app_spec)
-                @hook_executor = create_full_hook_executor
+                @hook_executor = create_hook_executor
                 mock_pipe = mock
                 Open3.stubs(:popen3).with(@child_env, 'su user -c ' + @script_location, :pgroup => true).yields([@mock_pipe,@mock_pipe,@mock_pipe,@wait_thr])
               end
@@ -374,7 +389,7 @@ class HookExecutorTest < InstanceAgentTestCase
               setup do
                 @app_spec =  { "version" => 0.0, "os" => "linux", "hooks" => {'ValidateService'=> [{"location"=>"test"}]}}
                 YAML.stubs(:load).returns(@app_spec)
-                @hook_executor = create_full_hook_executor
+                @hook_executor = create_hook_executor
                 Open3.stubs(:popen3).with(@child_env, @script_location, :pgroup => true).yields([@mock_pipe,@mock_pipe,@mock_pipe,@wait_thr])
               end
 
@@ -406,7 +421,7 @@ class HookExecutorTest < InstanceAgentTestCase
               setup do
                 @app_spec =  { "version" => 0.0, "os" => "linux", "hooks" => {'ValidateService'=> [{"location"=>"test"}]}}
                 YAML.stubs(:load).returns(@app_spec)
-                @hook_executor = create_full_hook_executor
+                @hook_executor = create_hook_executor
                 Open3.stubs(:popen3).with(@child_env, @script_location, {}).yields([@mock_pipe,@mock_pipe,@mock_pipe,@wait_thr])
                 InstanceAgent::LinuxUtil.stubs(:supports_process_groups?).returns(false)
               end
