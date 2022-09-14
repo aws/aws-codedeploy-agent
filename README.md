@@ -3,7 +3,7 @@
 [![Code Climate](https://codeclimate.com/github/aws/aws-codedeploy-agent.png)](https://codeclimate.com/github/aws/aws-codedeploy-agent) [![Build Status](https://travis-ci.org/aws/aws-codedeploy-agent.png?branch=master)](https://travis-ci.org/aws/aws-codedeploy-agent) [![Coverage Status](https://coveralls.io/repos/aws/aws-codedeploy-agent/badge.svg?branch=master&service=github)](https://coveralls.io/r/aws/aws-codedeploy-agent?branch=master)
 
 ## Latest Release: 1.4.0
-[Release Notes](https://docs.aws.amazon.com/codedeploy/latest/userguide/codedeploy-agent.html)
+[Release Notes](https://docs.aws.amazon.com/codedeploy/latest/userguide/codedeploy-agent.html#codedeploy-agent-version-history)
 
 ## Build Steps
 
