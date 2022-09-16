@@ -157,7 +157,20 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
             end
           end
 
-          should "generate a copy command if the file already exists and @file_exists_behavior is set to 'OVERWRITE'" do
+          should "raise an error if the file already exists and appspec file_exists_behavior is set to 'DISALLOW'" do
+            @installer.file_exists_behavior = "OVERWRITE"
+
+            @app_spec
+              .stubs(:file_exists_behavior)
+                .returns("DISALLOW")
+            File.stubs(:exists?).with("dst2/src2").returns(true)
+
+            assert_raised_with_message("The deployment failed because a specified file already exists at this location: dst2/src2") do
+              @installer.install(@deployment_group_id, @app_spec)
+            end
+          end
+
+          should "generate a copy command if the file already exists and Installer @file_exists_behavior is set to 'OVERWRITE'" do
             @app_spec
               .stubs(:files)
               .returns([stub(:source => "src1",
@@ -170,6 +183,21 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
             @installer.install(@deployment_group_id, @app_spec)
           end
 
+          should "generate a copy command if the file already exists and appspec file_exists_behavior is set to 'OVERWRITE'" do
+            @app_spec
+              .stubs(:file_exists_behavior)
+                .returns("OVERWRITE")
+              .stubs(:files)
+                .returns([stub(:source => "src1",
+                               :destination => "dst1")])
+            File.stubs(:exists?).with("dst1/src1").returns(true)
+            @instruction_builder
+              .expects(:copy)
+              .with("deploy-archive-dir/src1", "dst1/src1")
+            assert_equal(@installer.file_exists_behavior, "DISALLOW")
+            @installer.install(@deployment_group_id, @app_spec)
+          end
+
           should "neither generate a copy command nor raise an error if the file already exists and @file_exists_behavior is set to 'RETAIN'" do
             @app_spec
               .stubs(:files)
@@ -178,6 +206,19 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
             File.stubs(:exists?).with("dst1/src1").returns(true)
             @instruction_builder.expects(:copy).never
             @installer.file_exists_behavior = "RETAIN"
+            @installer.install(@deployment_group_id, @app_spec)
+          end
+
+          should "neither generate a copy command nor raise an error if the file already exists and appspec file_exists_behavior is set to 'RETAIN'" do
+            @app_spec
+              .stubs(:file_exists_behavior)
+                .returns("RETAIN")
+              .stubs(:files)
+                .returns([stub(:source => "src1",
+                               :destination => "dst1")])
+            File.stubs(:exists?).with("dst1/src1").returns(true)
+            @instruction_builder.expects(:copy).never
+            assert_equal(@installer.file_exists_behavior, "DISALLOW")
             @installer.install(@deployment_group_id, @app_spec)
           end
 

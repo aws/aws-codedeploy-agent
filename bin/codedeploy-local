@@ -65,7 +65,8 @@ Options
   The format of the application revision bundle. Supported types include tgz, tar, zip, and directory. If you do not specify a type, the tool uses directory by default. If you specify --type, you must also specify --bundle-location. [default: directory]
 
   -b, --file-exists-behavior <value>
-  Indicates how files are handled that already exist in a deployment target location but weren't part of a previous successful deployment. Options include DISALLOW, OVERWRITE, RETAIN. [default: #{InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR}]. 
+  Indicates how files are handled that already exist in a deployment target location but weren't part of a previous successful deployment. Options include DISALLOW, OVERWRITE, RETAIN. [default: #{InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification::DEFAULT_FILE_EXISTS_BEHAVIOR}].
+  Note: this setting can be overriden during individual deployments using the appspec file, which takes precedence over this option setting during that deployment installation.
   See also: "create-deployment" in the AWS CLI Reference for AWS CodeDeploy.
 
   -g, --deployment-group <value>

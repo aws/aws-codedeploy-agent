@@ -22,6 +22,17 @@ After("@codedeploy-local") do
   FileUtils.rm_rf(@test_directory) unless @test_directory.nil?
 end
 
+Given(/^I have a sample local directory_with_destination_files bundle with custom appspec filename ([^"]*)$/) do |appspec_filename|
+  @bundle_original_directory_location = create_bundle_with_appspec_containing_source_and_destination_file(StepConstants::SAMPLE_APP_BUNDLE_FULL_PATH, appspec_filename)
+  expect(File.directory?(@bundle_original_directory_location)).to be true
+
+  @bundle_type = 'directory'
+  @bundle_location = @bundle_original_directory_location
+  @appspec_filename = appspec_filename
+
+  expect(File.file?(@bundle_location)).to be false
+end
+
 Given(/^I have a sample local (tgz|tar|zip|zipped_directory|directory|relative_directory|custom_event_directory|directory_with_destination_files) bundle$/) do |bundle_type|
   case bundle_type
   when 'custom_event_directory'
@@ -78,14 +89,14 @@ def tar_app_bundle(temp_directory_to_create_bundle)
   tar_file_name
 end
 
-def create_bundle_with_appspec_containing_source_and_destination_file(source_bundle_location)
+def create_bundle_with_appspec_containing_source_and_destination_file(source_bundle_location, appspec_filename="appspec.yml")
   bundle_final_location = "#{@test_directory}/bundle_with_appspec_containing_source_and_destination_file"
   FileUtils.cp_r source_bundle_location, bundle_final_location
   # Remove the appspec file since we're going to overwrite it with a new one
   FileUtils.rm %W(#{bundle_final_location}/appspec.yml)
   # Read the default appspec.yml file
-  File.open("#{source_bundle_location}/appspec.yml", 'r') do |old_appspec|
-    File.open("#{bundle_final_location}/appspec.yml", 'w') do |new_appspec|
+  File.open("#{source_bundle_location}/#{appspec_filename}", 'r') do |old_appspec|
+    File.open("#{bundle_final_location}/#{appspec_filename}", 'w') do |new_appspec|
       # Create the new appspec in our bundle location but add the source and destination file lines
       old_appspec.each do |line|
         new_appspec << line
@@ -164,9 +175,9 @@ Then(/^the local deployment command should fail$/) do
   expect(@local_deployment_succeeded).to be false
 end
 
-Then(/^the expected files should have have been locally deployed to my host(| twice)$/) do |maybe_twice|
+Then(/^the expected files \((\d+)\) should have have been locally deployed to my host(| twice)$/) do |expected_file_count, maybe_twice|
   deployment_ids = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.directories_and_files_inside("#{InstanceAgent::Config.config[:root_dir]}/#{LOCAL_DEPLOYMENT_GROUP_ID}")
-  step "the expected files in directory #{bundle_original_directory_location}/scripts should have have been deployed#{maybe_twice} to my host during deployment with deployment group id #{LOCAL_DEPLOYMENT_GROUP_ID} and deployment ids #{deployment_ids.join(' ')}"
+  step "the expected files (#{expected_file_count}) in directory #{bundle_original_directory_location}/scripts should have have been deployed#{maybe_twice} to my host during deployment with deployment group id #{LOCAL_DEPLOYMENT_GROUP_ID} and deployment ids #{deployment_ids.join(' ')}"
 end
 
 def bundle_original_directory_location

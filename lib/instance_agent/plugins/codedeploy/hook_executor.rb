@@ -106,6 +106,11 @@ module InstanceAgent
                       'APPLICATION_NAME' => @application_name,
                       'DEPLOYMENT_GROUP_NAME' => @deployment_group_name,
                       'DEPLOYMENT_GROUP_ID' => @deployment_group_id}
+          @child_envs.merge!(arguments[:revision_envs]) if arguments[:revision_envs]
+        end
+
+        def is_noop?
+          return @app_spec.nil? || @app_spec.hooks[@lifecycle_event].nil? || @app_spec.hooks[@lifecycle_event].empty?
         end
 
         def execute

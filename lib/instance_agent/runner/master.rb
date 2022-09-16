@@ -68,7 +68,7 @@ module InstanceAgent
       end
 
       def kill_children(sig)
-	    children.each do |index, child_pid|
+        children.each do |index, child_pid|
           begin
             Process.kill(sig, child_pid)
           rescue Errno::ESRCH
@@ -87,6 +87,7 @@ module InstanceAgent
         rescue Timeout::Error
           children.each do |index, child_pid|
             if ProcessManager.process_running?(child_pid)
+              pid = self.class.find_pid
               puts "Stopping #{ProcessManager::Config.config[:program_name]} agent(#{pid}) but child(#{child_pid}) still processing."
               ProcessManager::Log.warn("Stopping #{ProcessManager::Config.config[:program_name]} agent(#{pid}) but child(#{child_pid}) is still processing.")
             end

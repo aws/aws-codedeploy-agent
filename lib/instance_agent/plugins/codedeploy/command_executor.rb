@@ -56,6 +56,29 @@ module InstanceAgent
           define_method(method, &blk)
         end
 
+        def is_command_noop?(command_name, deployment_spec)
+          deployment_spec = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(deployment_spec)
+
+          # DownloadBundle and Install are never noops.
+          return false if command_name == "Install" || command_name == "DownloadBundle"
+          return true if @hook_mapping[command_name].nil?
+
+          @hook_mapping[command_name].each do |lifecycle_event|
+            # Although we're not executing any commands here, the HookExecutor handles
+            # selecting the correct version of the appspec (last successful or current deployment) for us.
+            hook_executor = create_hook_executor(lifecycle_event, deployment_spec)
+
+            is_noop = hook_executor.is_noop?
+            if is_noop
+              log(:info, "Lifecycle event #{lifecycle_event} is a noop")
+            end
+            return false unless is_noop
+          end
+
+          log(:info, "Noop check completed for command #{command_name}, all lifecycle events are noops.")
+          return true
+        end
+
         def execute_command(command, deployment_specification)
           method_name = command_method(command.command_name)
           log(:debug, "Command #{command.command_name} maps to method #{method_name}")
@@ -146,17 +169,7 @@ module InstanceAgent
               #run the scripts
               script_log = InstanceAgent::Plugins::CodeDeployPlugin::ScriptLog.new
               lifecycle_events.each do |lifecycle_event|
-                hook_command = HookExecutor.new(:lifecycle_event => lifecycle_event,
-                :application_name => deployment_spec.application_name,
-                :deployment_id => deployment_spec.deployment_id,
-                :deployment_group_name => deployment_spec.deployment_group_name,
-                :deployment_group_id => deployment_spec.deployment_group_id,
-                :deployment_creator => deployment_spec.deployment_creator,
-                :deployment_type => deployment_spec.deployment_type,
-                :deployment_root_dir => deployment_root_dir(deployment_spec),
-                :last_successful_deployment_dir => last_successful_deployment_dir(deployment_spec.deployment_group_id),
-                :most_recent_deployment_dir => most_recent_deployment_dir(deployment_spec.deployment_group_id),
-                :app_spec_path => deployment_spec.app_spec_path)
+                hook_command = create_hook_executor(lifecycle_event, deployment_spec)
                 script_log.concat_log(hook_command.execute)
               end
               script_log.log
@@ -195,6 +208,54 @@ module InstanceAgent
           File.open most_recent_install_file_location do |f|
             return f.read.chomp
           end
+        end
+
+        private
+        def create_hook_executor(lifecycle_event, deployment_spec)
+          HookExecutor.new(:lifecycle_event => lifecycle_event,
+            :application_name => deployment_spec.application_name,
+            :deployment_id => deployment_spec.deployment_id,
+            :deployment_group_name => deployment_spec.deployment_group_name,
+            :deployment_group_id => deployment_spec.deployment_group_id,
+            :deployment_creator => deployment_spec.deployment_creator,
+            :deployment_type => deployment_spec.deployment_type,
+            :deployment_root_dir => deployment_root_dir(deployment_spec),
+            :last_successful_deployment_dir => last_successful_deployment_dir(deployment_spec.deployment_group_id),
+            :most_recent_deployment_dir => most_recent_deployment_dir(deployment_spec.deployment_group_id),
+            :app_spec_path => deployment_spec.app_spec_path,
+            :revision_envs => get_revision_envs(deployment_spec))
+        end
+
+        private
+        def get_revision_envs(deployment_spec)
+          case deployment_spec.revision_source
+          when 'S3'
+            return get_s3_envs(deployment_spec)
+          when 'GitHub'
+            return get_github_envs(deployment_spec)
+          when 'Local File', 'Local Directory'
+            return {}
+          else
+            raise "Unknown revision type '#{deployment_spec.revision_source}'"
+          end
+        end
+
+        private
+        def get_github_envs(deployment_spec)
+          # TODO(CDAGENT-387): expose the repository name and account, but we'll likely need to go through AppSec before doing so.
+          return {
+            "BUNDLE_COMMIT" => deployment_spec.commit_id
+          }
+        end
+
+        private
+        def get_s3_envs(deployment_spec)
+          return {
+            "BUNDLE_BUCKET" => deployment_spec.bucket,
+            "BUNDLE_KEY" => deployment_spec.key,
+            "BUNDLE_VERSION" => deployment_spec.version,
+            "BUNDLE_ETAG" => deployment_spec.etag
+          }
         end
 
         private
@@ -407,8 +468,15 @@ module InstanceAgent
           elsif "zip".eql? deployment_spec.bundle_type
             begin
               InstanceAgent::Platform.util.extract_zip(bundle_file, dst)
-            rescue
-              log(:warn, "Encountered non-zero exit code with default system unzip util. Hence falling back to ruby unzip to mitigate any partially unzipped or skipped zip files.")
+            rescue Exception => e
+              if e.message == "Error extracting zip archive: 50"
+                FileUtils.remove_dir(dst)
+                # http://infozip.sourceforge.net/FAQ.html#error-codes
+                msg = "The disk is (or was) full during extraction."
+                log(:warn, msg)
+                raise msg
+              end
+              log(:warn, "#{e.message}, with default system unzip util. Hence falling back to ruby unzip to mitigate any partially unzipped or skipped zip files.")
               Zip::File.open(bundle_file) do |zipfile|
                 zipfile.each do |f|
                   file_dst = File.join(dst, f.name)

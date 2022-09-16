@@ -90,10 +90,9 @@ module InstanceAgent
         end
 
         def acknowledge_and_process_command(command)
-          return unless acknowledge_command(command)
-
           begin
             spec = get_deployment_specification(command)
+            return unless acknowledge_command(command, spec)
             process_command(command, spec)
             #Commands that throw an exception will be considered to have failed
           rescue Exception => e
@@ -161,14 +160,40 @@ module InstanceAgent
         end
 
         private
-        def acknowledge_command(command)
+        def get_ack_diagnostics(command, spec)
+          is_command_noop = @plugin.is_command_noop?(command.command_name, spec)
+          return {:format => "JSON", :payload => {'IsCommandNoop' => is_command_noop}.to_json()}
+        end
+
+        private
+        def acknowledge_command(command, spec)
+          ack_diagnostics = get_ack_diagnostics(command, spec)
+
           log(:debug, "Calling PutHostCommandAcknowledgement:")
           output =  @deploy_control_client.put_host_command_acknowledgement(
-          :diagnostics => nil,
+          :diagnostics => ack_diagnostics,
           :host_command_identifier => command.host_command_identifier)
           status = output.command_status
           log(:debug, "Command Status = #{status}")
+
+          if status == "Failed" then
+            log(:info, "Received Failed for command #{command.command_name}, checking whether command is a noop...")
+            complete_if_noop_command(command)
+          end
           true unless status == "Succeeded" || status == "Failed"
+        end
+
+        private
+        def complete_if_noop_command(command)
+          spec = get_deployment_specification(command)
+
+          if @plugin.is_command_noop?(command.command_name, spec) then
+            log(:debug, 'Calling PutHostCommandComplete: "Succeeded"')
+            @deploy_control_client.put_host_command_complete(
+            :command_status => 'Succeeded',
+            :diagnostics => {:format => "JSON", :payload => gather_diagnostics("CompletedNoopCommand")},
+            :host_command_identifier => command.host_command_identifier)
+          end
         end
 
         private
@@ -203,9 +228,9 @@ module InstanceAgent
         end
 
         private
-        def gather_diagnostics()
+        def gather_diagnostics(msg = "")
           begin
-            raise ScriptError.new(ScriptError::SUCCEEDED_CODE, "", ScriptLog.new), 'Succeeded'
+            raise ScriptError.new(ScriptError::SUCCEEDED_CODE, "", ScriptLog.new), "Succeeded: #{msg}"
           rescue ScriptError => e
             script_error = e
           end

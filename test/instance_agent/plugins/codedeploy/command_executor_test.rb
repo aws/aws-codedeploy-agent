@@ -16,6 +16,21 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
         return spec
       end
 
+      def s3_env_vars()
+        return {
+          "BUNDLE_BUCKET" => @s3Revision["Bucket"],
+          "BUNDLE_KEY" => @s3Revision["Key"],
+          "BUNDLE_VERSION" => @s3Revision["Version"],
+          "BUNDLE_ETAG" => @s3Revision["Etag"]
+        }
+      end
+
+      def github_env_vars()
+        return {
+          "BUNDLE_COMMIT" => @githubRevision["CommitId"]
+        }
+      end
+
   context 'The CodeDeploy Plugin Command Executor' do
     setup do
       @test_hook_mapping = { "BeforeBlockTraffic"=>["BeforeBlockTraffic"],
@@ -59,6 +74,11 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           "Bucket" => "mybucket",
           "Key" => "mykey",
           "BundleType" => "tar"
+        }
+        @githubRevision = {
+          'Account' => 'account',
+          'Repository' => 'repository',
+          'CommitId' => 'commitid',
         }
         @file_exists_behavior = "RETAIN"
         @agent_actions_overrides_map = {"FileExistsBehavior" => @file_exists_behavior}
@@ -111,18 +131,68 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @command_executor.execute_command(@command, @deployment_spec)
           end
         end
+
+        should "be a noop" do
+          assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+        end
       end
 
-      context "when executing a valid command" do
+      context "when executing a valid non-hardcoded command" do
         setup do
-          @command.command_name = "Install"
-          @command_executor.stubs(:install)
+          @command.command_name = "ValidateService"
+          @command_executor.stubs(:validate_service)
+
+          @app_spec = mock("parsed application specification")
+          File.stubs(:exist?).with("#@archive_root_dir/appspec.yml").returns(true)
+          File.stubs(:read).with("#@archive_root_dir/appspec.yml").returns("APP SPEC")
+          ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC").returns(@app_spec)
         end
 
         should "create the deployment root directory" do
           FileUtils.expects(:mkdir_p).with(@deployment_root_dir)
 
           @command_executor.execute_command(@command, @deployment_spec)
+        end
+
+        context "when the bundle is from github" do
+          setup do
+            @deployment_spec = generate_signed_message_for({
+              "DeploymentId" => @deployment_id.to_s,
+              "DeploymentGroupId" => @deployment_group_id.to_s,
+              "ApplicationName" => @application_name,
+              "DeploymentCreator" => @deployment_creator,
+              "DeploymentGroupName" => @deployment_group_name,
+              "Revision" => {
+                "RevisionType" => "GitHub",
+                "GitHubRevision" => @githubRevision
+              }
+            })
+
+            @hook_executor_constructor_hash = {
+              :lifecycle_event => @command.command_name,
+              :application_name => @application_name,
+              :deployment_id => @deployment_id,
+              :deployment_group_name => @deployment_group_name,
+              :deployment_group_id => @deployment_group_id,
+              :deployment_creator => @deployment_creator,
+              :deployment_type => @deployment_type,
+              :deployment_root_dir => @deployment_root_dir,
+              :last_successful_deployment_dir => nil,
+              :most_recent_deployment_dir => nil,
+              :app_spec_path => 'appspec.yml',
+              :revision_envs => github_env_vars()}
+            @mock_hook_executor = mock
+            @command_executor.unstub(:validate_service)
+            @command_executor.stubs(:last_successful_deployment_dir).returns(nil)
+            @command_executor.stubs(:most_recent_deployment_dir).returns(nil)
+          end
+
+          should "create a hook executor with the commit hash as an environment variable" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:execute)
+
+            @command_executor.execute_command(@command, @deployment_spec)
+          end
         end
 
         context "when failed to create root directory" do
@@ -155,6 +225,10 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           File.stubs(:exist?).with("#@archive_root_dir/appspec.yml").returns(true)
           File.stubs(:read).with("#@archive_root_dir/appspec.yml").returns("APP SPEC")
           ApplicationSpecification::ApplicationSpecification.stubs(:parse).with("APP SPEC").returns(@app_spec)
+        end
+
+        should "not be a noop command" do
+          assert_false @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
         end
 
         should "create an appropriate Installer" do
@@ -338,6 +412,10 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           @s3 = mock
           @s3.stubs(:config).returns("hello")
           Aws::S3::Client.stubs(:new).returns(@s3)
+        end
+
+        should "not be a noop" do 
+          assert_false @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
         end
 
         context "when GitHub revision specified" do
@@ -695,7 +773,8 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             :deployment_root_dir => @deployment_root_dir,
             :last_successful_deployment_dir => nil,
             :most_recent_deployment_dir => nil,
-            :app_spec_path => 'appspec.yml'}
+            :app_spec_path => 'appspec.yml',
+            :revision_envs => s3_env_vars()}
           @mock_hook_executor = mock
         end
 
@@ -710,6 +789,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
           end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+          end
         end
 
         context "AfterBlockTraffic" do
@@ -722,6 +807,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
+          end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
           end
         end
 
@@ -736,6 +827,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
           end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+          end
         end
 
         context "BeforeInstall" do
@@ -748,6 +845,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
+          end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
           end
         end
 
@@ -762,6 +865,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
           end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+          end
         end
 
         context "ApplicationStart" do
@@ -774,6 +883,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
+          end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
           end
         end
 
@@ -788,6 +903,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
           end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+          end
         end
 
         context "AfterAllowTraffic" do
@@ -801,6 +922,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
           end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+          end
         end
 
         context "ValidateService" do
@@ -813,6 +940,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
             @mock_hook_executor.expects(:execute)
             @command_executor.execute_command(@command, @deployment_spec)
+          end
+
+          should "be a noop" do
+            HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
+            @mock_hook_executor.expects(:is_noop?).returns(true)
+            assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
           end
         end
       end
@@ -836,7 +969,8 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             :deployment_type => @deployment_type,
             :last_successful_deployment_dir => nil,
             :most_recent_deployment_dir => nil,
-            :app_spec_path => 'appspec.yml'}
+            :app_spec_path => 'appspec.yml',
+            :revision_envs => s3_env_vars()}
           @hook_executor_constructor_hash_1 = hook_executor_constructor_hash.merge({:lifecycle_event => "lifecycle_event_1"})
           @hook_executor_constructor_hash_2 = hook_executor_constructor_hash.merge({:lifecycle_event => "lifecycle_event_2"})
           @mock_hook_executor = mock
@@ -848,6 +982,15 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           @mock_hook_executor.expects(:execute).twice
 
           @command_executor.execute_command(@command, @deployment_spec)
+        end
+
+        should "not be a noop" do
+          HookExecutor.expects(:new).with(@hook_executor_constructor_hash_1).returns(@mock_hook_executor)
+          HookExecutor.expects(:new).with(@hook_executor_constructor_hash_2).returns(@mock_hook_executor)
+
+          @mock_hook_executor.expects(:is_noop?).twice.returns(true, false)
+
+          assert_false @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
         end
 
         context "when the first script is forced to fail" do

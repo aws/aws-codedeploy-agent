@@ -11,7 +11,7 @@ module InstanceAgent
 
         class ApplicationSpecification
 
-          attr_reader :version, :os, :hooks, :files, :permissions
+          attr_reader :version, :os, :hooks, :files, :permissions, :file_exists_behavior
           def initialize(yaml_hash, opts = {})
             unless yaml_hash
                 raise AppSpecValidationException, "The deployment failed because the application specification file was empty. Make sure your AppSpec file defines at minimum the 'version' and 'os' properties."
@@ -21,6 +21,7 @@ module InstanceAgent
             @hooks = parse_hooks(yaml_hash['hooks'] || {})
             @files = parse_files(yaml_hash['files'] || [])
             @permissions = parse_permissions(yaml_hash['permissions'] || [])
+            @file_exists_behavior = parse_file_exists_behavior(yaml_hash['file_exists_behavior'])
           end
 
           def self.parse(app_spec_string)
@@ -32,11 +33,23 @@ module InstanceAgent
             [0.0]
           end
 
+          private
+          def valid_file_exists_behaviors
+            %w[DISALLOW OVERWRITE RETAIN]
+          end
+
           def parse_version(version)
-            if !supported_versions.include?(version)
+            unless supported_versions.include?(version)
               raise AppSpecValidationException, "The deployment failed because an invalid version value (#{version}) was entered in the application specification file. Make sure your AppSpec file specifies \"0.0\" as the version, and then try again."
             end
             version
+          end
+
+          def parse_file_exists_behavior(file_exists_behavior)
+            unless file_exists_behavior.nil? or valid_file_exists_behaviors.include?(file_exists_behavior)
+              raise AppSpecValidationException, "The deployment failed because an invalid file_exists_behavior value (#{file_exists_behavior}) was entered in the application specification file. Make sure your AppSpec file specifies one of #{valid_file_exists_behaviors * ","} as the file_exists_behavior, and then try again."
+            end
+            file_exists_behavior
           end
 
           def supported_oses()
@@ -44,7 +57,7 @@ module InstanceAgent
           end
 
           def parse_os(os)
-            if !supported_oses.include?(os)
+            unless supported_oses.include?(os)
               raise AppSpecValidationException, "The deployment failed because the application specification file specifies an unsupported operating system (#{os}). Specify either \"linux\" or \"windows\" in the os section of the AppSpec file, and then try again."
             end
             os

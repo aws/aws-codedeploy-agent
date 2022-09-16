@@ -249,13 +249,13 @@ Then(/^the overall deployment should eventually succeed$/) do
   assert_deployment_status("Succeeded", 60)
 end
 
-Then(/^the expected files should have have been deployed to my host$/) do
+Then(/^the expected files \((\d+)\) should have have been deployed to my host$/) do |expected_file_count|
   deployment_group_id = @codedeploy_client.get_deployment_group({
     application_name: @application_name,
     deployment_group_name: @deployment_group_name,
   }).deployment_group_info.deployment_group_id
 
-  step "the expected files in directory #{Dir.pwd}/features/resources/#{StepConstants::SAMPLE_APP_BUNDLE_DIRECTORY}/scripts should have have been deployed to my host during deployment with deployment group id #{deployment_group_id} and deployment ids #{@deployment_id}"
+  step "the expected files (#{expected_file_count}) in directory #{Dir.pwd}/features/resources/#{StepConstants::SAMPLE_APP_BUNDLE_DIRECTORY}/scripts should have have been deployed to my host during deployment with deployment group id #{deployment_group_id} and deployment ids #{@deployment_id}"
 end
 
 Then(/^the scripts should have been executed$/) do
