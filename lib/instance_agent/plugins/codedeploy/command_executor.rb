@@ -304,8 +304,6 @@ module InstanceAgent
           log(:info, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
           options = s3_options()
           s3 = Aws::S3::Client.new(options)
-          ProcessManager::Log.info("s3 client configuration below:")
-          ProcessManager::Log.info(s3.config)
 
           File.open(artifact_bundle(deployment_spec), 'wb') do |file|
 
@@ -346,10 +344,10 @@ module InstanceAgent
           options[:region] = region
 
           if !InstanceAgent::Config.config[:s3_endpoint_override].to_s.empty?
-            ProcessManager::Log.info("using s3 override endpoint #{InstanceAgent::Config.config[:s3_endpoint_override]}")
+            ProcessManager::Log.debug("using s3 override endpoint #{InstanceAgent::Config.config[:s3_endpoint_override]}")
             options[:endpoint] = URI(InstanceAgent::Config.config[:s3_endpoint_override])
           elsif InstanceAgent::Config.config[:use_fips_mode]
-            ProcessManager::Log.info("using fips endpoint")
+            ProcessManager::Log.debug("using fips endpoint")
             # There was a recent change to S3 client to decompose the region and use a FIPS endpoint is "fips-" is appended
             # to the region. However, this is such a recent change that we cannot rely on the latest version of the SDK to be loaded.
             # For now, the endpoint will be set directly if FIPS is active but can switch to the S3 method once we have broader support.
