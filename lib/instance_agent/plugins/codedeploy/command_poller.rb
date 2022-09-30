@@ -143,7 +143,12 @@ module InstanceAgent
         private
         def next_command
           log(:debug, "Calling PollHostCommand:")
-          output = @deploy_control_client.poll_host_command(:host_identifier => @host_identifier)
+          begin
+            output = @deploy_control_client.poll_host_command(:host_identifier => @host_identifier)
+          rescue Exception => e
+            log(:error, "Error polling for host commands: #{e.class} - #{e.message} - #{e.backtrace.join("\n")}")
+            raise e
+          end
           command = output.host_command
           if command.nil?
             log(:debug, "PollHostCommand: Host Command =  nil")
