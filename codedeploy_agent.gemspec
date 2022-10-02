@@ -9,13 +9,13 @@ Gem::Specification.new do |spec|
   spec.bindir        = ['bin']
   spec.require_paths = ['lib']
   spec.license        = 'Apache-2.0'
-  spec.required_ruby_version = '~> 2.0'
+  spec.required_ruby_version = '>= 2.0'
 
   spec.add_dependency('gli', '~> 2.5')
-  spec.add_dependency('json_pure', '~> 1.6')
+  spec.add_dependency('json_pure', '~> 2.6')
   spec.add_dependency('archive-tar-minitar', '~> 0.5.2')
   spec.add_dependency('rubyzip', '~> 1.3.0')
-  spec.add_dependency('logging', '~> 1.8')
+  spec.add_dependency('logging', '~> 2.3')
   spec.add_dependency('aws-sdk-core', '~> 3')
   spec.add_dependency('aws-sdk-code-generator', '~> 0.2.2.pre')
   spec.add_dependency('aws-sdk-s3', '~> 1')
