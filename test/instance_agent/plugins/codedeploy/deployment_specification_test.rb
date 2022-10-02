@@ -480,7 +480,7 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
         should "raise when JSON submitted as PKCS7/JSON" do
           @packed_message.payload = @deployment_spec.to_json
 
-          assert_raised_with_message("Could not parse the PKCS7: nested asn1 error") do
+          assert_raised_with_message(/Could not parse the PKCS7/) do
             begin
               InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(@packed_message)
             rescue ArgumentError => e
@@ -591,7 +591,7 @@ class DeploymentSpecificationTest < InstanceAgentTestCase
         should "raise when JSON submitted as PKCS7/JSON" do
           @packed_local_revision_message.payload = @deployment_local_revision_spec.to_json
 
-          assert_raised_with_message("Could not parse the PKCS7: nested asn1 error") do
+          assert_raised_with_message(/Could not parse the PKCS7/) do
             begin
               InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(@packed_local_revision_message)
             rescue ArgumentError => e

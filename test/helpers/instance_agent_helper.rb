@@ -21,7 +21,6 @@ class InstanceAgentTestCase < Test::Unit::TestCase
   end
 
   def assert_raised_with_message(message, error_type = RuntimeError)
-    error = assert_raise(error_type) { yield }
-    assert_equal(message, error.message)
+    assert_raise_with_message(error_type, message) { yield }
   end
 end
