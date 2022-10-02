@@ -50,6 +50,8 @@ describe AWS::CodeDeploy::Local::Deployer do
     allow(File).to receive(:exists?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(false)
     allow(File).to receive(:readable?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(false)
     allow(File).to receive(:readable?).with(InstanceAgent::Config.config[:on_premises_config_file]).and_return(false)
+    # The logging lib checks if files exist; let it do that without throwing errors or needing to care which files
+    allow(File).to receive(:file?).and_call_original
   end
 
   def create_config_file(working_directory, log_dir = nil)
@@ -84,6 +86,7 @@ describe AWS::CodeDeploy::Local::Deployer do
     end
 
     it 'tries to load configuration if the configuration file location provided is nil' do
+      
       expect(File).to receive(:file?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(true)
       expect(File).to receive(:readable?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(true)
       expect(File).to receive(:file?).with(InstanceAgent::Config.config[:on_premises_config_file]).and_return(false)
