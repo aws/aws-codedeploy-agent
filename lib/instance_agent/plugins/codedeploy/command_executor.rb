@@ -79,6 +79,28 @@ module InstanceAgent
           return true
         end
 
+        def total_timeout_for_all_lifecycle_events(command_name, deployment_spec)
+          parsed_spec = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(deployment_spec)
+          timeout_sums = ((@hook_mapping || {command_name => []})[command_name] || []).map do |lifecycle_event|
+            create_hook_executor(lifecycle_event, parsed_spec).total_timeout_for_all_scripts
+          end
+
+          total_timeout = nil
+          if timeout_sums.empty?
+            log(:info, "Command #{command_name} has no script timeouts specified in appspec.")
+          # If any lifecycle events' scripts don't specify a timeout, don't set a value.
+          # The default will be the maximum at the server.
+          elsif timeout_sums.include?(nil)
+            log(:info, "Command #{command_name} has at least one script that does not specify a timeout. " +
+              "No timeout override will be sent.")
+          else
+            total_timeout = timeout_sums.reduce(0) {|running_sum, item| running_sum + item}
+            log(:info, "Command #{command_name} has total script timeout #{total_timeout} in appspec.")
+          end
+
+          total_timeout
+        end
+
         def execute_command(command, deployment_specification)
           method_name = command_method(command.command_name)
           log(:debug, "Command #{command.command_name} maps to method #{method_name}")

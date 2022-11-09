@@ -113,6 +113,12 @@ module InstanceAgent
           return @app_spec.nil? || @app_spec.hooks[@lifecycle_event].nil? || @app_spec.hooks[@lifecycle_event].empty?
         end
 
+        def total_timeout_for_all_scripts
+          return nil if is_noop?
+          timeouts = @app_spec.hooks[@lifecycle_event].map {|script| script.timeout}
+          timeouts.reduce(0) {|running_sum, item| running_sum + item}
+        end
+
         def execute
           return if @app_spec.nil?
           if (hooks = @app_spec.hooks[@lifecycle_event]) &&
