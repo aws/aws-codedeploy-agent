@@ -145,11 +145,7 @@ module InstanceAgent
                 rescue StandardError => e
                   script_error = "#{script_error_prefix(script.location, script.runas)} failed with error #{e.class} with message #{e}"
                   raise ScriptError.new(ScriptError::SCRIPT_FAILED_CODE, script.location, @script_log), script_error
-                ensure
-                  log_script("Finished script #{script.location} for lifecycle event #{@lifecycle_event}\n", script_log_file)
                 end
-              ensure
-                log_script("Finished all scripts for lifecycle event #{@lifecycle_event}\n", script_log_file)
               end
             end
           end
