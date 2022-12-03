@@ -31,6 +31,7 @@ module InstanceAgent
         with_error_handling do
           @runner = @plugins[index].runner
           ProcessManager.set_program_name(description)
+          @runner.recover_from_crash?()
         end
       end
 

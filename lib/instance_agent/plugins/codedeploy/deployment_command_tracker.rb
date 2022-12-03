@@ -13,13 +13,13 @@ module InstanceAgent
         class DeploymentCommandTracker 
             DEPLOYMENT_EVENT_FILE_STALE_TIMELIMIT_SECONDS = 86400 # 24 hour limit in secounds
 
-            def self.create_ongoing_deployment_tracking_file(deployment_id)
+            def self.create_ongoing_deployment_tracking_file(deployment_id, host_command_identifier)
               FileUtils.mkdir_p(deployment_dir_path())
-              FileUtils.touch(deployment_event_tracking_file_path(deployment_id));    
+              File.write(deployment_event_tracking_file_path(deployment_id), host_command_identifier)
             end
             
             def self.delete_deployment_tracking_file_if_stale?(deployment_id, timeout)
-              if(Time.now - File.ctime(deployment_event_tracking_file_path(deployment_id)) > timeout)
+              if(Time.now - File.mtime(deployment_event_tracking_file_path(deployment_id)) > timeout)
                 delete_deployment_command_tracking_file(deployment_id)
                 return true;
               end
@@ -27,7 +27,7 @@ module InstanceAgent
             end
             
             def self.check_deployment_event_inprogress?
-              if(File.exists?deployment_dir_path())
+              if(File.exist?(deployment_dir_path()))
                 return directories_and_files_inside(deployment_dir_path()).any?{|deployment_id| check_if_lifecycle_event_is_stale?(deployment_id)}
               else
                 return false
@@ -36,7 +36,7 @@ module InstanceAgent
 
             def self.delete_deployment_command_tracking_file(deployment_id)
               ongoing_deployment_event_file_path = deployment_event_tracking_file_path(deployment_id)
-                if File.exists?ongoing_deployment_event_file_path
+              if File.exist?(ongoing_deployment_event_file_path)
                     File.delete(ongoing_deployment_event_file_path);
                 else
                     InstanceAgent::Log.warn("the tracking file does not exist")
@@ -46,8 +46,18 @@ module InstanceAgent
             def self.directories_and_files_inside(directory)
               Dir.entries(directory) - %w(.. .)
             end
-            
-            private
+
+            def self.most_recent_host_command_identifier
+              # check_deployment_event_inprogress handles deleting stale files for us.
+              if check_deployment_event_inprogress? then
+                most_recent_id = directories_and_files_inside(deployment_dir_path()).max_by{ |filename| File.mtime(deployment_event_tracking_file_path(filename)) }
+                most_recent_file = deployment_event_tracking_file_path(most_recent_id)
+                return File.read(most_recent_file)
+              else
+                return nil
+              end
+            end
+
             def self.deployment_dir_path
               File.join(InstanceAgent::Config.config[:root_dir], InstanceAgent::Config.config[:ongoing_deployment_tracking])
             end
@@ -57,8 +67,12 @@ module InstanceAgent
             end
             
             def self.deployment_event_tracking_file_path(deployment_id)
-              ongoing_deployment_file_path = File.join(deployment_dir_path(), deployment_id)
-            end  
+              return File.join(deployment_dir_path(), deployment_id)
+            end
+
+            def self.clean_ongoing_deployment_dir
+              FileUtils.rm_r(InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.deployment_dir_path()) rescue Errno::ENOENT
+            end
           end
         end
     end          
