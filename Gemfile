@@ -14,7 +14,7 @@ group :test do
   gem 'coveralls_reborn', require: false
   gem 'cucumber'
   gem 'fakefs', :require => 'fakefs/safe'
-  gem 'mocha'
+  gem 'mocha', "0.13.3"
   gem 'rspec'
   gem 'webmock', :require => 'webmock/rspec'
   gem 'shoulda'
