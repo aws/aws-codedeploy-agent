@@ -77,7 +77,7 @@ module InstanceAgent
               log(:info, "Calling PutHostCommandComplete: 'Failed' #{host_command_identifier}")
               @deploy_control_client.put_host_command_complete(
                 :command_status => "Failed",
-                :diagnostics => {:format => "JSON", :payload => gather_diagnostics("Failing in-progress lifecycle event after an agent restart.")},
+                :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_failure_after_restart("Failing in-progress lifecycle event after an agent restart.")},
                 :host_command_identifier => host_command_identifier)
 
               DeploymentCommandTracker.clean_ongoing_deployment_dir()

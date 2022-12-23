@@ -14,6 +14,11 @@ class CommandPollerTest < InstanceAgentTestCase
     {'error_code' => InstanceAgent::Plugins::CodeDeployPlugin::ScriptError::SUCCEEDED_CODE, 'script_name' => "", 'message' => "Succeeded: #{msg}", 'log' => script_output}.to_json
   end
 
+  def gather_diagnostics_from_failure_after_restart(script_output, msg = "")
+    script_output ||= ""
+    {'error_code' => InstanceAgent::Plugins::CodeDeployPlugin::ScriptError::FAILED_AFTER_RESTART_CODE, 'script_name' => "", 'message' => "Failed: #{msg}", 'log' => script_output}.to_json
+  end
+
   def get_ack_diagnostics(is_command_noop)
     return {:format => "JSON", :payload => {'IsCommandNoop' => is_command_noop}.to_json()}
   end

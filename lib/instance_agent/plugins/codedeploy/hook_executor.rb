@@ -48,6 +48,8 @@ module InstanceAgent
         SCRIPT_FAILED_CODE = 4
         UNKNOWN_ERROR_CODE = 5
         OUTPUTS_LEFT_OPEN_CODE = 6
+        FAILED_AFTER_RESTART_CODE = 7
+
         def initialize(error_code, script_name, log)
           @error_code = error_code
           @script_name = script_name
