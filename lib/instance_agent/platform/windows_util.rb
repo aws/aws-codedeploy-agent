@@ -47,7 +47,7 @@ module InstanceAgent
       FileUtils.mkdir_p(dst)
       working_dir = FileUtils.pwd()
       absolute_bundle_path = File.expand_path(bundle_file)
-      execute_zip_command("powershell [System.Reflection.Assembly]::LoadWithPartialName(‘System.IO.Compression.FileSystem’); [System.IO.Compression.ZipFile]::ExtractToDirectory(‘#{absolute_bundle_path}’, ‘#{dst}’)")
+      execute_zip_command("powershell [System.Reflection.Assembly]::LoadWithPartialName(‘System.IO.Compression.FileSystem’); [System.IO.Compression.ZipFile]::ExtractToDirectory(‘#{absolute_bundle_path}’, ‘#{dst}’, true)")
     end 
 
     def self.supports_process_groups?()
