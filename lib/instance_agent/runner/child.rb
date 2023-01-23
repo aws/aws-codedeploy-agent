@@ -8,6 +8,8 @@ module InstanceAgent
 
       attr_accessor :runner
 
+      @prepare_run_done = false
+
       def load_plugins(plugins)
         ProcessManager::Log.debug("Registering Plugins: #{plugins.inspect}.")
         plugins.each do |plugin|
@@ -26,12 +28,16 @@ module InstanceAgent
       end
 
       def prepare_run
-        @plugins ||= load_plugins(ProcessManager::Config.config[:plugins] || ["codedeploy"])
-        validate_index
-        with_error_handling do
-          @runner = @plugins[index].runner
-          ProcessManager.set_program_name(description)
-          @runner.recover_from_crash?()
+        @startup_mutex.synchronize do
+          @plugins ||= load_plugins(ProcessManager::Config.config[:plugins] || ["codedeploy"])
+          validate_index
+          with_error_handling do
+            @runner = @plugins[index].runner
+            ProcessManager.set_program_name(description)
+            @runner.recover_from_crash?()
+          end
+
+          @prepare_run_done = true
         end
       end
 
@@ -40,27 +46,32 @@ module InstanceAgent
           runner.run
         end
       end
-      
+
       # Stops the master after recieving the kill signal
-      # is overriden from ProcessManager::Daemon::Child 
+      # is overriden from ProcessManager::Daemon::Child
       def stop
-        @runner.graceful_shutdown
+        if @prepare_run_done
+          @runner.graceful_shutdown
+        end
+
         ProcessManager::Log.info('agent exiting now')
         super
       end
 
-      # Catches the trap signals and does a default or custom action 
+      # Catches the trap signals and does a default or custom action
       # is overriden from ProcessManager::Daemon::Child
       def trap_signals
-        [:INT, :QUIT, :TERM].each do |sig|
-          trap(sig) do
-            ProcessManager::Log.info "#{description}: Received #{sig} - setting internal shutting down flag and possibly finishing last run"
-            stop_thread = Thread.new {stop}
-            stop_thread.join
+        @startup_mutex.synchronize do
+          [:INT, :QUIT, :TERM].each do |sig|
+            trap(sig) do
+              ProcessManager::Log.info "#{description}: Received #{sig} - setting internal shutting down flag and possibly finishing last run"
+              stop_thread = Thread.new {stop}
+              stop_thread.join
+            end
           end
+          # make sure we do not handle children like the master process
+          trap(:CHLD, 'DEFAULT')
         end
-        # make sure we do not handle children like the master process
-        trap(:CHLD, 'DEFAULT')
       end
 
       def description

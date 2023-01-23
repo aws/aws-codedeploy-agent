@@ -13,6 +13,7 @@ module ProcessManager
         @times_run = 0
 
         ProcessManager.set_program_name(description)
+        @startup_mutex = Mutex.new
       end
 
       def start
