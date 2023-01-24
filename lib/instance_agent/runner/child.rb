@@ -28,17 +28,15 @@ module InstanceAgent
       end
 
       def prepare_run
-        @startup_mutex.synchronize do
-          @plugins ||= load_plugins(ProcessManager::Config.config[:plugins] || ["codedeploy"])
-          validate_index
-          with_error_handling do
-            @runner = @plugins[index].runner
-            ProcessManager.set_program_name(description)
-            @runner.recover_from_crash?()
-          end
-
-          @prepare_run_done = true
+        @plugins ||= load_plugins(ProcessManager::Config.config[:plugins] || ["codedeploy"])
+        validate_index
+        with_error_handling do
+          @runner = @plugins[index].runner
+          ProcessManager.set_program_name(description)
+          @runner.recover_from_crash?()
         end
+
+        @prepare_run_done = true
       end
 
       def run
@@ -61,17 +59,15 @@ module InstanceAgent
       # Catches the trap signals and does a default or custom action
       # is overriden from ProcessManager::Daemon::Child
       def trap_signals
-        @startup_mutex.synchronize do
-          [:INT, :QUIT, :TERM].each do |sig|
-            trap(sig) do
-              ProcessManager::Log.info "#{description}: Received #{sig} - setting internal shutting down flag and possibly finishing last run"
-              stop_thread = Thread.new {stop}
-              stop_thread.join
-            end
+        [:INT, :QUIT, :TERM].each do |sig|
+          trap(sig) do
+            ProcessManager::Log.info "#{description}: Received #{sig} - setting internal shutting down flag and possibly finishing last run"
+            stop_thread = Thread.new {stop}
+            stop_thread.join
           end
-          # make sure we do not handle children like the master process
-          trap(:CHLD, 'DEFAULT')
         end
+        # make sure we do not handle children like the master process
+        trap(:CHLD, 'DEFAULT')
       end
 
       def description
