@@ -509,22 +509,21 @@ module InstanceAgent
             InstanceAgent::Platform.util.extract_tar(bundle_file, dst)
           end
 
-          archive_root_files = Dir.entries(dst)
-          archive_root_files.delete_if { |name| name == '.' || name == '..' }
+          # if the root of the archive doesn't contain an appspec, and there is exactly one
+          # directory with appspec, move top level to said directory
+          archive_root_appspec = Dir.glob(File.join(dst, 'appspec.*'))
+          archive_nested_appspec = Dir.glob(File.join(dst, '*/appspec.*'))
 
-          # If the top level of the archive is a directory that contains an appspec,
-          # strip that before giving up
-          if ((archive_root_files.size == 1) &&
-              File.directory?(File.join(dst, archive_root_files[0])) &&
-              Dir.entries(File.join(dst, archive_root_files[0])).grep(/appspec/i).any?)
+          if archive_root_appspec.size == 0 && archive_nested_appspec.size == 1
             log(:info, "Stripping leading directory from archive bundle contents.")
             # Move the unpacked files to a temporary location
+            nested_dst = File.dirname(archive_nested_appspec[0])
             tmp_dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive-temp')
             FileUtils.rm_rf(tmp_dst)
             FileUtils.mv(dst, tmp_dst)
 
             # Move the top level directory to the intended location
-            nested_archive_root = File.join(tmp_dst, archive_root_files[0])
+            nested_archive_root = File.join(tmp_dst, nested_dst)
             log(:debug, "Actual archive root at #{nested_archive_root}. Moving to #{dst}")
             FileUtils.mv(nested_archive_root, dst)
             FileUtils.rmdir(tmp_dst)

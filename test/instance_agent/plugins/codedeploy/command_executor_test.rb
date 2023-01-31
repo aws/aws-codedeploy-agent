@@ -709,6 +709,54 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           end
         end
 
+        context "handle bundle with nested appspec" do
+          setup do
+            @command.command_name = "DownloadBundle"
+            @mock_file = mock
+            @mock_file_location = '/mock/file/location.zip'
+            @mock_file_destination = '/mock/file/destination'
+            File.stubs(:symlink)
+            File.stubs(:join).returns(@mock_file_destination)
+            File.stubs(:directory?).returns(true)
+            FileUtils.stubs(:mv)
+            FileUtils.stubs(:rm_rf)
+            FileUtils.stubs(:rmdir)
+            Zip::File.expects(:open)
+            @mock_file.stubs(:close)
+
+            @deployment_spec = generate_signed_message_for({
+              "DeploymentId" => @deployment_id.to_s,
+              "DeploymentGroupId" => @deployment_group_id.to_s,
+              "ApplicationName" => @application_name,
+              "DeploymentGroupName" => @deployment_group_name,
+              "Revision" => {
+                "RevisionType" => "Local File",
+                "LocalRevision" => {
+                  "Location" => @mock_file_location,
+                  "BundleType" => 'zip'
+                }
+              }
+            })
+          end
+
+          should "handle nested directory" do
+            nested = sequence("nested")
+            FileUtils.expects(:rm_rf).in_sequence(nested)
+            FileUtils.expects(:mv).twice.in_sequence(nested)
+            FileUtils.expects(:rmdir).in_sequence(nested)
+            Dir.stubs(:glob).returns([], ["mock/appspec.yml"])
+            @command_executor.execute_command(@command, @deployment_spec)
+          end
+
+          should "handle appspec in root directory" do
+            FileUtils.expects(:rm_rf).never
+            FileUtils.expects(:mv).never
+            FileUtils.expects(:rmdir).never
+            Dir.stubs(:glob).returns([], ["mock/appspec.yml"])
+            @command_executor.execute_command(@command, @deployment_spec)
+          end
+        end
+
         context "handle bundle from local directory" do
           setup do
             @command.command_name = "DownloadBundle"
