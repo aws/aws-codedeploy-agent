@@ -514,6 +514,10 @@ module InstanceAgent
           archive_root_appspec = Dir.glob(File.join(dst, 'appspec.*'))
           archive_nested_appspec = Dir.glob(File.join(dst, '*/appspec.*'))
 
+          if archive_root_appspec.size + archive_nested_appspec.size > 1
+            log(:warn, "There are multiple appspec files in the bundle")
+          end
+
           if archive_root_appspec.size == 0 && archive_nested_appspec.size == 1
             log(:info, "Stripping leading directory from archive bundle contents.")
             # Move the unpacked files to a temporary location
