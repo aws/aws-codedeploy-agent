@@ -72,6 +72,10 @@ class UnpackBundleTest < InstanceAgentTestCase
         @deployment_root_dir = File.join(@root_dir, @deployment_group_id.to_s, @deployment_id.to_s)
         @archive_root_dir = File.join(@deployment_root_dir, 'deployment-archive')
         ProcessManager::Config.config[:root_dir] = @root_dir
+
+        # AppSpec file must be present during Download Bundle
+        Dir.expects(:glob).with(File.join(@archive_root_dir, 'appspec.*')).at_most(2).returns([File.join(@archive_root_dir, "appspec.yml")])
+        Dir.expects(:glob).with(File.join(@archive_root_dir, '*/appspec.*')).at_most_once().returns([File.join(@archive_root_dir, "nested/appspec.yml")])
       end
 
       context "test fallback mechanism in unpack_bundle in DownloadBundle" do

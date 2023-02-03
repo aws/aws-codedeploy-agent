@@ -519,21 +519,47 @@ module InstanceAgent
           end
 
           if archive_root_appspec.size == 0 && archive_nested_appspec.size == 1
-            log(:info, "Stripping leading directory from archive bundle contents.")
-            # Move the unpacked files to a temporary location
-            nested_dst = File.dirname(archive_nested_appspec[0])
-            tmp_dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive-temp')
-            FileUtils.rm_rf(tmp_dst)
-            FileUtils.mv(dst, tmp_dst)
-
-            # Move the top level directory to the intended location
-            nested_archive_root = File.join(tmp_dst, nested_dst)
-            log(:debug, "Actual archive root at #{nested_archive_root}. Moving to #{dst}")
-            FileUtils.mv(nested_archive_root, dst)
-            FileUtils.rmdir(tmp_dst)
-
-            log(:debug, Dir.entries(dst).join("; "))
+            strip_leading_directory(deployment_spec, dst)
           end
+
+          #once the nested directory is handled there should be only one appspec file in the deployment-archive
+          if Dir.glob(File.join(dst, 'appspec.*')).size < 1
+            msg = "appspec file is not found."
+            log(:error, msg)
+            raise msg
+          end
+
+        end
+        private
+        def strip_leading_directory(deployment_spec, dst)
+          log(:info, "Stripping leading directory from archive bundle contents.")
+          # Move the unpacked files to a temporary location
+          tmp_dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive-temp')
+          FileUtils.rm_rf(tmp_dst)
+          FileUtils.mv(dst, tmp_dst)
+
+          # Move the top level directory to the intended location
+          nested_archive_root = File.dirname(Dir.glob(File.join(tmp_dst, '*/appspec.*'))[0])
+          log(:debug, "Actual archive root at #{nested_archive_root}. Moving to #{dst}")
+          FileUtils.mv(nested_archive_root, dst)
+          remove_deployment_archive_temp(tmp_dst)
+          log(:debug, Dir.entries(dst).join("; "))
+        end
+
+        private
+        def remove_deployment_archive_temp(tmp_dst)
+          tmp_dst_files = Dir.entries(tmp_dst).to_set.subtract(['.', '..']).to_a.sort
+          with_extra_message = tmp_dst_files[0,10].append("...#{tmp_dst_files.size - 10} additional files")
+          warn_about_these = tmp_dst_files
+          if with_extra_message.size <= tmp_dst_files.size # if <= 10 elements, we would only have added an element and not removed any
+            warn_about_these = with_extra_message
+          end
+
+          if !warn_about_these.empty?
+            log(:warn, "The following files are outside the directory containing appspec and will be removed: #{tmp_dst_files.join(';')}")
+          end
+
+          FileUtils.rm_rf(tmp_dst)
         end
 
         private
