@@ -10,12 +10,16 @@ module InstanceAgent
         end
 
         def handle
+          log(:debug, "Checking deployment archive rooted at #{archive_root} for appspec...")
           # if the root of the archive doesn't contain an appspec, and there is exactly one
           # directory with appspec, move top level to said directory
           archive_root_appspec = Dir.glob(File.join(archive_root, 'appspec.*'))
-          archive_nested_appspec = Dir.glob(File.join(archive_root, '*/appspec.*'))
+          archive_nested_appspec = Dir.glob(File.join(archive_root, '*', 'appspec.*'))
+          total_appspecs = archive_root_appspec.size + archive_nested_appspec.size
 
-          if archive_root_appspec.size + archive_nested_appspec.size > 1
+          if total_appspecs == 0
+            log_and_raise_not_found
+          elsif total_appspecs > 1
             log(:warn, "There are multiple appspec files in the bundle")
           end
 
@@ -25,9 +29,7 @@ module InstanceAgent
 
           #once the nested directory is handled there should be only one appspec file in the deployment-archive
           if Dir.glob(File.join(archive_root, 'appspec.*')).size < 1
-            msg = "appspec file is not found."
-            log(:error, msg)
-            raise msg
+            log_and_raise_not_found
           end
         end
 
@@ -65,6 +67,12 @@ module InstanceAgent
           end
 
           FileUtils.rm_rf(tmp_dst)
+        end
+
+        def log_and_raise_not_found
+          msg = "appspec file is not found."
+          log(:error, msg)
+          raise msg
         end
 
         def log(severity, message)
