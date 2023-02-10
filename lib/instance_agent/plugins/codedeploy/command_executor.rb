@@ -483,7 +483,9 @@ module InstanceAgent
 
           dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive')
           nested_appspec_handler =
-            InstanceAgent::Plugins::CodeDeployPlugin::NestedAppspecHandler.new(deployment_root_dir(deployment_spec))
+            InstanceAgent::Plugins::CodeDeployPlugin::NestedAppspecHandler.new(
+              deployment_root_dir(deployment_spec),
+              InstanceAgent::Platform.util)
 
           if "tar".eql? deployment_spec.bundle_type
             InstanceAgent::Platform.util.extract_tar(bundle_file, dst)

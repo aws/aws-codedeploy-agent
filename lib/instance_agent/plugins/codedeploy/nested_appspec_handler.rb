@@ -5,16 +5,17 @@ module InstanceAgent
   module Plugins
     module CodeDeployPlugin
       class NestedAppspecHandler
-        def initialize(deployment_root_dir)
+        def initialize(deployment_root_dir, globber)
           @deployment_root_dir = deployment_root_dir
+          @globber = globber
         end
 
         def handle
           log(:debug, "Checking deployment archive rooted at #{archive_root} for appspec...")
           # if the root of the archive doesn't contain an appspec, and there is exactly one
           # directory with appspec, move top level to said directory
-          archive_root_appspec = Dir.glob(File.join(archive_root, 'appspec.*'))
-          archive_nested_appspec = Dir.glob(File.join(archive_root, '*', 'appspec.*'))
+          archive_root_appspec = @globber.glob(File.join(archive_root, 'appspec.*'))
+          archive_nested_appspec = @globber.glob(File.join(archive_root, '*', 'appspec.*'))
           total_appspecs = archive_root_appspec.size + archive_nested_appspec.size
 
           if total_appspecs == 0
@@ -28,7 +29,7 @@ module InstanceAgent
           end
 
           #once the nested directory is handled there should be only one appspec file in the deployment-archive
-          if Dir.glob(File.join(archive_root, 'appspec.*')).size < 1
+          if @globber.glob(File.join(archive_root, 'appspec.*')).size < 1
             log_and_raise_not_found
           end
         end
@@ -47,7 +48,7 @@ module InstanceAgent
           FileUtils.mv(archive_root, tmp_dst)
 
           # Move the top level directory to the intended location
-          nested_archive_root = File.dirname(Dir.glob(File.join(tmp_dst, '*/appspec.*'))[0])
+          nested_archive_root = File.dirname(@globber.glob(File.join(tmp_dst, '*', 'appspec.*'))[0])
           log(:debug, "Actual archive root at #{nested_archive_root}. Moving to #{archive_root}")
           FileUtils.mv(nested_archive_root, archive_root)
           remove_deployment_archive_temp(tmp_dst)
@@ -63,7 +64,7 @@ module InstanceAgent
           end
 
           if !warn_about_these.empty?
-            log(:warn, "The following files are outside the directory containing appspec and will be removed: #{tmp_dst_files.join(';')}")
+            log(:warn, "The following files are outside the directory containing appspec and will be removed: #{warn_about_these.join(';')}")
           end
 
           FileUtils.rm_rf(tmp_dst)

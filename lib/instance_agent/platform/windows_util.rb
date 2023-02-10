@@ -70,6 +70,11 @@ module InstanceAgent
         delete_folder(dir);  
       end
     end
+
+    # Dir.glob doesn't like backslash as file separator, but backslash is a legal filename character in Unix.
+    def self.glob(path)
+      Dir.glob(path.gsub('\\', '/'))
+    end
     
     private 
     def self.delete_folder (dir)

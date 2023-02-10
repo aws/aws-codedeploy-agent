@@ -5,6 +5,12 @@ require 'stringio'
 require 'fileutils'
 
 class NestedAppspecHandlerTest < InstanceAgentTestCase
+  class WindowsGlobber
+    def self.glob(path)
+      Dir.glob(path.gsub('\\', '/'))
+    end
+  end
+
   include InstanceAgent::Plugins::CodeDeployPlugin
 
   context "top level appspec" do
@@ -18,7 +24,7 @@ class NestedAppspecHandlerTest < InstanceAgentTestCase
       @other_file_path = File.join(@deployment_archive_dir, 'otherfile.txt')
       FileUtils.touch(@appspec_path)
       FileUtils.touch(@other_file_path)
-      @handler = NestedAppspecHandler.new(@deployment_root_dir)
+      @handler = NestedAppspecHandler.new(@deployment_root_dir, Dir)
     end
 
     should "do nothing" do
@@ -47,7 +53,7 @@ class NestedAppspecHandlerTest < InstanceAgentTestCase
       FileUtils.touch(@appspec_path)
       FileUtils.touch(@toplevel_file_path)
       FileUtils.touch(@nested_file_path)
-      @handler = NestedAppspecHandler.new(@deployment_root_dir)
+      @handler = NestedAppspecHandler.new(@deployment_root_dir, Dir)
     end
 
     should "move nested contents to top level" do
@@ -58,6 +64,28 @@ class NestedAppspecHandlerTest < InstanceAgentTestCase
     end
 
     teardown do
+      FileUtils.rm_rf(@deployment_root_dir)
+    end
+  end
+
+  context "Windows root dir with backslashes" do
+    should "do nothing" do
+      @deployment_root_dir = File.join('/tmp', 'nested-appspec-handler-test')
+      @deployment_archive_dir = File.join(@deployment_root_dir, 'deployment-archive')
+      FileUtils.rm_rf(@deployment_root_dir)
+      Dir.mkdir(@deployment_root_dir)
+      Dir.mkdir(@deployment_archive_dir)
+      @appspec_path = File.join(@deployment_archive_dir, 'appspec.yml')
+      @other_file_path = File.join(@deployment_archive_dir, 'otherfile.txt')
+      FileUtils.touch(@appspec_path)
+      FileUtils.touch(@other_file_path)
+      @handler = NestedAppspecHandler.new('/tmp\\nested-appspec-handler-test', WindowsGlobber)
+
+      @handler.handle
+
+      assert(File.exist?(@appspec_path))
+      assert(File.exist?(@other_file_path))
+
       FileUtils.rm_rf(@deployment_root_dir)
     end
   end
