@@ -57,7 +57,7 @@ module InstanceAgent
 
         def remove_deployment_archive_temp(tmp_dst)
           tmp_dst_files = Dir.entries(tmp_dst).to_set.subtract(['.', '..']).to_a.sort
-          with_extra_message = tmp_dst_files[0,10].append("...#{tmp_dst_files.size - 10} additional files")
+          with_extra_message = tmp_dst_files[0,10].push("...#{tmp_dst_files.size - 10} additional files")
           warn_about_these = tmp_dst_files
           if with_extra_message.size <= tmp_dst_files.size # if <= 10 elements, we would only have added an element and not removed any
             warn_about_these = with_extra_message
