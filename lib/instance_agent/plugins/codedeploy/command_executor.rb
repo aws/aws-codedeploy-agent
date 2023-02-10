@@ -13,7 +13,6 @@ require 'instance_agent/plugins/codedeploy/command_poller'
 require 'instance_agent/plugins/codedeploy/deployment_specification'
 require 'instance_agent/plugins/codedeploy/hook_executor'
 require 'instance_agent/plugins/codedeploy/installer'
-require 'instance_agent/plugins/codedeploy/nested_appspec_handler'
 require 'instance_agent/string_utils'
 
 module InstanceAgent
@@ -480,12 +479,7 @@ module InstanceAgent
 
         private
         def unpack_bundle(cmd, bundle_file, deployment_spec)
-
           dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive')
-          nested_appspec_handler =
-            InstanceAgent::Plugins::CodeDeployPlugin::NestedAppspecHandler.new(
-              deployment_root_dir(deployment_spec),
-              InstanceAgent::Platform.util)
 
           if "tar".eql? deployment_spec.bundle_type
             InstanceAgent::Platform.util.extract_tar(bundle_file, dst)
@@ -515,7 +509,28 @@ module InstanceAgent
             InstanceAgent::Platform.util.extract_tar(bundle_file, dst)
           end
 
-          nested_appspec_handler.handle
+          archive_root_files = Dir.entries(dst)
+          archive_root_files.delete_if { |name| name == '.' || name == '..' }
+
+          # If the top level of the archive is a directory that contains an appspec,
+          # strip that before giving up
+          if ((archive_root_files.size == 1) &&
+              File.directory?(File.join(dst, archive_root_files[0])) &&
+              Dir.entries(File.join(dst, archive_root_files[0])).grep(/appspec/i).any?)
+            log(:info, "Stripping leading directory from archive bundle contents.")
+            # Move the unpacked files to a temporary location
+            tmp_dst = File.join(deployment_root_dir(deployment_spec), 'deployment-archive-temp')
+            FileUtils.rm_rf(tmp_dst)
+            FileUtils.mv(dst, tmp_dst)
+
+            # Move the top level directory to the intended location
+            nested_archive_root = File.join(tmp_dst, archive_root_files[0])
+            log(:debug, "Actual archive root at #{nested_archive_root}. Moving to #{dst}")
+            FileUtils.mv(nested_archive_root, dst)
+            FileUtils.rmdir(tmp_dst)
+
+            log(:debug, Dir.entries(dst).join("; "))
+          end
         end
 
         private

@@ -55,10 +55,3 @@ To run the integration test execute:
 ```
 rake test-integration
 ```
-
-## Caveats
-### Platform-specific behavior belongs in lib/instance_agent/platform/
-Specifically, it belongs in linux_util.rb and windows_util.rb in the same directory.
-
-For example, certain functions in Ruby's `fileutils` do not handle backslash as file separator. We wrap `glob` in
-windows_util.rb for this reason.

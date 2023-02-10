@@ -418,10 +418,6 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           @s3 = mock
           @s3.stubs(:config).returns("hello")
           Aws::S3::Client.stubs(:new).returns(@s3)
-
-          # AppSpec file must be present during Download Bundle
-          Dir.expects(:glob).with(File.join(@archive_root_dir, 'appspec.*')).at_most(2).returns([File.join(@archive_root_dir, "appspec.yml")])
-          Dir.expects(:glob).with(File.join(@archive_root_dir, '*/appspec.*')).at_most_once().returns([File.join(@archive_root_dir, "nested/appspec.yml")])
         end
 
         should "not be a noop" do 
@@ -712,32 +708,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @command_executor.execute_command(@command, @deployment_spec)
           end
         end
-
-        context "handle bundle with nested appspec" do
-          setup do
-            @deployment_archive_temp = File.join(@deployment_root_dir, 'deployment-archive-temp')
-            Dir.expects(:glob).with(File.join(@archive_root_dir, 'appspec.*')).at_most(2).returns([], [File.join(@archive_root_dir, "appspec.yml")])
-            Dir.expects(:glob).with(File.join(@archive_root_dir, '*/appspec.*')).at_most_once().returns([File.join(@archive_root_dir, "nested/appspec.yml")])
-            Dir.expects(:glob).with(File.join(@deployment_archive_temp, "*/appspec.*")).at_most_once().returns([File.join(@deployment_archive_temp, "nested/appspec.yml")])
-          end
-
-          should "handle nested directory" do
-            FileUtils.expects(:rm_rf).with(@archive_root_dir)
-            FileUtils.expects(:rm_rf).twice.with(@deployment_archive_temp)
-            FileUtils.expects(:mv).twice
-            File.expects(:dirname)
-            @command_executor.execute_command(@command, @deployment_spec)
-          end
-
-          should "handle appspec in root directory" do
-            Dir.expects(:glob).with(File.join(@archive_root_dir, 'appspec.*')).at_most(2).returns([File.join(@archive_root_dir, "appspec.yml")])
-            Dir.expects(:glob).with(File.join(@archive_root_dir, '*/appspec.*')).at_most_once().returns([])
-            FileUtils.expects(:rm_rf).once
-            FileUtils.expects(:mv).never
-            @command_executor.execute_command(@command, @deployment_spec)
-          end
-        end
-
+        
         context "handle bundle from local directory" do
           setup do
             @command.command_name = "DownloadBundle"
