@@ -410,6 +410,43 @@ class CommandPollerTest < InstanceAgentTestCase
 
       end
 
+      context 'calling recover_from_crash when a lifecycle event is in-progress' do
+
+        setup do
+          InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.stubs(:check_deployment_event_inprogress?).returns(true)
+          InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.stubs(:deployment_dir_path).returns("deployment-path")
+          InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.stubs(:most_recent_host_command_identifier).returns("i-123")
+          InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.stubs(:clean_ongoing_deployment_dir)
+        end
+
+        should 'call PutHostCommandComplete' do
+          @deploy_control_client.expects(:put_host_command_complete).
+            with(:command_status => "Failed",
+                 :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_failure_after_restart("", "Failing in-progress lifecycle event after an agent restart.")},
+                 :host_command_identifier => "i-123")
+
+          @poller.recover_from_crash?
+        end
+      end
+
+      context 'calling recover_from_crash when a lifecycle event is not in-progress' do
+
+        setup do
+          InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.stubs(:check_deployment_event_inprogress?).returns(false)
+          InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.stubs(:deployment_dir_path).returns("deployment-path")
+          InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.stubs(:most_recent_host_command_identifier).returns("i-123")
+          InstanceAgent::Plugins::CodeDeployPlugin::DeploymentCommandTracker.stubs(:clean_ongoing_deployment_dir)
+        end
+
+        should 'not call PutHostCommandComplete' do
+          @put_host_command_complete_state.become('never')
+          @deploy_control_client.expects(:put_host_command_complete).never.
+            when(@put_host_command_complete_state.is('never'))
+
+          @poller.recover_from_crash?
+        end
+      end
+
       context 'when no deployment specification is given by GetDeploymentSpecification' do
 
         setup do
@@ -447,7 +484,7 @@ class CommandPollerTest < InstanceAgentTestCase
 
       should 'allow exceptions from execute_command to propagate to caller' do
         @executor.expects(:execute_command).
-          raises("some error") 
+          raises("some error")
         @deploy_control_client.expects(:put_host_command_complete).
           with(:command_status => "Failed",
                :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_error(RuntimeError.new("some error"))},

@@ -256,6 +256,16 @@ module InstanceAgent
         end
 
         private
+        def gather_diagnostics_from_failure_after_restart(msg = "")
+          begin
+            raise ScriptError.new(ScriptError::FAILED_AFTER_RESTART_CODE, "", ScriptLog.new), "Failed: #{msg}"
+          rescue ScriptError => e
+            script_error = e
+          end
+          gather_diagnostics_from_script_error(script_error)
+        end
+
+        private
         def gather_diagnostics(msg = "")
           begin
             raise ScriptError.new(ScriptError::SUCCEEDED_CODE, "", ScriptLog.new), "Succeeded: #{msg}"
