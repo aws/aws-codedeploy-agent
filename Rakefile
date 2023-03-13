@@ -11,6 +11,7 @@ Rake::TestTask.new(:test) do |t|
   t.libs << ['test', 'lib', 'test/helpers']
 
   test_files = FileList.new("test/**/*_test.rb")
+  test_files.exclude("test/instance_agent/plugins/windows/*_test.rb")
   t.test_files = test_files
   t.verbose = true
 end
