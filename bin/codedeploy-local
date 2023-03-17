@@ -131,7 +131,7 @@ begin
 rescue Docopt::Exit => e
   puts e.message
   exit(false)
-rescue AWS::CodeDeploy::Local::CLIValidator::ValidationError,InstanceMetadata::InstanceMetadataError,SystemCallError,ArgumentError => e
+rescue AWS::CodeDeploy::Local::CLIValidator::ValidationError,SystemCallError,ArgumentError => e
   puts "ERROR: #{e.message}"
   exit(false)
 rescue Aws::Errors::MissingCredentialsError => e
