@@ -7,7 +7,7 @@ module InstanceAgent
         def self.configure
           file_path = InstanceAgent::Config.config[:on_premises_config_file]
           file_config = nil
-          if File.exists?(file_path) && File.readable?(file_path)
+          if File.readable?(file_path)
             begin
               file_config = YAML.load(File.read(file_path)).symbolize_keys
             rescue

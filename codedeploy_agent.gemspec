@@ -19,7 +19,6 @@ Gem::Specification.new do |spec|
   spec.add_dependency('aws-sdk-core', '~> 3')
   spec.add_dependency('aws-sdk-code-generator', '~> 0.2.2.pre')
   spec.add_dependency('aws-sdk-s3', '~> 1')
-  spec.add_dependency('simple_pid', '~> 0.2.1')
   spec.add_dependency('docopt', '~> 0.5.0')
   spec.add_dependency('concurrent-ruby', '~> 1.1.9')
 

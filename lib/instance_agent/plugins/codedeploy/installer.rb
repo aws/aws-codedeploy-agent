@@ -27,7 +27,7 @@ module InstanceAgent
         def install(deployment_group_id, application_specification)
           cleanup_file = File.join(deployment_instructions_dir, "#{deployment_group_id}-cleanup")
 
-          if File.exists?(cleanup_file)
+          if File.exist?(cleanup_file)
             commands = InstanceAgent::Plugins::CodeDeployPlugin::InstallInstruction.parse_remove_commands(File.read(cleanup_file))
             commands.each do |cmd|
               cmd.execute
@@ -116,7 +116,7 @@ module InstanceAgent
 
         private
         def generate_normal_copy(i, absolute_source_path, destination, file_exists_behavior)
-          if File.exists?(destination)
+          if File.exist?(destination)
             case file_exists_behavior
             when "DISALLOW"
               raise "The deployment failed because a specified file already exists at this location: #{destination}"
@@ -136,7 +136,7 @@ module InstanceAgent
         def fill_in_missing_ancestors(i, destination)
           missing_ancestors = []
           parent_dir = File.dirname(destination)
-          while !File.exists?(parent_dir) &&
+          while !File.exist?(parent_dir) &&
             parent_dir != "." && parent_dir != "/"
             missing_ancestors.unshift(parent_dir)
             parent_dir = File.dirname(parent_dir)

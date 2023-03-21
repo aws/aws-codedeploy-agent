@@ -32,7 +32,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
 
       it 'returns the same arguments' do
-        allow(File).to receive(:exists?).with(VALID_FILE).and_return(true)
+        allow(File).to receive(:exist?).with(VALID_FILE).and_return(true)
         expect(validator.validate(args)).to equal(args)
       end
     end
@@ -93,10 +93,10 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
 
       it 'throws a ValidationError' do
-        allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
+        allow(File).to receive(:exist?).with(FAKE_DIRECTORY).and_return(true)
         allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
-        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(false)
-        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yaml").and_return(false)
+        expect(File).to receive(:exist?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(false)
+        expect(File).to receive(:exist?).with("#{FAKE_DIRECTORY}/appspec.yaml").and_return(false)
         expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "Expecting appspec file at location #{FAKE_DIRECTORY}/appspec.yml or #{FAKE_DIRECTORY}/appspec.yaml but it is not found there. Please either run the CLI from within a directory containing the appspec.yml or appspec.yaml file or specify a bundle location containing an appspec.yml or appspec.yaml file in its root directory")
       end
     end
@@ -109,9 +109,9 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
 
       it 'throws a ValidationError' do
-        allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
+        allow(File).to receive(:exist?).with(FAKE_DIRECTORY).and_return(true)
         allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
-        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec-override.yaml").and_return(false)
+        expect(File).to receive(:exist?).with("#{FAKE_DIRECTORY}/appspec-override.yaml").and_return(false)
         expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "Expecting appspec file at location #{FAKE_DIRECTORY}/appspec-override.yaml but it is not found there. Please either run the CLI from within a directory containing the appspec-override.yaml file or specify a bundle location containing an appspec-override.yaml file in its root directory")
       end
     end
@@ -129,7 +129,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
 
       it 'throws a ValidationError' do
-        allow(File).to receive(:exists?).with(FAKE_FILE_WHICH_DOES_NOT_EXIST).and_return(false)
+        allow(File).to receive(:exist?).with(FAKE_FILE_WHICH_DOES_NOT_EXIST).and_return(false)
         expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "location #{FAKE_FILE_WHICH_DOES_NOT_EXIST} is specified as a file or directory which does not exist")
       end
     end
@@ -147,7 +147,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
 
       it 'throws a ValidationError' do
-        allow(File).to receive(:exists?).with(FAKE_FILE).and_return(true)
+        allow(File).to receive(:exist?).with(FAKE_FILE).and_return(true)
         allow(File).to receive(:file?).with(FAKE_FILE).and_return(true)
         expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "location #{FAKE_FILE} is specified with type directory but it is a file")
       end
@@ -173,7 +173,7 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
 
       it 'throws a ValidationError' do
-        allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
+        allow(File).to receive(:exist?).with(FAKE_DIRECTORY).and_return(true)
         allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
         expect{validator.validate(argszip)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "location #{FAKE_DIRECTORY} is specified as a compressed local file but it is a directory")
         expect{validator.validate(argstgz)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "location #{FAKE_DIRECTORY} is specified as a compressed local file but it is a directory")
@@ -189,9 +189,9 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
 
       it 'throws a ValidationError' do
-        allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
+        allow(File).to receive(:exist?).with(FAKE_DIRECTORY).and_return(true)
         allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
-        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
+        expect(File).to receive(:exist?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
         expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "The only events that can be specified before DownloadBundle are BeforeBlockTraffic,AfterBlockTraffic,ApplicationStop. Please fix the order of your specified events: #{args['--events']}")
       end
     end
@@ -205,9 +205,9 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
 
       it 'throws a ValidationError' do
-        allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
+        allow(File).to receive(:exist?).with(FAKE_DIRECTORY).and_return(true)
         allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
-        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
+        expect(File).to receive(:exist?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
         expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "The only events that can be specified before DownloadBundle are BeforeBlockTraffic,AfterBlockTraffic,ApplicationStop. Please fix the order of your specified events: #{args['--events']}")
       end
     end
@@ -221,9 +221,9 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
 
       it 'throws a ValidationError' do
-        allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
+        allow(File).to receive(:exist?).with(FAKE_DIRECTORY).and_return(true)
         allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
-        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
+        expect(File).to receive(:exist?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
         expect{validator.validate(args)}.to raise_error(AWS::CodeDeploy::Local::CLIValidator::ValidationError, "The only events that can be specified before Install are BeforeBlockTraffic,AfterBlockTraffic,ApplicationStop,DownloadBundle,BeforeInstall. Please fix the order of your specified events: #{args['--events']}")
       end
     end
@@ -237,9 +237,9 @@ describe AWS::CodeDeploy::Local::CLIValidator do
       end
 
       it 'returns the same arguments' do
-        allow(File).to receive(:exists?).with(FAKE_DIRECTORY).and_return(true)
+        allow(File).to receive(:exist?).with(FAKE_DIRECTORY).and_return(true)
         allow(File).to receive(:directory?).with(FAKE_DIRECTORY).and_return(true)
-        expect(File).to receive(:exists?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
+        expect(File).to receive(:exist?).with("#{FAKE_DIRECTORY}/appspec.yml").and_return(true)
         expect(validator.validate(args)).to equal(args)
       end
     end

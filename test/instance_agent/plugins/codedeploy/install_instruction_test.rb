@@ -60,7 +60,7 @@ module InstanceAgent
               @mock_file.stubs(:close)
               @mock_file.stubs(:exist?).returns(false)
               File.stubs(:open).returns(@mock_file)
-              File.stubs(:exists?).returns(false)
+              File.stubs(:exist?).returns(false)
             end
 
             should "return a collection containing a copy command and a mkdir command" do

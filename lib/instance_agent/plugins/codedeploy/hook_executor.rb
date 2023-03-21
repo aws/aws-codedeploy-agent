@@ -202,7 +202,7 @@ module InstanceAgent
         private
         def create_script_log_file_if_needed
           script_log_file_location = File.join(@current_deployment_root_dir, ScriptLog::SCRIPT_LOG_FILE_RELATIVE_LOCATION)
-          if(!File.exists?(script_log_file_location))
+          if(!File.exist?(script_log_file_location))
             unless File.directory?(File.dirname(script_log_file_location))
               FileUtils.mkdir_p(File.dirname(script_log_file_location))
             end
@@ -224,7 +224,7 @@ module InstanceAgent
         def parse_app_spec
           app_spec_location = File.join(@deployment_archive_dir, @app_spec_path)
           log(:debug, "Checking for app spec in #{app_spec_location}")
-          unless File.exists?(app_spec_location)
+          unless File.exist?(app_spec_location)
             raise <<-MESSAGE.gsub(/^[\s\t]*/, '').gsub(/\s*\n/, ' ').strip
                 The CodeDeploy agent did not find an AppSpec file within the unpacked revision directory at revision-relative path "#{@app_spec_path}".
                 The revision was unpacked to directory "#{@deployment_archive_dir}", and the AppSpec file was expected but not found at path
@@ -241,7 +241,7 @@ module InstanceAgent
           hook_deployment_mapping = mapping_between_hooks_and_deployments
           if(select_correct_mapping_for_hooks == LAST_SUCCESSFUL_DEPLOYMENT && !File.exist?(File.join(@deployment_root_dir, 'deployment-archive')))
             @deployment_root_dir = last_successful_deployment_root_dir
-          elsif(select_correct_mapping_for_hooks == MOST_RECENT_DEPLOYMENT && !File.exists?(File.join(@deployment_root_dir, 'deployment-archive')))
+          elsif(select_correct_mapping_for_hooks == MOST_RECENT_DEPLOYMENT && !File.exist?(File.join(@deployment_root_dir, 'deployment-archive')))
             @deployment_root_dir = most_recent_deployment_dir
           end
         end
