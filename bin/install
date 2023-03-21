@@ -5,31 +5,39 @@
 # than 2.0. Testing on multiple Ruby versions is required for
 # changes to this part of the code.
 ##################################################################
-class Proxy
-  instance_methods.each do |m|
-    undef_method m unless m =~ /(^__|^send$|^object_id$)/
+
+class LoggerWrapper
+  def initialize(loggers)
+    @loggers = loggers
   end
 
-  def initialize(*targets)
-    @targets = targets
-  end
-
-  def path
-    @targets.map do |target|
-      if target.respond_to?(:path)
-        target.__send__(:path)
-      else
-        # default to to_s since it's just used as a label for log statements.
-        target.__send__(:to_s)
-      end
+  def debug(message)
+    @loggers.each do |logger|
+      logger.debug(message)
     end
   end
 
-  protected
+  def error(message)
+    @loggers.each do |logger|
+      logger.error(message)
+    end
+  end
 
-  def method_missing(name, *args, &block)
-    @targets.map do |target|
-      target.__send__(name, *args, &block)
+  def info(message)
+    @loggers.each do |logger|
+      logger.info(message)
+    end
+  end
+
+  def level(message)
+    @loggers.each do |logger|
+      logger.level = message
+    end
+  end
+
+  def warn(message)
+    @loggers.each do |logger|
+      logger.warn(message)
     end
   end
 end
@@ -40,16 +48,16 @@ require 'logger'
 
 if($stdout.isatty)
   # if we are being run in a terminal, log to stdout and the log file.
-  @log = Logger.new(Proxy.new(File.open(log_file_path, 'a+'), $stdout))
+  @log = LoggerWrapper.new([Logger.new(log_file_path), Logger.new($stdout)])
+  @log.level(Logger::INFO)
 else
   # keep at most 2MB of old logs rotating out 1MB at a time
   @log = Logger.new(log_file_path, 2, 1048576)
+  @log.level = Logger::INFO
   # make sure anything coming out of ruby ends up in the log file
   $stdout.reopen(log_file_path, 'a+')
   $stderr.reopen(log_file_path, 'a+')
 end
-
-@log.level = Logger::INFO
 
 require 'net/http'
 
@@ -128,7 +136,7 @@ class IMDS
     Net::HTTP.start(IP_ADDRESS, 80, :read_timeout => 10, :open_timeout => 10) do |http|
       response = http.request(request)
       if block_given?
-        yield(response) 
+        yield(response)
       elsif response.kind_of? Net::HTTPSuccess
         response.body
       else
@@ -153,7 +161,7 @@ class IMDS
 end
 
 class S3Bucket
-  # Split out as older versions of ruby dont like multi entry attr 
+  # Split out as older versions of ruby dont like multi entry attr
   attr :domain
   attr :region
   attr :bucket
@@ -203,8 +211,8 @@ to check for a running agent.
 To use a HTTP proxy, specify --proxy followed by the proxy server
 defined by http://hostname:port
 
-This install script needs Ruby version 2.x installed as a prerequisite.
-Currently recommended Ruby versions are 2.0.0, 2.1.8, 2.2.4, 2.3, 2.4, 2.5, 2.6 and 2.7.
+This install script needs Ruby versions 2.x or 3.x installed as a prerequisite.
+Currently recommended Ruby versions are 2.0.0, 2.1.8, 2.2.4, 2.3, 2.4, 2.5, 2.6, 2.7, 3.0, 3.1, and 3.2
 If multiple Ruby versions are installed, the default ruby version will be used.
 If the default ruby version does not satisfy requirement, the newest version will be used.
 If you do not have a supported Ruby version installed, please install one of them first.
@@ -213,10 +221,10 @@ EOF
   end
 
   def supported_ruby_versions
-    ['2.7', '2.6', '2.5', '2.4', '2.3', '2.2', '2.1', '2.0']
+    ['3.2','3.1','3.0', '2.7', '2.6', '2.5', '2.4', '2.3', '2.2', '2.1', '2.0']
   end
 
-  # check ruby version, only version 2.x works
+  # check ruby version, only version 2.x 3.x works
   def check_ruby_version_and_symlink
     @log.info("Starting Ruby version check.")
     actual_ruby_version = RUBY_VERSION.split('.').map{|s|s.to_i}[0,2]
@@ -231,8 +239,8 @@ EOF
       if(File.exist?("/usr/bin/ruby#{version}"))
         return "/usr/bin/ruby#{version}"
       elsif (File.symlink?("/usr/bin/ruby#{version}"))
-          @log.error("The symlink /usr/bin/ruby#{version} exists, but it's linked to a non-existent directory or non-executable file.")
-          exit(1)
+        @log.error("The symlink /usr/bin/ruby#{version} exists, but it's linked to a non-existent directory or non-executable file.")
+        exit(1)
       end
     end
 
@@ -241,9 +249,9 @@ EOF
   end
 
   def unsupported_ruby_version_error
-    @log.error("Current running Ruby version for "+ENV['USER']+" is "+RUBY_VERSION+", but Ruby version 2.x needs to be installed.")
+    @log.error("Current running Ruby version for "+ENV['USER']+" is "+RUBY_VERSION+", but Ruby version 2.x, 3.x needs to be installed.")
     @log.error('If you already have the proper Ruby version installed, please either create a symlink to /usr/bin/ruby2.x,')
-    @log.error( "or run this install script with right interpreter. Otherwise please install Ruby 2.x for "+ENV['USER']+" user.")
+    @log.error( "or run this install script with right interpreter. Otherwise please install Ruby 2.x, 3.x for "+ENV['USER']+" user.")
     @log.error('You can get more information by running the script with --help option.')
   end
 
@@ -295,15 +303,14 @@ EOF
     end
     @type = ARGV.shift.downcase;
   end
-
   def force_ruby2x(ruby_interpreter_path)
     # change interpreter when symlink /usr/bin/ruby2.x exists, but running with non-supported ruby version
     actual_ruby_version = RUBY_VERSION.split('.').map{|s|s.to_i}
     left_bound = '2.0.0'.split('.').map{|s|s.to_i}
-    right_bound = '2.7.0'.split('.').map{|s|s.to_i}
+    right_bound = '3.2.1'.split('.').map{|s|s.to_i}
     if (actual_ruby_version <=> left_bound) < 0
       if(!@reexeced)
-        @log.info("The current Ruby version is not 2.x! Restarting the installer with #{ruby_interpreter_path}")
+        @log.info("The current Ruby version is not 2.x or 3.x! Restarting the installer with #{ruby_interpreter_path}")
         exec("#{ruby_interpreter_path}", __FILE__, '--re-execed' , *@args)
       else
         unsupported_ruby_version_error
@@ -394,7 +401,7 @@ EOF
     exceptions = [OpenURI::HTTPError, OpenSSL::SSL::SSLError]
     begin
       uri.open(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy) do |s3|
-         package_file.write(s3.read)
+        package_file.write(s3.read)
       end
     rescue *exceptions  => e
       @log.warn("Could not find package to download at '#{uri.to_s}' - Retrying... Attempt: '#{retries.to_s}'")
@@ -407,7 +414,7 @@ EOF
         exit(1)
       end
     end
-end
+  end
 
   def get_version_file_from_s3(s3_bucket, key)
     @log.info("Downloading version file from bucket #{s3_bucket.bucket} and key #{key}...")
