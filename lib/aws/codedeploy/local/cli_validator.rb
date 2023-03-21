@@ -27,7 +27,7 @@ module AWS
             raise ValidationError.new("location #{location} cannot be http, only encrypted (https) url endpoints supported")
           end
 
-          if (uri.scheme != 'https' && uri.scheme != 's3' && !File.exists?(location))
+          if (uri.scheme != 'https' && uri.scheme != 's3' && !File.exist?(location))
               raise ValidationError.new("location #{location} is specified as a file or directory which does not exist")
           end
 
@@ -41,10 +41,10 @@ module AWS
 
           if (type == 'directory' && (uri.scheme != 'https' && uri.scheme != 's3' && File.directory?(location)))
             appspec_filename = args['--appspec-filename']
-            if !appspec_filename.nil? && !File.exists?("#{location}/#{appspec_filename}")
+            if !appspec_filename.nil? && !File.exist?("#{location}/#{appspec_filename}")
               raise ValidationError.new("Expecting appspec file at location #{location}/#{appspec_filename} but it is not found there. Please either run the CLI from within a directory containing the #{appspec_filename} file or specify a bundle location containing an #{appspec_filename} file in its root directory")
             end
-            if appspec_filename.nil? && !File.exists?("#{location}/appspec.yml") && !File.exists?("#{location}/appspec.yaml")
+            if appspec_filename.nil? && !File.exist?("#{location}/appspec.yml") && !File.exist?("#{location}/appspec.yaml")
               raise ValidationError.new("Expecting appspec file at location #{location}/appspec.yml or #{location}/appspec.yaml but it is not found there. Please either run the CLI from within a directory containing the appspec.yml or appspec.yaml file or specify a bundle location containing an appspec.yml or appspec.yaml file in its root directory")
             end
           end

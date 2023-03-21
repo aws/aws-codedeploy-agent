@@ -63,8 +63,8 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
           .returns(@instruction_builder)
 
         @instruction_builder.stubs(:cleanup).returns(nil)
-        File.stubs(:exists?).returns(false)
-        File.stubs(:exists?).with("deploy-instructions-dir/ig1-cleanup").returns(false)
+        File.stubs(:exist?).returns(false)
+        File.stubs(:exist?).with("deploy-instructions-dir/ig1-cleanup").returns(false)
 
         @app_spec.stubs(:permissions).returns([])
         @app_spec.stubs(:files).returns([])
@@ -75,7 +75,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
       context "with an existing cleanup file" do
 
         setup do
-          File.stubs(:exists?).with("deploy-instructions-dir/ig1-cleanup").returns(true)
+          File.stubs(:exist?).with("deploy-instructions-dir/ig1-cleanup").returns(true)
         end
 
         should "parse the file, execute the commands and remove the file before generating new install instructions" do
@@ -133,8 +133,8 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
                              :destination => "dst2")])
 
             File.stubs(:directory?).returns(false)
-            File.stubs(:exists?).returns(false)
-            File.stubs(:exists?).with(any_of("dst1", "dst2")).returns(true)
+            File.stubs(:exist?).returns(false)
+            File.stubs(:exist?).with(any_of("dst1", "dst2")).returns(true)
             @instruction_builder.stubs(:copy)
           end
 
@@ -150,7 +150,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
           end
 
           should "raise an error if the file already exists and @file_exists_behavior is set to 'DISALLOW'" do
-            File.stubs(:exists?).with("dst2/src2").returns(true)
+            File.stubs(:exist?).with("dst2/src2").returns(true)
 
             assert_raised_with_message("The deployment failed because a specified file already exists at this location: dst2/src2") do
               @installer.install(@deployment_group_id, @app_spec)
@@ -163,7 +163,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
             @app_spec
               .stubs(:file_exists_behavior)
                 .returns("DISALLOW")
-            File.stubs(:exists?).with("dst2/src2").returns(true)
+            File.stubs(:exist?).with("dst2/src2").returns(true)
 
             assert_raised_with_message("The deployment failed because a specified file already exists at this location: dst2/src2") do
               @installer.install(@deployment_group_id, @app_spec)
@@ -175,7 +175,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
               .stubs(:files)
               .returns([stub(:source => "src1",
                              :destination => "dst1")])
-            File.stubs(:exists?).with("dst1/src1").returns(true)
+            File.stubs(:exist?).with("dst1/src1").returns(true)
             @instruction_builder
               .expects(:copy)
               .with("deploy-archive-dir/src1", "dst1/src1")
@@ -190,7 +190,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
               .stubs(:files)
                 .returns([stub(:source => "src1",
                                :destination => "dst1")])
-            File.stubs(:exists?).with("dst1/src1").returns(true)
+            File.stubs(:exist?).with("dst1/src1").returns(true)
             @instruction_builder
               .expects(:copy)
               .with("deploy-archive-dir/src1", "dst1/src1")
@@ -203,7 +203,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
               .stubs(:files)
               .returns([stub(:source => "src1",
                              :destination => "dst1")])
-            File.stubs(:exists?).with("dst1/src1").returns(true)
+            File.stubs(:exist?).with("dst1/src1").returns(true)
             @instruction_builder.expects(:copy).never
             @installer.file_exists_behavior = "RETAIN"
             @installer.install(@deployment_group_id, @app_spec)
@@ -216,14 +216,14 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
               .stubs(:files)
                 .returns([stub(:source => "src1",
                                :destination => "dst1")])
-            File.stubs(:exists?).with("dst1/src1").returns(true)
+            File.stubs(:exist?).with("dst1/src1").returns(true)
             @instruction_builder.expects(:copy).never
             assert_equal(@installer.file_exists_behavior, "DISALLOW")
             @installer.install(@deployment_group_id, @app_spec)
           end
 
           should "raise an error if the file already exists and @file_exists_behavior is set to some invalid value" do
-            File.stubs(:exists?).with("dst2/src2").returns(true)
+            File.stubs(:exist?).with("dst2/src2").returns(true)
             @installer.file_exists_behavior = "SOMETHING_WEIRD"
 
             assert_raised_with_message("The deployment failed because an invalid option was specified for fileExistsBehavior: #{@installer.file_exists_behavior}. Valid options include OVERWRITE, RETAIN, and DISALLOW.") do
@@ -236,7 +236,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
               .stubs(:files)
               .returns([stub(:source => "src1",
                              :destination => "dst1")])
-            File.stubs(:exists?).with("dst1").returns(false)
+            File.stubs(:exist?).with("dst1").returns(false)
 
             command_sequence = sequence("command sequence")
             @instruction_builder
@@ -275,7 +275,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
               .stubs(:files)
               .returns([stub(:source => "src1",
                              :destination => "dst1/foo/bar")])
-            File.stubs(:exists?).with("dst1").returns(true)
+            File.stubs(:exist?).with("dst1").returns(true)
 
             command_sequence = sequence("command sequence")
             @instruction_builder
@@ -326,7 +326,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
               .returns([stub(:source => "src1",
                              :destination => "/dst1/foo/bar")])
 
-            File.stubs(:exists?).with("/dst1").returns(true)
+            File.stubs(:exist?).with("/dst1").returns(true)
 
             command_sequence = sequence("command sequence")
             @instruction_builder
@@ -369,7 +369,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
             Dir.stubs(:entries)
               .with("deploy-archive-dir/src1")
               .returns([".", "..", "foo", "bar"])
-            File.stubs(:exists?).with("dst1/bar").returns(true)
+            File.stubs(:exist?).with("dst1/bar").returns(true)
             @instruction_builder.stubs(:mkdir)
             @instruction_builder.stubs(:copy)
 
@@ -383,7 +383,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
               .with("deploy-archive-dir/src1")
               .returns([".", "..", "foo", "bar"])
             File.stubs(:directory?).with("dst1").returns(true)
-            File.stubs(:exists?).with("dst1/bar").returns(true)
+            File.stubs(:exist?).with("dst1/bar").returns(true)
             @instruction_builder
               .expects(:copy)
               .with("deploy-archive-dir/src1/foo", "dst1/foo")
@@ -401,7 +401,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
               .with("deploy-archive-dir/src1")
               .returns([".", "..", "foo", "bar"])
             File.stubs(:directory?).with("dst1").returns(true)
-            File.stubs(:exists?).with("dst1/bar").returns(true)
+            File.stubs(:exist?).with("dst1/bar").returns(true)
             @instruction_builder
               .expects(:copy)
               .with("deploy-archive-dir/src1/foo", "dst1/foo")
@@ -466,7 +466,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
             end
 
             should "raise an error if an entry already exists and @file_exists_behavior is set to 'DISALLOW'" do
-              File.stubs(:exists?).with("dst1/foo/bar").returns(true)
+              File.stubs(:exist?).with("dst1/foo/bar").returns(true)
               Dir.stubs(:entries)
                 .with("deploy-archive-dir/src1")
                 .returns([".", "..", "foo"])
@@ -483,7 +483,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
 
             should "generate a copy command if the file already exists and @file_exists_behavior is set to 'OVERWRITE'" do
               File.stubs(:directory?).with("dst1/foo").returns(true)
-              File.stubs(:exists?).with("dst1/foo/bar").returns(true)
+              File.stubs(:exist?).with("dst1/foo/bar").returns(true)
               Dir.stubs(:entries)
                 .with("deploy-archive-dir/src1")
                 .returns([".", "..", "foo"])
@@ -499,7 +499,7 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
 
             should "neither generate a copy command nor raise an error if the file already exists and @file_exists_behavior is set to 'RETAIN'" do
               File.stubs(:directory?).with("dst1/foo").returns(true)
-              File.stubs(:exists?).with("dst1/foo/bar").returns(true)
+              File.stubs(:exist?).with("dst1/foo/bar").returns(true)
               Dir.stubs(:entries)
                 .with("deploy-archive-dir/src1")
                 .returns([".", "..", "foo"])
@@ -555,8 +555,8 @@ class CodeDeployPluginInstallerTest < InstanceAgentTestCase
             Dir.stubs(:entries)
               .with("deploy-archive-dir/src3/dir1")
               .returns(["file1", ".", ".."])
-            File.stubs(:exists?).returns(false)
-            File.stubs(:exists?).with(any_of("dst1","dst3")).returns(true)
+            File.stubs(:exist?).returns(false)
+            File.stubs(:exist?).with(any_of("dst1","dst3")).returns(true)
             @instruction_builder.stubs(:copying_file?).returns(false)
             @instruction_builder.stubs(:copying_file?).with("dst1/src1").returns(true)
             @instruction_builder.stubs(:making_directory?).returns(false)

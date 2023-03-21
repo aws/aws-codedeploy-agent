@@ -45,11 +45,12 @@ describe AWS::CodeDeploy::Local::Deployer do
     allow(Dir).to receive(:pwd).and_return test_working_directory
     ProcessManager::Config.config[:root_dir] = test_working_directory
     allow(AWS::CodeDeploy::Local::Deployer).to receive(:random_deployment_id).and_return(TEST_DEPLOYMENT_ID)
-    allow(File).to receive(:exists?).with(@config_file_location).and_return(true)
+    allow(File).to receive(:exist?).with(@config_file_location).and_return(true)
     allow(File).to receive(:readable?).with(@config_file_location).and_return(true)
-    allow(File).to receive(:exists?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(false)
+    allow(File).to receive(:exist?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(false)
     allow(File).to receive(:readable?).with(AWS::CodeDeploy::Local::Deployer::CONF_DEFAULT_LOCATION).and_return(false)
     allow(File).to receive(:readable?).with(InstanceAgent::Config.config[:on_premises_config_file]).and_return(false)
+    allow(File).to receive(:exist?)
   end
 
   def create_config_file(working_directory, log_dir = nil)
@@ -114,7 +115,7 @@ describe AWS::CodeDeploy::Local::Deployer do
       config_file_location = create_config_file(new_test_working_directory, not_yet_existing_directory)
       expect(FileUtils).to receive(:mkdir_p).with(not_yet_existing_directory).and_call_original
       allow(File).to receive(:readable?).with(config_file_location).and_return(true)
-      allow(File).to receive(:exists?).with(config_file_location).and_return(true)
+      allow(File).to receive(:exist?).with(config_file_location).and_return(true)
       AWS::CodeDeploy::Local::Deployer.new(config_file_location)
     end
   end
@@ -133,7 +134,7 @@ describe AWS::CodeDeploy::Local::Deployer do
       end
 
       it 'deploys the local file and calls the executor to execute all commands' do
-        allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+        allow(File).to receive(:exist?).with(SAMPLE_FILE_BUNDLE).and_return(true)
         executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
         expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
@@ -151,7 +152,7 @@ describe AWS::CodeDeploy::Local::Deployer do
 
       context 'when script fails with script error' do
         it 'prints the correct error message to the screen and exits' do
-          allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+          allow(File).to receive(:exist?).with(SAMPLE_FILE_BUNDLE).and_return(true)
           executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
           expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
@@ -192,7 +193,7 @@ describe AWS::CodeDeploy::Local::Deployer do
       end
 
       it 'deploys the local file and calls the executor to execute all specified commands after DownloadBundle and Install commands' do
-        allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+        allow(File).to receive(:exist?).with(SAMPLE_FILE_BUNDLE).and_return(true)
         executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
         all_possible_lifecycle_events = AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS.to_set.merge(NON_DEFAULT_LIFECYCLE_EVENTS).to_a
@@ -221,7 +222,7 @@ describe AWS::CodeDeploy::Local::Deployer do
       end
 
       it 'corrects the order of download bundle followed by install' do
-        allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+        allow(File).to receive(:exist?).with(SAMPLE_FILE_BUNDLE).and_return(true)
         executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
         all_possible_lifecycle_events = AWS::CodeDeploy::Local::Deployer::DEFAULT_ORDERED_LIFECYCLE_EVENTS
@@ -254,7 +255,7 @@ describe AWS::CodeDeploy::Local::Deployer do
       end
 
       it 'deploys the local directory and calls the executor to execute all commands' do
-        allow(File).to receive(:exists?).with(SAMPLE_DIRECTORY_BUNDLE).and_return(true)
+        allow(File).to receive(:exist?).with(SAMPLE_DIRECTORY_BUNDLE).and_return(true)
         executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
         expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
@@ -280,7 +281,7 @@ describe AWS::CodeDeploy::Local::Deployer do
       end
 
       it 'deploys the local directory and calls the executor to execute all commands' do
-        allow(File).to receive(:exists?).with(SAMPLE_DIRECTORY_BUNDLE).and_return(true)
+        allow(File).to receive(:exist?).with(SAMPLE_DIRECTORY_BUNDLE).and_return(true)
         executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
         expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
@@ -457,7 +458,7 @@ describe AWS::CodeDeploy::Local::Deployer do
            "--version"=>false}
         end
         it 'defaults to LocalFleet' do
-          allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+          allow(File).to receive(:exist?).with(SAMPLE_FILE_BUNDLE).and_return(true)
           executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
           expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
@@ -486,7 +487,7 @@ describe AWS::CodeDeploy::Local::Deployer do
            "--version"=>false}
         end
         it 'defaults to the bundle-location' do
-          allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+          allow(File).to receive(:exist?).with(SAMPLE_FILE_BUNDLE).and_return(true)
           executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
           expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
@@ -516,7 +517,7 @@ describe AWS::CodeDeploy::Local::Deployer do
            "--version"=>false}
         end
         it 'generates a spec with the provided value' do
-          allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+          allow(File).to receive(:exist?).with(SAMPLE_FILE_BUNDLE).and_return(true)
           executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
           expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
@@ -546,7 +547,7 @@ describe AWS::CodeDeploy::Local::Deployer do
            "--version"=>false}
         end
         it 'generates a spec with the provided value' do
-          allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+          allow(File).to receive(:exist?).with(SAMPLE_FILE_BUNDLE).and_return(true)
           executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
           expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
@@ -576,7 +577,7 @@ describe AWS::CodeDeploy::Local::Deployer do
            "--version"=>false}
         end
         it 'generates a spec with the provided value' do
-          allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+          allow(File).to receive(:exist?).with(SAMPLE_FILE_BUNDLE).and_return(true)
           executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
           expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
@@ -607,7 +608,7 @@ describe AWS::CodeDeploy::Local::Deployer do
            "--version"=>false}
         end
         it 'generates a spec with the provided value' do
-          allow(File).to receive(:exists?).with(SAMPLE_FILE_BUNDLE).and_return(true)
+          allow(File).to receive(:exist?).with(SAMPLE_FILE_BUNDLE).and_return(true)
           executor = double(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor)
 
           expect(InstanceAgent::Plugins::CodeDeployPlugin::CommandExecutor).to receive(:new).
