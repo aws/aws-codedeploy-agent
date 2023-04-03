@@ -6,7 +6,8 @@ class RunnerChildTest < InstanceAgentTestCase
   context 'The runner child' do
     setup do
       @dir = Dir.tmpdir()
-      @agent = mock()
+      @agent = mock('agent')
+      @agent.stubs(:recover_from_crash?).returns(true)
       InstanceAgent::Plugins::CodeDeployPlugin::CommandPoller.stubs(:new).returns(@agent)
       @agent.stubs(:description).returns("CommandPoller")
       InstanceAgent::Runner::Child.any_instance.stubs(:trap_signals)
@@ -18,6 +19,9 @@ class RunnerChildTest < InstanceAgentTestCase
       InstanceAgent::Config.config[:wait_between_spawning_children] = 0
       SimplePid.stubs(:drop)
       ProcessManager.reset_on_error_callbacks
+      @runner = mock('runner')
+      @runner.stubs(:description).returns 'master-process'
+      @child.stubs(:runner).returns(@runner)
     end
 
     context 'when preparing the run' do
@@ -41,23 +45,23 @@ class RunnerChildTest < InstanceAgentTestCase
         end
       end
 
+      should 'call recover_from_crash' do
+        @agent.expects(:recover_from_crash?)
+        @child.prepare_run()
+      end
+
       context 'sets the process description' do
         should 'set it for the running children' do
-          @child.stubs(:runner).returns(runner = mock('runner'))
-          runner.stubs(:description).returns 'master-process'
           assert_equal 'master-process of master 777', @child.description
         end
 
         should 'set it for the booting children' do
+          @child.stubs(:runner).returns(nil)
           assert_equal 'booting child', @child.description
         end
       end
 
       context 'handle exceptions' do
-        setup do
-          @child.stubs(:runner).returns(runner = mock('runner'))
-          runner.stubs(:description).returns 'master-process'
-        end
         should 'handle SocketErrors during the run and exit cleanly' do
           InstanceAgent::Config.config[:wait_after_connection_problem] = 0
           @child.expects(:runner).raises(SocketError)

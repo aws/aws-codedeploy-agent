@@ -48,6 +48,8 @@ module InstanceAgent
         SCRIPT_FAILED_CODE = 4
         UNKNOWN_ERROR_CODE = 5
         OUTPUTS_LEFT_OPEN_CODE = 6
+        FAILED_AFTER_RESTART_CODE = 7
+
         def initialize(error_code, script_name, log)
           @error_code = error_code
           @script_name = script_name
@@ -111,6 +113,12 @@ module InstanceAgent
 
         def is_noop?
           return @app_spec.nil? || @app_spec.hooks[@lifecycle_event].nil? || @app_spec.hooks[@lifecycle_event].empty?
+        end
+
+        def total_timeout_for_all_scripts
+          return nil if is_noop?
+          timeouts = @app_spec.hooks[@lifecycle_event].map {|script| script.timeout}
+          timeouts.reduce(0) {|running_sum, item| running_sum + item}
         end
 
         def execute

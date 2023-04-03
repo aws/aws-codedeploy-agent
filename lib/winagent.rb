@@ -41,6 +41,7 @@ class InstanceAgentService < Daemon
         begin
           @polling_mutex.synchronize do
             @runner ||= InstanceAgent::Plugins::CodeDeployPlugin::CommandPoller.runner
+            @runner.recover_from_crash?
             @runner.run
           end
         rescue SystemExit

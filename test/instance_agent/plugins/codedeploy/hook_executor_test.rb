@@ -163,11 +163,18 @@ class HookExecutorTest < InstanceAgentTestCase
         should "be a noop command" do
           assert_true @hook_executor.is_noop?
         end
+
+        should "have a total timeout of nil" do
+          assert_nil(@hook_executor.total_timeout_for_all_scripts)
+        end
       end
 
       context "running with a single basic script" do
         setup do
-          @app_spec = {"version" => 0.0, "os" => "linux", "hooks" => {'ValidateService'=>[{'location'=>'test'}]}}
+          @app_spec = {
+            "version" => 0.0,
+            "os" => "linux",
+            "hooks" => {'ValidateService'=>[{'location'=>'test', 'timeout'=>300}]}}
           YAML.stubs(:load).returns(@app_spec)
           @script_location = File.join(@deployment_root_dir, 'deployment-archive', 'test')
           @hook_executor = create_hook_executor
@@ -175,6 +182,10 @@ class HookExecutorTest < InstanceAgentTestCase
 
         should "not be a noop" do
           assert_false @hook_executor.is_noop?
+        end
+
+        should "have a total timeout of 300" do
+          assert_equal 300, @hook_executor.total_timeout_for_all_scripts
         end
 
         context "when hook script doesn't exist" do
@@ -450,6 +461,54 @@ class HookExecutorTest < InstanceAgentTestCase
               end
             end
           end
+        end
+      end
+
+      context "running with two scripts with timeouts" do
+        setup do
+          @app_spec = {
+            "version" => 0.0,
+            "os" => "linux",
+            "hooks" => {'ValidateService'=>[
+              {'location'=>'test', 'timeout'=>300},
+              {'location'=>'test2', 'timeout'=>150}
+            ]}
+          }
+          YAML.stubs(:load).returns(@app_spec)
+          @script_location = File.join(@deployment_root_dir, 'deployment-archive', 'test')
+          @hook_executor = create_hook_executor
+        end
+
+        should "not be a noop" do
+          assert_false @hook_executor.is_noop?
+        end
+
+        should "have a total timeout of 450" do
+          assert_equal 450, @hook_executor.total_timeout_for_all_scripts
+        end
+      end
+
+      context "running with two scripts, one with timeout" do
+        setup do
+          @app_spec = {
+            "version" => 0.0,
+            "os" => "linux",
+            "hooks" => {'ValidateService'=>[
+              {'location'=>'test', 'timeout'=>300},
+              {'location'=>'test2'}
+            ]}
+          }
+          YAML.stubs(:load).returns(@app_spec)
+          @script_location = File.join(@deployment_root_dir, 'deployment-archive', 'test')
+          @hook_executor = create_hook_executor
+        end
+
+        should "not be a noop" do
+          assert_false @hook_executor.is_noop?
+        end
+
+        should "have a total timeout of 3900" do
+          assert_equal 3900, @hook_executor.total_timeout_for_all_scripts
         end
       end
     end

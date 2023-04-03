@@ -67,6 +67,29 @@ module InstanceAgent
           end
         end
 
+        # Called during initialization of the child process
+        def recover_from_crash?
+          begin
+            if DeploymentCommandTracker.check_deployment_event_inprogress?() then
+              log(:warn, "Deployment tracking file found: #{DeploymentCommandTracker.deployment_dir_path()}. The agent likely restarted while running a customer-supplied script. Failing the lifecycle event.")
+              host_command_identifier = DeploymentCommandTracker.most_recent_host_command_identifier()
+
+              log(:info, "Calling PutHostCommandComplete: 'Failed' #{host_command_identifier}")
+              @deploy_control_client.put_host_command_complete(
+                :command_status => "Failed",
+                :diagnostics => {:format => "JSON", :payload => gather_diagnostics_from_failure_after_restart("Failing in-progress lifecycle event after an agent restart.")},
+                :host_command_identifier => host_command_identifier)
+
+              DeploymentCommandTracker.clean_ongoing_deployment_dir()
+              return true
+            end
+            # We want to catch-all exceptions so that the child process always can startup succesfully.
+          rescue Exception => e
+            log(:error, "Exception thrown during restart recovery: #{e}")
+            return nil
+          end
+        end
+
         def perform
           return unless command = next_command
 
@@ -109,7 +132,7 @@ module InstanceAgent
           log(:debug, "Calling #{@plugin.to_s}.execute_command")
           begin
             deployment_id = InstanceAgent::Plugins::CodeDeployPlugin::DeploymentSpecification.parse(spec).deployment_id
-            DeploymentCommandTracker.create_ongoing_deployment_tracking_file(deployment_id)
+            DeploymentCommandTracker.create_ongoing_deployment_tracking_file(deployment_id, command.host_command_identifier)
             #Successful commands will complete without raising an exception
             @plugin.execute_command(command, spec)
             
@@ -226,6 +249,16 @@ module InstanceAgent
           begin
             message = error.message || ""
             raise ScriptError.new(ScriptError::UNKNOWN_ERROR_CODE, "", ScriptLog.new), message
+          rescue ScriptError => e
+            script_error = e
+          end
+          gather_diagnostics_from_script_error(script_error)
+        end
+
+        private
+        def gather_diagnostics_from_failure_after_restart(msg = "")
+          begin
+            raise ScriptError.new(ScriptError::FAILED_AFTER_RESTART_CODE, "", ScriptLog.new), "Failed: #{msg}"
           rescue ScriptError => e
             script_error = e
           end

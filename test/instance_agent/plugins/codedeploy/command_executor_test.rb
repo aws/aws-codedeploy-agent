@@ -135,6 +135,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
         should "be a noop" do
           assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
         end
+
+        should "have a total timeout of nil" do
+          assert_nil(
+            @command_executor.total_timeout_for_all_lifecycle_events(@command.command_name, @deployment_spec),
+            "Unknown command should have a total timeout of nil")
+        end
       end
 
       context "when executing a valid non-hardcoded command" do
@@ -702,7 +708,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             @command_executor.execute_command(@command, @deployment_spec)
           end
         end
-
+        
         context "handle bundle from local directory" do
           setup do
             @command.command_name = "DownloadBundle"
@@ -794,6 +800,12 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
             HookExecutor.expects(:new).with(@hook_executor_constructor_hash).returns(@mock_hook_executor)
             @mock_hook_executor.expects(:is_noop?).returns(true)
             assert_true @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+          end
+
+          should "have a total script timeout of nil" do
+            assert_nil(
+              @command_executor.total_timeout_for_all_lifecycle_events(@command, @deployment_spec),
+              "Total timeout should be whatever's returned by HookExecutor")
           end
         end
 
@@ -991,6 +1003,30 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
           @mock_hook_executor.expects(:is_noop?).twice.returns(true, false)
 
           assert_false @command_executor.is_command_noop?(@command.command_name, @deployment_spec)
+        end
+
+        should "have a total timeout of 900 seconds" do
+          HookExecutor.expects(:new).with(@hook_executor_constructor_hash_1).returns(@mock_hook_executor)
+          HookExecutor.expects(:new).with(@hook_executor_constructor_hash_2).returns(@mock_hook_executor)
+
+          @mock_hook_executor.expects(:total_timeout_for_all_scripts).twice.returns(300, 600)
+
+          assert_equal(
+            900,
+            @command_executor.total_timeout_for_all_lifecycle_events(@command.command_name, @deployment_spec),
+            "Timeout should be the sum of the appspec timeouts for the scripts for all lifecycle events"
+          )
+        end
+
+        should "have a total timeout of nil when one command has no timeout" do
+          HookExecutor.expects(:new).with(@hook_executor_constructor_hash_1).returns(@mock_hook_executor)
+          HookExecutor.expects(:new).with(@hook_executor_constructor_hash_2).returns(@mock_hook_executor)
+
+          @mock_hook_executor.expects(:total_timeout_for_all_scripts).twice.returns(600, nil)
+
+          assert_nil(
+            @command_executor.total_timeout_for_all_lifecycle_events(@command.command_name, @deployment_spec),
+            "Timeout should be nil if any script's timeout is nil")
         end
 
         context "when the first script is forced to fail" do
