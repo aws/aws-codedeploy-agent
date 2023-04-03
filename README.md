@@ -4,7 +4,7 @@
 
 # Notice: This branch is no longer the default.  Please use `main` branch.
 
-## Latest Release: 1.4.0
+## Latest Release: 1.5.0
 [Release Notes](https://docs.aws.amazon.com/codedeploy/latest/userguide/codedeploy-agent.html#codedeploy-agent-version-history)
 
 ## Build Steps
