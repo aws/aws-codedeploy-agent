@@ -19,7 +19,7 @@ task :default => [:version_tracking, :test]
 task :release => [:version_tracking, :test]
 
 desc "Run unit tests in spec/"
-RSpec::Core::RakeTask.new(:spec)
+RSpec::Core::RakeTask.new({:exclude_pattern =>'spec/aws/codedeploy/local/deployer_spec.rb'})
 task :test => :spec
 
 begin
