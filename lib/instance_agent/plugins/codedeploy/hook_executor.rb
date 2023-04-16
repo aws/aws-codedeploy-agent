@@ -126,28 +126,32 @@ module InstanceAgent
           if (hooks = @app_spec.hooks[@lifecycle_event]) &&
           !hooks.empty?
             create_script_log_file_if_needed do |script_log_file|
-              log_script("LifecycleEvent - " + @lifecycle_event + "\n", script_log_file)
-              hooks.each do |script|
-                if(!File.exist?(script_absolute_path(script)))
-                  raise ScriptError.new(ScriptError::SCRIPT_MISSING_CODE, script.location, @script_log), 'Script does not exist at specified location: ' + File.expand_path(script_absolute_path(script))
-                elsif(!InstanceAgent::Platform.util.script_executable?(script_absolute_path(script)))
-                  log :warn, 'Script at specified location: ' + script.location + ' is not executable.  Trying to make it executable.'
+              begin
+                log_script("LifecycleEvent - " + @lifecycle_event + "\n", script_log_file)
+                hooks.each do |script|
+                  if(!File.exist?(script_absolute_path(script)))
+                    raise ScriptError.new(ScriptError::SCRIPT_MISSING_CODE, script.location, @script_log), 'Script does not exist at specified location: ' + File.expand_path(script_absolute_path(script))
+                  elsif(!InstanceAgent::Platform.util.script_executable?(script_absolute_path(script)))
+                    log :warn, 'Script at specified location: ' + script.location + ' is not executable.  Trying to make it executable.'
+                    begin
+                      FileUtils.chmod("+x", script_absolute_path(script))
+                    rescue
+                      raise ScriptError.new(ScriptError::SCRIPT_EXECUTABILITY_CODE, script.location, @script_log), 'Unable to set script at specified location: ' + script.location + ' as executable'
+                    end
+                  end
                   begin
-                    FileUtils.chmod("+x", script_absolute_path(script))
-                  rescue
-                    raise ScriptError.new(ScriptError::SCRIPT_EXECUTABILITY_CODE, script.location, @script_log), 'Unable to set script at specified location: ' + script.location + ' as executable'
+                    execute_script(script, script_log_file)
+                  rescue Timeout::Error
+                    raise ScriptError.new(ScriptError::SCRIPT_TIMED_OUT_CODE, script.location, @script_log), 'Script at specified location: ' +script.location + ' failed to complete in '+script.timeout.to_s+' seconds'
+                  rescue ScriptError
+                    raise
+                  rescue StandardError => e
+                    script_error = "#{script_error_prefix(script.location, script.runas)} failed with error #{e.class} with message #{e}"
+                    raise ScriptError.new(ScriptError::SCRIPT_FAILED_CODE, script.location, @script_log), script_error
                   end
                 end
-                begin
-                  execute_script(script, script_log_file)
-                rescue Timeout::Error
-                  raise ScriptError.new(ScriptError::SCRIPT_TIMED_OUT_CODE, script.location, @script_log), 'Script at specified location: ' +script.location + ' failed to complete in '+script.timeout.to_s+' seconds'
-                rescue ScriptError
-                  raise
-                rescue StandardError => e
-                  script_error = "#{script_error_prefix(script.location, script.runas)} failed with error #{e.class} with message #{e}"
-                  raise ScriptError.new(ScriptError::SCRIPT_FAILED_CODE, script.location, @script_log), script_error
-                end
+              ensure
+                log_script("LifecycleEvent finished - " + @lifecycle_event + "\n", script_log_file)
               end
             end
           end
