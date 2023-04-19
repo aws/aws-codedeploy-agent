@@ -177,7 +177,7 @@ module ProcessManager
         if lock_acquired == false
           ProcessManager::Log.info("Could not acquire lock on #{pid_lock_file} - aborting start!")
           self.class.abort
-        elsif File.exists?(pid_file)
+        elsif File.file?(pid_file)
           pid = self.class.find_pid
           if ProcessManager.process_running?(pid) and process_matcher(pid)
             puts "Pidfile #{pid_file} exists and process #{pid} is running - aborting start!"

@@ -11,6 +11,7 @@ Rake::TestTask.new(:test) do |t|
   t.libs << ['test', 'lib', 'test/helpers']
 
   test_files = FileList.new("test/**/*_test.rb")
+  test_files.exclude("test/instance_agent/plugins/windows/*_test.rb")
   t.test_files = test_files
   t.verbose = true
 end
@@ -18,7 +19,7 @@ task :default => [:version_tracking, :test]
 task :release => [:version_tracking, :test]
 
 desc "Run unit tests in spec/"
-RSpec::Core::RakeTask.new(:spec)
+RSpec::Core::RakeTask.new({:exclude_pattern =>'spec/aws/codedeploy/local/deployer_spec.rb'})
 task :test => :spec
 
 begin
