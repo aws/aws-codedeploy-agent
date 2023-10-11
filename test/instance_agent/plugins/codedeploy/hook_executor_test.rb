@@ -262,7 +262,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
               should "call popen with the environment variables" do
                 Open3.stubs(:popen3).with(@child_env, @script_location, :pgroup => true).yields([@mock_pipe,@mock_pipe,@mock_pipe,@wait_thr])
-                @value.stubs(:exitstatus).returns(0)
+                setup_successful_status(@value)
                 @hook_executor.execute()
               end
             end
@@ -374,7 +374,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
               context "scripts fail" do
                 setup do
-                  @value.stubs(:exitstatus).returns(1)
+                  setup_failure_status(@value)
                 end
 
                 should "raise an exception" do
@@ -386,7 +386,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
               context "scripts pass" do
                 setup do
-                  @value.stubs(:exitstatus).returns(0)
+                  setup_successful_status(@value)
                 end
 
                 should "execute script with runas" do
@@ -406,7 +406,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
               context "Scripts fail" do
                 setup do
-                  @value.stubs(:exitstatus).returns(1)
+                  setup_failure_status(@value)
                 end
 
                 should "raise an exception" do
@@ -418,7 +418,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
               context "Scripts pass" do
                 setup do
-                  @value.stubs(:exitstatus).returns(0)
+                  setup_successful_status(@value)
                 end
 
                 should "execute script" do
@@ -439,7 +439,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
               context "Scripts fail" do
                 setup do
-                  @value.stubs(:exitstatus).returns(1)
+                  setup_failure_status(@value)
                 end
 
                 should "raise an exception" do
@@ -451,7 +451,7 @@ class HookExecutorTest < InstanceAgentTestCase
 
               context "Scripts pass" do
                 setup do
-                  @value.stubs(:exitstatus).returns(0)
+                  setup_successful_status(@value)
                 end
 
                 should "execute script" do
@@ -512,5 +512,37 @@ class HookExecutorTest < InstanceAgentTestCase
         end
       end
     end
+  end
+
+  def setup_successful_status(value)
+    value.stubs(:exitstatus).returns(0)
+
+    # for diagnostic logging
+    value.stubs(:coredump?).returns(false)
+    value.stubs(:exited?).returns(true)
+    value.stubs(:inspect).returns("inspect result")
+    value.stubs(:pid).returns(4560)
+    value.stubs(:signaled?).returns(false)
+    value.stubs(:stopped?).returns(false)
+    value.stubs(:stopsig).returns(nil)
+    value.stubs(:success?).returns(false)
+    value.stubs(:termsig).returns(nil)
+    value.stubs(:to_i).returns(12)
+  end
+
+  def setup_failure_status(value)
+    value.stubs(:exitstatus).returns(1)
+
+    # for diagnostic logging
+    value.stubs(:coredump?).returns(false)
+    value.stubs(:exited?).returns(true)
+    value.stubs(:inspect).returns("inspect result")
+    value.stubs(:pid).returns(4560)
+    value.stubs(:signaled?).returns(false)
+    value.stubs(:stopped?).returns(false)
+    value.stubs(:stopsig).returns(nil)
+    value.stubs(:success?).returns(false)
+    value.stubs(:termsig).returns(nil)
+    value.stubs(:to_i).returns(12)
   end
 end
