@@ -43,9 +43,9 @@ module InstanceAgent
       FileUtils.mkdir_p(dst)
       working_dir = FileUtils.pwd()
       absolute_bundle_path = File.expand_path(bundle_file)
-      FileUtils.cd(dst)
-      execute_tar_command("/bin/tar -xpsf #{absolute_bundle_path}")
-      FileUtils.cd(working_dir)
+      FileUtils.cd(dst) do
+        execute_tar_command("/bin/tar -xpsf #{absolute_bundle_path}")
+      end
     end
 
     def self.extract_zip(bundle_file, dst)
@@ -60,9 +60,9 @@ module InstanceAgent
       FileUtils.mkdir_p(dst)
       working_dir = FileUtils.pwd()
       absolute_bundle_path = File.expand_path(bundle_file)
-      FileUtils.cd(dst)
-      execute_tar_command("/bin/tar -zxpsf #{absolute_bundle_path}")
-      FileUtils.cd(working_dir)
+      FileUtils.cd(dst) do 
+        execute_tar_command("/bin/tar -zxpsf #{absolute_bundle_path}")
+      end
     end
 
     def self.supports_process_groups?()
