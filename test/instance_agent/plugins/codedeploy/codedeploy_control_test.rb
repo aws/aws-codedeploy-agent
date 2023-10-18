@@ -127,7 +127,13 @@ class CodeDeployControlTest < InstanceAgentTestCase
           assert_equal "codedeploy-commands.cn-north-1.amazonaws.com.cn", codedeploy_control_client.get_client.config.endpoint.host
         end
       end
-        
+
+      context "common config" do
+        should "add common config to the client settings" do
+          client = CodeDeployControl.new :region => "us-east-1"
+          assert_equal 3, client.get_client.config.instance_profile_credentials_retries
+        end
+      end
     end
   end
 end

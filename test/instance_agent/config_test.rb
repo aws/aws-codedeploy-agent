@@ -74,6 +74,20 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         assert InstanceAgent::Config.validate_config.empty?, InstanceAgent::Config.validate_config.inspect
       end
     end
+
+    should 'return merged hash with common config options' do
+      result = InstanceAgent::Config.common_client_config({
+        :other => "test"
+      })
+
+      expected = {
+        :other => "test",
+        :instance_profile_credentials_retries => 3,
+        :instance_profile_credentials_timeout => 1,  
+      }
+
+      assert_equal expected, result
+    end
     
     context 'validate use_fips_mode' do
       

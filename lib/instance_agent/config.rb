@@ -62,6 +62,18 @@ module InstanceAgent
     def region 
       ENV['AWS_REGION'] || InstanceMetadata.region
     end
-    
+
+    # @param opts [Hash]
+    # @return [Hash]
+    def self.common_client_config(opts = {})
+      # See: https://github.com/aws/aws-sdk-ruby/blob/3136ed9f74da28e9d742b1f5b3a2d5abda28ecba/gems/aws-sdk-core/lib/aws-sdk-core/credential_provider_chain.rb#L36-L38
+      #
+      # Latest ruby sdk may have better default behavior for imds retry, but we are pinned to an old version to support ruby 2.0. So, we need
+      # to configure for more imds retries manually.
+      {
+        :instance_profile_credentials_retries => 3,
+        :instance_profile_credentials_timeout => 1,
+      }.merge(opts)
+    end
   end
 end
