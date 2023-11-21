@@ -1,4 +1,5 @@
 require 'test_helper'
+require 'tempfile'
 
 class InstanceAgentConfigTest < InstanceAgentTestCase
   context 'The instance agent configuration' do
@@ -121,6 +122,90 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         ENV['AWS_REGION'] = nil
       end
 
+    end
+  end
+
+  context 'validate default config' do
+    default_config_path = File.join(
+      File.expand_path(File.dirname(__FILE__)),
+      "../..",
+      "conf",
+      "codedeployagent.yml"
+    )
+
+    should 'load the default config file' do
+      InstanceAgent::Config.config[:config_file] = default_config_path
+
+      assert_equal(nil, InstanceAgent::Config.config[:max_revisions])
+      InstanceAgent::Config.load_config
+
+      assert_equal(5, InstanceAgent::Config.config[:max_revisions])
+    end
+
+    should 'include a newline at the end of the file' do
+      lines = []
+      File.open(default_config_path).each_line do |line|
+        lines << line
+      end
+
+      # note that newline is not the last line but the last character at the end of the last line
+      assert_equal("\n", lines[-1][-1])
+    end
+  end
+
+  context 'config loading logic' do
+    should 'use the last config entry in the file' do
+      config_file = Tempfile.new("config.yml")
+      begin
+        config_file.write <<~FILE
+          ---
+          :string_param: testing_one
+          :string_param: testing_two
+          :boolean_param: false
+          :boolean_param: true
+          :number_param: 1
+          :number_param: 2
+
+        FILE
+
+        config_file.close
+
+        InstanceAgent::Config.config[:config_file] = config_file.path
+        InstanceAgent::Config.load_config
+
+        assert_equal("testing_two", InstanceAgent::Config.config[:string_param])
+        assert_equal(true, InstanceAgent::Config.config[:boolean_param])
+        assert_equal(2, InstanceAgent::Config.config[:number_param])
+      ensure
+        config_file.delete
+      end
+    end
+
+    should 'handle gaps in the file config' do
+      config_file = Tempfile.new("config.yml")
+      begin
+        config_file.write <<~FILE
+          ---
+
+          :param_one: one
+
+          :param_two: two
+
+          :param_three: three
+
+        FILE
+
+        config_file.close
+
+        InstanceAgent::Config.config[:config_file] = config_file.path
+        InstanceAgent::Config.load_config
+
+        assert_equal("one", InstanceAgent::Config.config[:param_one])
+        assert_equal("two", InstanceAgent::Config.config[:param_two])
+        assert_equal("three", InstanceAgent::Config.config[:param_three])
+      ensure
+        config_file.delete
+      end
     end
   end
 end
