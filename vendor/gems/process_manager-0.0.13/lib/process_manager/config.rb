@@ -18,9 +18,13 @@ module ProcessManager
 
     def self.load_config
       if File.readable?(config[:config_file])
-        file_config = YAML.load(File.read(config[:config_file])).symbolize_keys
-        config.update(file_config)
-        config_loaded_callbacks.each{|c| c.call}
+        begin
+          file_config = YAML.load(File.read(config[:config_file])).symbolize_keys
+          config.update(file_config)
+          config_loaded_callbacks.each{|c| c.call}
+        rescue Exception => ex
+          raise "An error occurred loading the CodeDeploy agent config file at #{config[:config_file]}. Error message: #{ex}"
+        end
       else
         raise "The config file #{config[:config_file]} does not exist or is not readable"
       end

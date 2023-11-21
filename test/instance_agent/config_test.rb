@@ -207,5 +207,35 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         config_file.delete
       end
     end
+
+    should 'raise readable error on config load failure' do
+      config_file = Tempfile.new("config.yml")
+      begin
+        config_file.write <<~FILE
+          this is not valid
+        FILE
+
+        config_file.close
+
+        InstanceAgent::Config.config[:config_file] = config_file.path
+        exception = assert_raise(RuntimeError) { InstanceAgent::Config.load_config }
+
+        message = exception.to_s
+
+        assert_match(/^An error occurred loading the CodeDeploy agent config file at #{config_file.path}. Error message:.*$/, message)
+      ensure
+        config_file.delete
+      end
+    end
+
+    should 'raise readable error on config file not found' do
+      fake_path = "/path/does/not/exist/not_here.yml"
+      InstanceAgent::Config.config[:config_file] = "/path/does/not/exist/not_here.yml"
+      exception = assert_raise(RuntimeError) { InstanceAgent::Config.load_config }
+
+      message = exception.to_s
+
+      assert_match(/^The config file #{fake_path} does not exist or is not readable$/, message)
+    end
   end
 end
