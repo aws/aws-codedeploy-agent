@@ -135,16 +135,10 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
 
     should 'load the default config file' do
       InstanceAgent::Config.config[:config_file] = default_config_path
-
-      expected_log_dir = if RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/
-                           "Amazon/CodeDeploy/log"
-                         else
-                           "/var/log/aws/codedeploy-agent/"
-                         end
       
-      assert_equal("/tmp", InstanceAgent::Config.config[:log_dir])
+      assert_equal(30, InstanceAgent::Config.config[:wait_between_runs])
       InstanceAgent::Config.load_config
-      assert_equal(expected_log_dir, InstanceAgent::Config.config[:log_dir])
+      assert_equal(1, InstanceAgent::Config.config[:wait_between_runs])
     end
 
     should 'include a newline at the end of the file' do
