@@ -16,6 +16,7 @@ class InstanceAgentConfigTest < InstanceAgentTestCase
         :wait_after_throttle_error => 60,
         :wait_between_runs => 30,
         :verbose => false,
+        :disable_imds_v1 => false,
         :config_file => nil,
         :wait_after_connection_problem => 5,
         :children => 1,

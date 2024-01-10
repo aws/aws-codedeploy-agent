@@ -44,6 +44,7 @@ module ProcessManager
         :log_dir => '/tmp',
         :pid_dir => '/tmp',
         :verbose => false,
+        :disable_imds_v1 => false,
         :wait_after_throttle_error => 60, # wait time in seconds after a we got a throttling exception from SWF
         :wait_between_runs => 5, # wait time in seconds after a run so that we don't run into throttling exceptions
         :wait_after_connection_problem => 5, # wait time in seconds after a connection problem as we don't want to build a fork-bomb
