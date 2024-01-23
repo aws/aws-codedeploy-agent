@@ -1,0 +1,9 @@
+{
+    "amazonaws.com": {
+        "regionRegex" : "^(us|eu|ap|sa|ca|me|af|il)\\-\\w+\\-\\d+|^us\\-gov\\-\\w+\\-\\d+$"
+    },
+
+    "amazonaws.com.cn": {   
+        "regionRegex" : "^cn\\-\\w+\\-\\d+$"
+    }
+}

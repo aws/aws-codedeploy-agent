@@ -1,4 +1,5 @@
 require 'aws-sdk-core'
+require 'json'
 
 module Aws
   module Plugins
@@ -20,10 +21,29 @@ module Aws
           if InstanceMetadata.imds_supported?
             region = InstanceMetadata.region
             domain = InstanceMetadata.domain
+
+            if is_on_prem?
+              partitions_region_pattern = File.read(File.join(File.dirname(__FILE__), 'partition-region-pattern.json'))
+              partitions_region_pattern_hash = JSON.parse(partitions_region_pattern)
+              
+              unless partitions_region_pattern_hash.include?(domain)
+                raise "Unknown domain: #{domain}"
+              end
+              
+              known_region_pattern = partitions_region_pattern_hash[domain]["regionRegex"]
+              
+              unless region.match(known_region_pattern)
+                raise "Invalid region: #{region}"
+              end
+            end
+
+            ProcessManager::Log.info("Creating client url from IMDS region and domain")
           else
             region = cfg.region
             domain = 'amazonaws.com'
             domain += '.cn' if region.split("-")[0] == 'cn'
+
+            ProcessManager::Log.info("Creating client url from configurations")
           end
 
           url = "https://#{service}.#{region}.#{domain}"
@@ -31,6 +51,10 @@ module Aws
 
         ProcessManager::Log.info("CodeDeploy endpoint: #{url}")
         url
+      end
+
+      def self.is_on_prem?
+        return File.readable?(InstanceAgent::Config.config[:on_premises_config_file])
       end
     end
   end
