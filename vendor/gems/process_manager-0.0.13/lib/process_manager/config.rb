@@ -18,9 +18,13 @@ module ProcessManager
 
     def self.load_config
       if File.readable?(config[:config_file])
-        file_config = YAML.load(File.read(config[:config_file])).symbolize_keys
-        config.update(file_config)
-        config_loaded_callbacks.each{|c| c.call}
+        begin
+          file_config = YAML.load(File.read(config[:config_file])).symbolize_keys
+          config.update(file_config)
+          config_loaded_callbacks.each{|c| c.call}
+        rescue Exception => ex
+          raise "An error occurred loading the CodeDeploy agent config file at #{config[:config_file]}. Error message: #{ex}"
+        end
       else
         raise "The config file #{config[:config_file]} does not exist or is not readable"
       end
@@ -44,6 +48,7 @@ module ProcessManager
         :log_dir => '/tmp',
         :pid_dir => '/tmp',
         :verbose => false,
+        :disable_imds_v1 => false,
         :wait_after_throttle_error => 60, # wait time in seconds after a we got a throttling exception from SWF
         :wait_between_runs => 5, # wait time in seconds after a run so that we don't run into throttling exceptions
         :wait_after_connection_problem => 5, # wait time in seconds after a connection problem as we don't want to build a fork-bomb

@@ -325,6 +325,7 @@ module InstanceAgent
         def download_from_s3(deployment_spec, bucket, key, version, etag)
           log(:info, "Downloading artifact bundle from bucket '#{bucket}' and key '#{key}', version '#{version}', etag '#{etag}'")
           options = s3_options()
+          options = InstanceAgent::Config.common_client_config(options)
           s3 = Aws::S3::Client.new(options)
 
           File.open(artifact_bundle(deployment_spec), 'wb') do |file|

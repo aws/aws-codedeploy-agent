@@ -12,6 +12,8 @@ module InstanceAgent
             :http_read_timeout => InstanceAgent::Config.config[:http_read_timeout]
           })
 
+          @options = options.update(InstanceAgent::Config.common_client_config)
+
           if InstanceAgent::Config.config[:log_aws_wire]
             @options = options.update({
               # wire logs might be huge; customers should be careful about turning them on

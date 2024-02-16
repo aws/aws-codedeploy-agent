@@ -14,8 +14,23 @@ module InstanceAgent
             DEPLOYMENT_EVENT_FILE_STALE_TIMELIMIT_SECONDS = 86400 # 24 hour limit in secounds
 
             def self.create_ongoing_deployment_tracking_file(deployment_id, host_command_identifier)
-              FileUtils.mkdir_p(deployment_dir_path())
-              File.write(deployment_event_tracking_file_path(deployment_id), host_command_identifier)
+              retry_interval_in_sec = [1, 2, 5]
+              
+              # deployment tracking file creations intermittently fails on recent windows versions
+              begin
+                FileUtils.mkdir_p(deployment_dir_path())
+                File.write(deployment_event_tracking_file_path(deployment_id), host_command_identifier)
+              rescue Errno::EACCES => error
+                InstanceAgent::Log.warn("Received Errno::EACCESS when creating deployment tracking file, retrying creation")
+                InstanceAgent::Log.warn(error.message)
+                if delay = retry_interval_in_sec.shift
+                  sleep delay
+                  retry
+                else
+                  InstanceAgent::Log.error("Exhausted retries on creating tracking file, rethrowing exception")
+                  raise
+                end
+              end
             end
             
             def self.delete_deployment_tracking_file_if_stale?(deployment_id, timeout)

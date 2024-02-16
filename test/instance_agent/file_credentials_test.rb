@@ -53,7 +53,7 @@ END
     end
 
     should 'raise error when credential file is missing' do
-      assert_raised_with_message("Profile `default' not found in #{credentials_path}", Aws::Errors::NoSuchProfileError) do
+      assert_raised_with_message("Failed to load credentials from path #{credentials_path}", RuntimeError) do
         InstanceAgent::FileCredentials.new(credentials_path)
       end
     end

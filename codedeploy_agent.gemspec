@@ -1,6 +1,6 @@
 Gem::Specification.new do |spec|
   spec.name          = 'aws_codedeploy_agent'
-  spec.version       = '1.6.0'
+  spec.version       = '1.7.0'
   spec.summary       = 'Packages AWS CodeDeploy agent libraries'
   spec.description   = 'AWS CodeDeploy agent is responsible for doing the actual work of deploying software on an individual EC2 instance'
   spec.author        = 'Amazon Web Services'
@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.license        = 'Apache-2.0'
   spec.required_ruby_version = '>= 2.7.0'
 
-  spec.add_dependency('gli', '~> 2.5')
+  spec.add_dependency('gli', '~> 2.21')
   spec.add_dependency('json_pure', '~> 1.6')
   spec.add_dependency('archive-tar-minitar', '~> 0.5.2')
   spec.add_dependency('rubyzip', '~> 1.3.0')

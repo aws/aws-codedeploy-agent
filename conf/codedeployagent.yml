@@ -8,3 +8,4 @@
 :wait_between_runs: 1
 :proxy_uri:
 :max_revisions: 5
+:disable_imds_v1: false
