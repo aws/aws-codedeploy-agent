@@ -71,12 +71,24 @@ class IMDS
   BASE_PATH = '/latest/meta-data'
   IDENTITY_DOCUMENT_PATH = '/latest/dynamic/instance-identity/document'
   DOMAIN_PATH = '/latest/meta-data/services/domain'
+  HTTP_MAX_RETRY_COUNT = 2
 
-  def self.imds_supported?
+  attr :disable_imds_v1
+  attr :log
+  def initialize(disable_imds_v1, log)
+    @disable_imds_v1 = disable_imds_v1
+    @log = log
+  end
+
+  def imds_supported?
     imds_v2? || imds_v1?
   end
 
-  def self.imds_v1?
+  def disable_imds_v1?
+    !!@disable_imds_v1
+  end
+
+  def imds_v1?
     begin
       get_request(BASE_PATH) { |response|
         return response.kind_of? Net::HTTPSuccess
@@ -86,19 +98,18 @@ class IMDS
     end
   end
 
-  def self.imds_v2?
+  def imds_v2?
     begin
-      put_request(TOKEN_PATH) { |token_response|
-        (token_response.kind_of? Net::HTTPSuccess) && get_request(BASE_PATH, token_response.body) { |response|
-          return response.kind_of? Net::HTTPSuccess
-        }
+      token = get_imds_v2_token(TOKEN_PATH)
+      get_request(BASE_PATH, token) { |response|
+        return response.kind_of? Net::HTTPSuccess
       }
     rescue
       false
     end
   end
 
-  def self.region
+  def region
     begin
       identity_document()['region'].strip
     rescue
@@ -106,7 +117,7 @@ class IMDS
     end
   end
 
-  def self.domain
+  def domain
     begin
       get_instance_metadata(DOMAIN_PATH).strip
     rescue
@@ -114,44 +125,63 @@ class IMDS
     end
   end
 
-  def self.identity_document
+  def identity_document
     # JSON is lazy loaded to ensure we dont break older ruby runtimes
     require 'json'
     JSON.parse(get_instance_metadata(IDENTITY_DOCUMENT_PATH).strip)
   end
 
   private
-  def self.get_instance_metadata(path)
+  def get_instance_metadata(path)
     begin
-      token = put_request(TOKEN_PATH)
-      get_request(path, token)
+      token = get_imds_v2_token(TOKEN_PATH)
     rescue
-      get_request(path)
+      if disable_imds_v1?
+        @log.error('HTTP error from metadata service to get imdsv2 token.')
+        raise 'HTTP error from metadata service to get imdsv2 token.'
+      end
+      @log.warn('IMDSv2 http request failed, falling back to IMDSv1.')
+      return get_request(path)
     end
+    get_request(path, token)
   end
 
+  private
+  def get_imds_v2_token(path)
+    @current_imds_v2_token ||= put_request(path)
+  end
 
   private
-  def self.http_request(request)
-    Net::HTTP.start(IP_ADDRESS, 80, :read_timeout => 10, :open_timeout => 10) do |http|
-      response = http.request(request)
-      if block_given?
-        yield(response)
-      elsif response.kind_of? Net::HTTPSuccess
-        response.body
+  def http_request(request)
+    retry_interval_in_sec = [1, 2]
+    begin
+      Net::HTTP.start(IP_ADDRESS, 80, :read_timeout => 10, :open_timeout => 10, :max_retries => HTTP_MAX_RETRY_COUNT) do |http|
+        response = http.request(request)
+        if block_given?
+          yield(response)
+        elsif response.kind_of? Net::HTTPSuccess
+          response.body
+        else
+          raise "HTTP error from metadata service: #{response.message}, code #{response.code}"
+        end
+      end
+    rescue
+      if delay = retry_interval_in_sec.shift # will be nil if the list is empty
+        sleep delay
+        retry # backs up to just after the "begin"
       else
-        raise "HTTP error from metadata service: #{response.message}, code #{response.code}"
+        raise # with no args re-raises original error
       end
     end
   end
 
-  def self.put_request(path, &block)
+  def put_request(path, &block)
     request = Net::HTTP::Put.new(path)
     request['X-aws-ec2-metadata-token-ttl-seconds'] = '21600'
     http_request(request, &block)
   end
 
-  def self.get_request(path, token = nil, &block)
+  def get_request(path, token = nil, &block)
     request = Net::HTTP::Get.new(path)
     unless token.nil?
       request['X-aws-ec2-metadata-token'] = token
@@ -187,8 +217,9 @@ begin
   def usage
     print <<EOF
 
-install [--sanity-check] [--proxy http://hostname:port] <package-type>
+install [--sanity-check] [--disable-imds-v1] [--proxy http://hostname:port] <package-type>
    --sanity-check [optional]
+   --disable-imds-v1 [optional]
    --proxy [optional]
    package-type: 'rpm', 'deb', or 'auto'
 
@@ -207,6 +238,9 @@ the gdebi will be installed using apt-get first.
 
 If --sanity-check is specified, the install script will wait for 3 minutes post installation
 to check for a running agent.
+
+If --disable-imds-v1 is specified, the install script will not fallback to IMDS v1 call when
+IMDS v2 call is failed
 
 To use a HTTP proxy, specify --proxy followed by the proxy server
 defined by http://hostname:port
@@ -267,6 +301,7 @@ EOF
     end
 
     @sanity_check = false
+    @disable_imds_v1 = false
     @reexeced = false
     @http_proxy = nil
     @target_version_arg = nil
@@ -274,6 +309,7 @@ EOF
     @args = Array.new(ARGV)
     opts = GetoptLong.new(
       ['--sanity-check', GetoptLong::NO_ARGUMENT],
+      ['--disable-imds-v1', GetoptLong::NO_ARGUMENT],
       ['--help', GetoptLong::NO_ARGUMENT],
       ['--re-execed', GetoptLong::NO_ARGUMENT],
       ['--proxy', GetoptLong::OPTIONAL_ARGUMENT],
@@ -283,6 +319,8 @@ EOF
       case opt
       when '--sanity-check'
         @sanity_check = true
+      when '--disable-imds-v1'
+        @disable_imds_v1 = true
       when '--help'
         usage
         exit(0)
@@ -347,9 +385,10 @@ EOF
   end
 
   def get_ec2_metadata_property(property)
-    if IMDS.imds_supported?
+    imds = IMDS.new(@disable_imds_v1, @log)
+    if imds.imds_supported?
       begin
-        return IMDS.send(property)
+        return imds.send(property)
       rescue => error
         @log.warn("Could not get #{property} from EC2 metadata service at '#{error.message}'")
       end
@@ -559,7 +598,7 @@ EOF
     else
       #use -n for non-interactive mode
       #use -o to not overwrite config files unless they have not been changed
-      install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dkpg::Options::=--force-confold']
+      install_cmd = ['/usr/bin/gdebi', '-n', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold']
       install_from_s3(s3_bucket, target_version, install_cmd)
       do_sanity_check('/usr/sbin/service')
     end
