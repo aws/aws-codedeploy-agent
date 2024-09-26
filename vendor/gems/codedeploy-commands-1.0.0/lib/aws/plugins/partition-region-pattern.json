@@ -1,6 +1,6 @@
 {
     "amazonaws.com": {
-        "regionRegex" : "^(us|eu|ap|sa|ca|me|af|il)\\-\\w+\\-\\d+|^us\\-gov\\-\\w+\\-\\d+$"
+        "regionRegex" : "^[0-9a-z-]{1,20}$"
     },
 
     "amazonaws.com.cn": {   
