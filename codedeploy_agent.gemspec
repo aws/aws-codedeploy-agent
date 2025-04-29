@@ -1,6 +1,6 @@
 Gem::Specification.new do |spec|
   spec.name          = 'aws_codedeploy_agent'
-  spec.version       = '1.7.1'
+  spec.version       = '1.8.0'
   spec.summary       = 'Packages AWS CodeDeploy agent libraries'
   spec.description   = 'AWS CodeDeploy agent is responsible for doing the actual work of deploying software on an individual EC2 instance'
   spec.author        = 'Amazon Web Services'
