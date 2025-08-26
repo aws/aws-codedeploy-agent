@@ -217,10 +217,12 @@ begin
   def usage
     print <<EOF
 
-install [--sanity-check] [--disable-imds-v1] [--proxy http://hostname:port] <package-type>
+install [--sanity-check] [--disable-imds-v1] [--proxy http://hostname:port] [--user username] [--pass pasword] <package-type>
    --sanity-check [optional]
    --disable-imds-v1 [optional]
    --proxy [optional]
+   --user [optional]
+   --pass [optional]
    package-type: 'rpm', 'deb', or 'auto'
 
 Installs fetches the latest package version of the specified type and
@@ -243,7 +245,8 @@ If --disable-imds-v1 is specified, the install script will not fallback to IMDS 
 IMDS v2 call is failed
 
 To use a HTTP proxy, specify --proxy followed by the proxy server
-defined by http://hostname:port
+defined by http://hostname:port. If it is an authenticated proxy add the additional
+--user and --pass options.
 
 This install script needs Ruby versions 2.x or 3.x installed as a prerequisite.
 Currently recommended Ruby versions are 2.0.0, 2.1.8, 2.2.4, 2.3, 2.4, 2.5, 2.6, 2.7, 3.0, 3.1, and 3.2
@@ -290,7 +293,7 @@ EOF
   end
 
   def parse_args()
-    if (ARGV.length > 4)
+    if (ARGV.length > 7)
       usage
       @log.error('Too many arguments.')
       exit(1)
@@ -304,6 +307,8 @@ EOF
     @disable_imds_v1 = false
     @reexeced = false
     @http_proxy = nil
+    @proxy_user = nil
+    @proxy_pass = nil
     @target_version_arg = nil
 
     @args = Array.new(ARGV)
@@ -313,6 +318,8 @@ EOF
       ['--help', GetoptLong::NO_ARGUMENT],
       ['--re-execed', GetoptLong::NO_ARGUMENT],
       ['--proxy', GetoptLong::OPTIONAL_ARGUMENT],
+      ['--user', GetoptLong::OPTIONAL_ARGUMENT],
+      ['--pass', GetoptLong::OPTIONAL_ARGUMENT],
       ['-v', '--version', GetoptLong::OPTIONAL_ARGUMENT]
     )
     opts.each do |opt, args|
@@ -329,6 +336,14 @@ EOF
       when '--proxy'
         if (args != '')
           @http_proxy = args
+        end
+      when '--user'
+        if (args != '')
+          @proxy_user = args
+        end
+      when '--pass'
+        if (args != '')
+          @proxy_pass = args
         end
       when '-v' || '--version'
         @target_version_arg = args
@@ -439,8 +454,15 @@ EOF
     retries ||= 0
     exceptions = [OpenURI::HTTPError, OpenSSL::SSL::SSLError]
     begin
-      uri.open(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy) do |s3|
-        package_file.write(s3.read)
+      if @proxy_user == nil
+        uri.open(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy) do |s3|
+          package_file.write(s3.read)
+        end
+      else
+        proxy_uri=URI.parse(@http_proxy)
+        uri.open(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy_http_basic_authentication => [proxy_uri, @proxy_user, @proxy_pass]) do |s3|
+          package_file.write(s3.read)
+        end
       end
     rescue *exceptions  => e
       @log.warn("Could not find package to download at '#{uri.to_s}' - Retrying... Attempt: '#{retries.to_s}'")
@@ -465,8 +487,12 @@ EOF
     exceptions = [OpenURI::HTTPError, OpenSSL::SSL::SSLError, Errno::ETIMEDOUT]
     begin
       require 'json'
-
-      version_string = uri.read(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy)
+      if @proxy_user == nil
+        version_string = uri.read(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy => @http_proxy)
+      else
+        proxy_uri=URI.parse(@http_proxy)
+        version_string = uri.read(:ssl_verify_mode => OpenSSL::SSL::VERIFY_PEER, :redirect => true, :read_timeout => 120, :proxy_http_basic_authentication => [proxy_uri, @proxy_user, @proxy_pass])
+      end
       JSON.parse(version_string)
     rescue *exceptions => e
       @log.warn("Could not find version file to download at '#{uri.to_s}' - Retrying... Attempt: '#{retries.to_s}'")
