@@ -3,7 +3,11 @@
         "regionRegex" : "^[0-9a-z-]{1,20}$"
     },
 
-    "amazonaws.com.cn": {   
+    "amazonaws.eu": {
+      "regionRegex" : "^[0-9a-z-]{1,20}$"
+    },
+
+   "amazonaws.com.cn": {
         "regionRegex" : "^cn\\-\\w+\\-\\d+$"
     }
 }

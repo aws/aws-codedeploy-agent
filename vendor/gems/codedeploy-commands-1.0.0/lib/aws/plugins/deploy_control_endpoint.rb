@@ -25,13 +25,13 @@ module Aws
             if is_on_prem?
               partitions_region_pattern = File.read(File.join(File.dirname(__FILE__), 'partition-region-pattern.json'))
               partitions_region_pattern_hash = JSON.parse(partitions_region_pattern)
-              
+
               unless partitions_region_pattern_hash.include?(domain)
                 raise "Unknown domain: #{domain}"
               end
-              
+
               known_region_pattern = partitions_region_pattern_hash[domain]["regionRegex"]
-              
+
               unless region.match(known_region_pattern)
                 raise "Invalid region: #{region}"
               end
@@ -40,8 +40,13 @@ module Aws
             ProcessManager::Log.info("Creating client url from IMDS region and domain")
           else
             region = cfg.region
-            domain = 'amazonaws.com'
-            domain += '.cn' if region.split("-")[0] == 'cn'
+            suffix = case
+                     when region == 'eusc-de-east-1' then 'eu' # Special region has special domain
+                     when region.split("-")[0] == 'cn' then 'com.cn'
+                     else 'com'
+                     end
+
+            domain = "amazonaws.#{suffix}"
 
             ProcessManager::Log.info("Creating client url from configurations")
           end
