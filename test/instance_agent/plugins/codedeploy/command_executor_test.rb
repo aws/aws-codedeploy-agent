@@ -501,7 +501,7 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
               assert_equal "https://example.override.endpoint.com", @command_executor.s3_options[:endpoint].to_s
             end
           end
-
+ 
           context "when no override endpoint provided and not using fips" do
             setup do
               InstanceAgent::Config.config[:s3_endpoint_override] = nil
@@ -522,6 +522,32 @@ class CodeDeployPluginCommandExecutorTest < InstanceAgentTestCase
               assert_equal 'us-east-1', @command_executor.s3_options[:region]
               assert_true @command_executor.s3_options.include? :endpoint
             end
+          end
+
+          context "when region is EU GovCloud with instance metadata" do
+            setup do
+              InstanceAgent::Config.config[:s3_endpoint_override] = nil
+              InstanceAgent::Config.config[:use_fips_mode] = false
+              ENV['AWS_REGION'] = nil
+              InstanceMetadata.stubs(:region).returns('eusc-de-east-1')
+            end
+            should "use S3 EU GovCloud specific endpoint" do
+              assert_equal 'eusc-de-east-1', @command_executor.s3_options[:region]
+              assert_equal 'https://s3.eusc-de-east-1.amazonaws.eu', @command_executor.s3_options[:endpoint]
+            end
+          end
+
+          context "when region is EU GovCloud" do
+            setup do
+              InstanceAgent::Config.config[:s3_endpoint_override] = nil
+              InstanceAgent::Config.config[:use_fips_mode] = false
+              ENV['AWS_REGION'] = 'eusc-de-east-1'
+            end
+            should "use S3 EU GovCloud specific endpoint" do
+              assert_equal 'eusc-de-east-1', @command_executor.s3_options[:region]
+              assert_equal 'https://s3.eusc-de-east-1.amazonaws.eu', @command_executor.s3_options[:endpoint]
+            end
+          end
           end
         end
 
