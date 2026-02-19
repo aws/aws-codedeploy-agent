@@ -122,9 +122,19 @@ class CodeDeployControlTest < InstanceAgentTestCase
           assert_equal "codedeploy-commands.us-east-1.amazonaws.com", codedeploy_control_client.get_client.config.endpoint.host
         end
 
-        should "resolve non .com domains" do
+        should "resolve China (Beijing) domain" do
           codedeploy_control_client = CodeDeployControl.new :region => "cn-north-1"
           assert_equal "codedeploy-commands.cn-north-1.amazonaws.com.cn", codedeploy_control_client.get_client.config.endpoint.host
+        end
+
+        should "resolve China (Ningxia) domain" do
+          codedeploy_control_client = CodeDeployControl.new :region => "cn-northwest-1"
+          assert_equal "codedeploy-commands.cn-northwest-1.amazonaws.com.cn", codedeploy_control_client.get_client.config.endpoint.host
+        end
+
+        should "resolve eu gov cloud domain" do
+          codedeploy_control_client = CodeDeployControl.new :region => "eusc-de-east-1"
+          assert_equal "codedeploy-commands.eusc-de-east-1.amazonaws.eu", codedeploy_control_client.get_client.config.endpoint.host
         end
       end
 

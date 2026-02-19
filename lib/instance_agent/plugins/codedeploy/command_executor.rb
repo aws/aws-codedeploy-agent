@@ -364,6 +364,9 @@ module InstanceAgent
           options[:signature_version] = 'v4'
 
           region = ENV['AWS_REGION'] || InstanceMetadata.region
+          if region == "eusc-de-east-1"
+            options[:endpoint] = 'https://s3.eusc-de-east-1.amazonaws.eu'
+          end
           options[:region] = region
 
           if !InstanceAgent::Config.config[:s3_endpoint_override].to_s.empty?
