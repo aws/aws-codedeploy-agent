@@ -1,0 +1,545 @@
+//! @risk medium
+//!
+//! `DownloadBundle` command.
+//!
+//! Cleans up old archives, downloads the bundle from the appropriate source
+//! (S3, GitHub, local file/directory), unpacks if not a directory, and records
+//! the most recent install.
+
+use crate::aws_clients::S3Client;
+use crate::deployment_specification::types::{DeploymentSpec, RevisionLocation, RevisionSource};
+use crate::host_command::DeploymentArchives;
+use crate::host_command::bundle_downloader::{
+    BundleDownloader, BundleFormat, GitHubDownloader, LocalDirectoryDownloader,
+    LocalFileDownloader, S3Downloader,
+};
+use crate::host_command::bundle_unpacker;
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use tracing::{debug, info};
+
+#[derive(Debug)]
+pub struct DownloadCommand {
+    archives: Arc<DeploymentArchives>,
+    s3_client: Option<S3Client>,
+}
+
+impl DownloadCommand {
+    #[must_use]
+    pub fn new(archives: Arc<DeploymentArchives>, s3_client: Option<S3Client>) -> Self {
+        Self { archives, s3_client }
+    }
+
+    /// Execute the `DownloadBundle` command.
+    ///
+    /// # Errors
+    /// Returns an error if download, unpack, or archive management fails.
+    pub fn execute(&self, spec: &DeploymentSpec) -> io::Result<()> {
+        let deploy_dir = self
+            .archives
+            .deployment_root_dir(&spec.deployment_group_id, &spec.deployment_id);
+        let archive_dir = self.archives.archive_dir(&spec.deployment_group_id, &spec.deployment_id);
+        let bundle_path = self
+            .archives
+            .artifact_bundle_path(&spec.deployment_group_id, &spec.deployment_id);
+
+        self.archives.cleanup_old_archives(&spec.deployment_group_id, &deploy_dir)?;
+
+        debug!("Executing DownloadBundle command");
+
+        self.download(spec, &bundle_path, &archive_dir)?;
+
+        info!(
+            revision_source = ?spec.revision_source,
+            deployment_id = %spec.deployment_id,
+            "Bundle downloaded"
+        );
+
+        if !matches!(spec.revision_source, RevisionSource::LocalDirectory) {
+            if archive_dir.exists() {
+                fs::remove_dir_all(&archive_dir)?;
+            }
+            bundle_unpacker::unpack(&bundle_path, &archive_dir, &Self::bundle_type(spec))?;
+        }
+
+        let instructions_dir = self.archives.instructions_dir();
+        fs::create_dir_all(instructions_dir)?;
+        debug!("Instructions directory created at {}", instructions_dir.display());
+
+        // Ruby: command_executor.rb:308-322 (app_spec_real_path) validates appspec
+        // exists, but only during Install. We check earlier at download time to
+        // fail fast with a clear message rather than letting Install discover it.
+        // NOTE: cleanup_old_archives has already run at this point, matching Ruby's
+        // destructive-then-validate ordering. A missing appspec here means the old
+        // archive may already be gone.
+        let appspec_path = archive_dir.join(&spec.app_spec_path);
+        if !appspec_path.exists() {
+            return Err(io::Error::other(format!(
+                "The deployment failed because the specified file does not exist at the expected \
+                 location: {}. Verify that your AppSpec file is named correctly and that it is in \
+                 the root directory of the revision's source code.",
+                appspec_path.display()
+            )));
+        }
+
+        self.archives.update_most_recent(&spec.deployment_group_id, &deploy_dir)?;
+
+        Ok(())
+    }
+
+    fn download(
+        &self,
+        spec: &DeploymentSpec,
+        bundle_path: &Path,
+        archive_dir: &Path,
+    ) -> io::Result<()> {
+        match &spec.revision {
+            RevisionLocation::S3 { bucket, key, version, etag, .. } => {
+                let client = self.s3_client.as_ref().ok_or_else(|| {
+                    io::Error::other("S3 client not configured for S3 revision source")
+                })?;
+                S3Downloader::new(
+                    client,
+                    bucket.clone(),
+                    key.clone(),
+                    version.clone(),
+                    etag.clone(),
+                    bundle_path.to_path_buf(),
+                )
+                .download()
+            },
+            RevisionLocation::GitHub { .. } => {
+                let downloader = Self::build_github_downloader(spec, bundle_path)?;
+                downloader.download()
+            },
+            RevisionLocation::Local { location, bundle_type: _ } => {
+                if spec.revision_source == RevisionSource::LocalDirectory {
+                    LocalDirectoryDownloader::new(
+                        PathBuf::from(location),
+                        archive_dir.to_path_buf(),
+                    )
+                    .download()
+                } else {
+                    LocalFileDownloader::new(PathBuf::from(location), bundle_path.to_path_buf())
+                        .download()
+                }
+            },
+        }
+    }
+
+    fn build_github_downloader(
+        spec: &DeploymentSpec,
+        bundle_path: &Path,
+    ) -> io::Result<GitHubDownloader> {
+        let RevisionLocation::GitHub {
+            account,
+            repository,
+            commit_id,
+            anonymous,
+            auth_token,
+            bundle_type,
+        } = &spec.revision
+        else {
+            return Err(io::Error::other("Not a GitHub revision"));
+        };
+
+        let format = BundleFormat::from_bundle_type(bundle_type.as_deref())?;
+        let dest = bundle_path.to_path_buf();
+        if *anonymous {
+            Ok(GitHubDownloader::anonymous(
+                account.clone(),
+                repository.clone(),
+                commit_id.clone(),
+                format,
+                dest,
+            ))
+        } else {
+            Ok(GitHubDownloader::authenticated(
+                account.clone(),
+                repository.clone(),
+                commit_id.clone(),
+                auth_token.clone().unwrap_or_default(),
+                format,
+                dest,
+            ))
+        }
+    }
+
+    fn bundle_type(spec: &DeploymentSpec) -> String {
+        match &spec.revision {
+            RevisionLocation::S3 { bundle_type, .. }
+            | RevisionLocation::Local { bundle_type, .. } => bundle_type.clone(),
+            RevisionLocation::GitHub { bundle_type, .. } => {
+                bundle_type.clone().unwrap_or_else(|| "tar".to_string())
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::deployment_specification::types::{
+        DeploymentSpec, RevisionLocation, RevisionSource,
+    };
+    use tempfile::TempDir;
+
+    fn test_archives(dir: &TempDir) -> Arc<DeploymentArchives> {
+        let root = dir.path().join("deployments");
+        let instructions = dir.path().join("instructions");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&instructions).unwrap();
+        Arc::new(DeploymentArchives::new(root, instructions, 5))
+    }
+
+    fn local_file_spec(location: &str) -> DeploymentSpec {
+        DeploymentSpec {
+            deployment_id: "d-123".into(),
+            deployment_group_id: "dg-1".into(),
+            deployment_group_name: "my-group".into(),
+            application_name: "my-app".into(),
+            deployment_creator: "user".into(),
+            deployment_type: "IN_PLACE".into(),
+            app_spec_path: "appspec.yml".into(),
+            file_exists_behavior: "DISALLOW".into(),
+            revision_source: RevisionSource::LocalFile,
+            revision: RevisionLocation::Local {
+                location: location.into(),
+                bundle_type: "tar".into(),
+            },
+            all_possible_lifecycle_events: None,
+        }
+    }
+
+    fn local_dir_spec(location: &str) -> DeploymentSpec {
+        DeploymentSpec {
+            revision_source: RevisionSource::LocalDirectory,
+            revision: RevisionLocation::Local {
+                location: location.into(),
+                bundle_type: "directory".into(),
+            },
+            ..local_file_spec(location)
+        }
+    }
+
+    fn s3_spec() -> DeploymentSpec {
+        DeploymentSpec {
+            revision_source: RevisionSource::S3,
+            revision: RevisionLocation::S3 {
+                bucket: "my-bucket".into(),
+                key: "my-key".into(),
+                bundle_type: "tar".into(),
+                version: None,
+                etag: None,
+            },
+            ..local_file_spec("")
+        }
+    }
+
+    #[test]
+    fn bundle_type_s3() {
+        let spec = s3_spec();
+        assert_eq!(DownloadCommand::bundle_type(&spec), "tar");
+    }
+
+    #[test]
+    fn bundle_type_local() {
+        let spec = local_file_spec("/tmp/bundle.tgz");
+        assert_eq!(DownloadCommand::bundle_type(&spec), "tar");
+    }
+
+    #[test]
+    fn bundle_type_github_default() {
+        let spec = DeploymentSpec {
+            revision_source: RevisionSource::GitHub,
+            revision: RevisionLocation::GitHub {
+                account: "acme".into(),
+                repository: "app".into(),
+                commit_id: "abc".into(),
+                anonymous: true,
+                auth_token: None,
+                bundle_type: None,
+            },
+            ..local_file_spec("")
+        };
+        assert_eq!(DownloadCommand::bundle_type(&spec), "tar");
+    }
+
+    #[test]
+    fn s3_without_client_errors() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        let cmd = DownloadCommand::new(archives, None);
+
+        let spec = s3_spec();
+        let deploy_dir = cmd.archives.deployment_root_dir("dg-1", "d-123");
+        fs::create_dir_all(&deploy_dir).unwrap();
+
+        let err = cmd.execute(&spec).unwrap_err();
+        assert!(err.to_string().contains("S3 client not configured"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_file_creates_symlink_and_unpacks() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        let cmd = DownloadCommand::new(archives.clone(), None);
+
+        // Create a source tar with an appspec
+        let src_dir = dir.path().join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(src_dir.join("appspec.yml"), "version: 0.0\nos: linux").unwrap();
+
+        let tar_path = dir.path().join("bundle.tar");
+        std::process::Command::new("tar")
+            .args([
+                "-cf",
+                &tar_path.display().to_string(),
+                "-C",
+                &src_dir.display().to_string(),
+                ".",
+            ])
+            .output()
+            .unwrap();
+
+        let spec = local_file_spec(&tar_path.display().to_string());
+
+        let deploy_dir = archives.deployment_root_dir("dg-1", "d-123");
+        fs::create_dir_all(&deploy_dir).unwrap();
+
+        cmd.execute(&spec).unwrap();
+
+        // Bundle symlinked
+        let bundle = archives.artifact_bundle_path("dg-1", "d-123");
+        assert!(bundle.is_symlink());
+
+        // Archive unpacked
+        let archive = archives.archive_dir("dg-1", "d-123");
+        assert!(archive.join("appspec.yml").exists());
+
+        // Most recent updated
+        assert!(archives.most_recent_dir("dg-1").is_some());
+
+        // Instructions dir created
+        assert!(archives.instructions_dir().exists());
+    }
+
+    #[test]
+    fn local_directory_copies_without_unpack() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        let cmd = DownloadCommand::new(archives.clone(), None);
+
+        // Create source directory
+        let src_dir = dir.path().join("my-app");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(src_dir.join("appspec.yml"), "version: 0.0").unwrap();
+        fs::write(src_dir.join("script.sh"), "#!/bin/sh").unwrap();
+
+        let spec = local_dir_spec(&src_dir.display().to_string());
+
+        let deploy_dir = archives.deployment_root_dir("dg-1", "d-123");
+        fs::create_dir_all(&deploy_dir).unwrap();
+
+        cmd.execute(&spec).unwrap();
+
+        // Archive dir has copied content (no unpack step)
+        let archive = archives.archive_dir("dg-1", "d-123");
+        assert!(archive.join("appspec.yml").exists());
+        assert!(archive.join("script.sh").exists());
+
+        // Most recent updated
+        assert!(archives.most_recent_dir("dg-1").is_some());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_file_removes_existing_archive_dir_before_unpack() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        let cmd = DownloadCommand::new(archives.clone(), None);
+
+        // Create a source tar
+        let src_dir = dir.path().join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(src_dir.join("appspec.yml"), "version: 0.0\nos: linux").unwrap();
+
+        let tar_path = dir.path().join("bundle.tar");
+        std::process::Command::new("tar")
+            .args([
+                "-cf",
+                &tar_path.display().to_string(),
+                "-C",
+                &src_dir.display().to_string(),
+                ".",
+            ])
+            .output()
+            .unwrap();
+
+        let spec = local_file_spec(&tar_path.display().to_string());
+        let deploy_dir = archives.deployment_root_dir("dg-1", "d-123");
+        fs::create_dir_all(&deploy_dir).unwrap();
+
+        // Pre-create archive dir with stale content — should be removed before unpack
+        let archive_dir = archives.archive_dir("dg-1", "d-123");
+        fs::create_dir_all(&archive_dir).unwrap();
+        fs::write(archive_dir.join("stale.txt"), "old").unwrap();
+
+        cmd.execute(&spec).unwrap();
+
+        // Stale file should be gone, fresh unpack should be present
+        assert!(!archive_dir.join("stale.txt").exists());
+        assert!(archive_dir.join("appspec.yml").exists());
+    }
+
+    #[test]
+    fn bundle_type_github_with_zip() {
+        let spec = DeploymentSpec {
+            revision_source: RevisionSource::GitHub,
+            revision: RevisionLocation::GitHub {
+                account: "acme".into(),
+                repository: "app".into(),
+                commit_id: "abc".into(),
+                anonymous: true,
+                auth_token: None,
+                bundle_type: Some("zip".into()),
+            },
+            ..local_file_spec("")
+        };
+        assert_eq!(DownloadCommand::bundle_type(&spec), "zip");
+    }
+
+    #[test]
+    fn build_downloader_s3_without_client() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        let cmd = DownloadCommand::new(archives.clone(), None);
+
+        let deploy_dir = archives.deployment_root_dir("dg-1", "d-123");
+        fs::create_dir_all(&deploy_dir).unwrap();
+
+        let result = cmd.execute(&s3_spec());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("S3 client not configured"));
+    }
+
+    #[test]
+    fn build_github_downloader_anonymous() {
+        let spec = DeploymentSpec {
+            revision_source: RevisionSource::GitHub,
+            revision: RevisionLocation::GitHub {
+                account: "acme".into(),
+                repository: "app".into(),
+                commit_id: "abc".into(),
+                anonymous: true,
+                auth_token: None,
+                bundle_type: Some("tar".into()),
+            },
+            ..local_file_spec("")
+        };
+        let result = DownloadCommand::build_github_downloader(&spec, Path::new("/tmp/out"));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn build_github_downloader_authenticated() {
+        let spec = DeploymentSpec {
+            revision_source: RevisionSource::GitHub,
+            revision: RevisionLocation::GitHub {
+                account: "acme".into(),
+                repository: "app".into(),
+                commit_id: "abc".into(),
+                anonymous: false,
+                auth_token: Some("ghp_token".into()),
+                bundle_type: Some("zip".into()),
+            },
+            ..local_file_spec("")
+        };
+        let result = DownloadCommand::build_github_downloader(&spec, Path::new("/tmp/out"));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn build_github_downloader_not_github() {
+        let result = DownloadCommand::build_github_downloader(
+            &local_file_spec("/tmp/x"),
+            Path::new("/tmp/out"),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn build_github_downloader_invalid_bundle_type() {
+        let spec = DeploymentSpec {
+            revision_source: RevisionSource::GitHub,
+            revision: RevisionLocation::GitHub {
+                account: "acme".into(),
+                repository: "app".into(),
+                commit_id: "abc".into(),
+                anonymous: true,
+                auth_token: None,
+                bundle_type: Some("rar".into()),
+            },
+            ..local_file_spec("")
+        };
+        let result = DownloadCommand::build_github_downloader(&spec, Path::new("/tmp/out"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("bundle_type other than zip or tar"));
+    }
+
+    #[test]
+    fn missing_appspec_after_download_fails() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        let cmd = DownloadCommand::new(archives.clone(), None);
+
+        // Create source directory without appspec.yml.
+        // Uses LocalDirectory path as representative — the validation runs after
+        // all download types (S3, GitHub, local file) since it checks the
+        // unpacked archive_dir, not the download source.
+        let src_dir = dir.path().join("no-appspec");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(src_dir.join("script.sh"), "#!/bin/sh").unwrap();
+
+        let spec = local_dir_spec(&src_dir.display().to_string());
+        let deploy_dir = archives.deployment_root_dir("dg-1", "d-123");
+        fs::create_dir_all(&deploy_dir).unwrap();
+
+        let err = cmd.execute(&spec).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("does not exist at the expected location"),
+            "unexpected error: {msg}"
+        );
+        assert!(msg.contains("appspec.yml"), "error should mention appspec path: {msg}");
+    }
+
+    #[test]
+    fn execute_github_invalid_bundle_type_fails_fast() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        let cmd = DownloadCommand::new(archives.clone(), None);
+
+        let deploy_dir = archives.deployment_root_dir("dg-1", "d-123");
+        fs::create_dir_all(&deploy_dir).unwrap();
+
+        let spec = DeploymentSpec {
+            revision_source: RevisionSource::GitHub,
+            revision: RevisionLocation::GitHub {
+                account: "acme".into(),
+                repository: "app".into(),
+                commit_id: "abc".into(),
+                anonymous: true,
+                auth_token: None,
+                bundle_type: Some("rar".into()),
+            },
+            ..local_file_spec("")
+        };
+
+        let result = cmd.execute(&spec);
+        assert!(result.is_err());
+    }
+}

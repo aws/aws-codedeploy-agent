@@ -1,0 +1,27 @@
+# Clippy linter configuration
+# See: https://doc.rust-lang.org/clippy/
+
+# Cognitive complexity threshold
+cognitive-complexity-threshold = 30
+
+# Documentation requirements
+missing-docs-in-crate-items = false
+
+# Allowed lints (use sparingly)
+# Example: allow-mixed-uninlined-format-args = true
+
+# Disallowed methods (methods that should not be used)
+disallowed-methods = [
+    # Example: { path = "std::env::set_var", reason = "Use a safer alternative" }
+]
+
+# Disallowed types
+disallowed-types = [
+    # Example: { path = "std::collections::HashMap", reason = "Use IndexMap for deterministic ordering" }
+]
+
+# Maximum function lines
+too-many-lines-threshold = 100
+
+# Type complexity threshold
+type-complexity-threshold = 250

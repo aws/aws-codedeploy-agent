@@ -1,0 +1,6 @@
+---
+:log_dir: /var/log/custom/codedeploy
+:root_dir: /data/deployments
+:verbose: false
+:wait_between_runs: 5
+:max_revisions: 10

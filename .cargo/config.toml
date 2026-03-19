@@ -1,0 +1,25 @@
+# Cargo configuration
+# See: https://doc.rust-lang.org/cargo/reference/config.html
+
+[build]
+# Incremental compilation for faster builds
+incremental = true
+
+[term]
+# Use color in terminal output
+color = "auto"
+verbose = false
+
+[alias]
+# Useful cargo aliases
+fmt-check = "fmt -- --check"
+lint = "clippy --all-targets --all-features -- -D warnings"
+test-all = "test --all-targets --all-features"
+# nextest alias omitted — conflicts with cargo-nextest binary
+coverage = "llvm-cov --html --output-dir coverage --all-targets --all-features"
+coverage-ci = "llvm-cov --lcov --output-path coverage/lcov.info --all-targets --all-features"
+check-all = "check --all-targets --all-features"
+
+# [target.x86_64-unknown-linux-gnu]
+# Linux-specific settings (uncomment if lld linker is available)
+# rustflags = ["-C", "link-arg=-fuse-ld=lld"]

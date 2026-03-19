@@ -1,0 +1,9 @@
+version: 0.0
+os: linux
+files:
+  - source: /
+    destination: /opt/failing-app
+hooks:
+  AfterInstall:
+    - location: scripts/always_fail.sh
+      timeout: 10

@@ -1,0 +1,9 @@
+version: 0.0
+os: linux
+hooks:
+  BeforeInstall:
+    - location: scripts/setup.sh
+      timeout: 60
+  ValidateService:
+    - location: scripts/health_check.sh
+      timeout: 120

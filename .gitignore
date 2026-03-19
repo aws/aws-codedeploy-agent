@@ -1,0 +1,34 @@
+# Build artifacts
+target/
+
+# Cargo lock is committed for binary crates
+# Cargo.lock
+
+# Cargo config
+.cargo/*
+# but track cargo-mutants config (standard location per cargo-mutants docs)
+!.cargo/mutants.toml
+# track cargo aliases so local dev commands stay consistent
+!.cargo/config.toml
+
+# Code coverage reports
+coverage/
+*.profraw
+*.profdata
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Runtime PID files
+test.pid
+
+# JVM attach artifacts
+.attach_*

@@ -1,0 +1,27 @@
+[Unit]
+Description=AWS CodeDeploy Agent
+Documentation=https://docs.aws.amazon.com/codedeploy/latest/userguide/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Type=simple: the master process does not double-fork. systemd tracks the
+# main process directly. PID file is managed by the agent itself for the
+# `status` subcommand; systemd does not need it with Type=simple.
+Type=simple
+ExecStart=/opt/codedeploy-agent/bin/codedeploy-agent start
+ExecStop=/opt/codedeploy-agent/bin/codedeploy-agent stop
+# on-abnormal: only restart on signal/timeout/watchdog, not on clean non-zero
+# exit. The master's internal respawn loop handles worker crashes; systemd
+# should only intervene if the master itself is killed unexpectedly.
+Restart=on-abnormal
+RestartSec=10
+# KillMode defaults to control-group, ensuring worker children are also
+# cleaned up if the master fails to stop them gracefully.
+TimeoutStopSec=7200
+LimitNOFILE=65536
+LimitCORE=infinity
+SyslogIdentifier=codedeploy-agent
+
+[Install]
+WantedBy=multi-user.target
