@@ -1,0 +1,42 @@
+---
+# AWS CodeDeploy Agent Configuration
+#
+# Copy or symlink this file to /etc/codedeploy-agent/conf/codedeployagent.yml
+# for the agent to pick it up automatically, or pass --config-file <path>.
+#
+# All fields are optional — defaults are shown below.
+
+# Logging
+log_dir: /var/log/aws/codedeploy-agent
+verbose: false
+
+# Directories
+root_dir: /opt/codedeploy-agent/deployment-root
+pid_dir: /opt/codedeploy-agent/state/.pid
+
+# Polling
+wait_between_runs: 30
+wait_after_error: 30
+
+# HTTP
+http_read_timeout: 80
+# proxy_uri:
+
+# Deployment
+max_revisions: 5
+enable_deployments_log: true
+
+# Security
+use_fips_mode: false
+enable_auth_policy: false
+disable_imds_v1: false
+
+# Endpoints (leave empty for defaults)
+# deploy_control_endpoint:
+# s3_endpoint_override:
+
+# Shutdown
+kill_agent_max_wait_time_seconds: 7200
+
+# Debug
+enable_command_port: false

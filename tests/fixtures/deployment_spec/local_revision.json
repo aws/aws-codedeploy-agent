@@ -1,0 +1,13 @@
+{
+  "DeploymentId": "d-U1V2W3X4Y",
+  "DeploymentGroupId": "dg-Z5A6B7C8D",
+  "DeploymentGroupName": "local-test",
+  "ApplicationName": "test-app",
+  "Revision": {
+    "RevisionType": "Local File",
+    "LocalRevision": {
+      "Location": "/tmp/bundles/test-app-v1.0.tar.gz",
+      "BundleType": "tar"
+    }
+  }
+}

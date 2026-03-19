@@ -1,0 +1,42 @@
+version: 0.0
+os: linux
+files:
+  - source: Config/config.txt
+    destination: /webapps/Config
+  - source: source
+    destination: /webapps/myApp
+permissions:
+  - object: /webapps/myApp
+    pattern: "**"
+    owner: webapp
+    group: webapp
+    mode: "0755"
+    type:
+      - directory
+  - object: /webapps/Config/config.txt
+    owner: webapp
+    group: webapp
+    mode: "0644"
+    type:
+      - file
+hooks:
+  ApplicationStop:
+    - location: scripts/stop_server.sh
+      timeout: 120
+      runas: webapp
+  BeforeInstall:
+    - location: scripts/install_dependencies.sh
+    - location: scripts/create_dirs.sh
+  AfterInstall:
+    - location: scripts/change_permissions.sh
+      timeout: 30
+    - location: scripts/run_tests.sh
+      timeout: 180
+  ApplicationStart:
+    - location: scripts/start_server.sh
+      timeout: 300
+      runas: webapp
+  ValidateService:
+    - location: scripts/validate.sh
+      timeout: 3600
+      runas: webapp

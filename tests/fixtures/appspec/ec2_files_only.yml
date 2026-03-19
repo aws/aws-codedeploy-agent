@@ -1,0 +1,7 @@
+version: 0.0
+os: linux
+files:
+  - source: /
+    destination: /opt/myapp
+  - source: config/settings.json
+    destination: /etc/myapp

@@ -1,0 +1,29 @@
+version: 0.0
+os: linux
+files:
+  - source: /
+    destination: /opt/secure-app
+permissions:
+  - object: /opt/secure-app
+    pattern: "**"
+    owner: deploy
+    group: deploy
+    mode: "0755"
+    type:
+      - directory
+    acls:
+      - "u:webuser:rwx"
+      - "g:webgroup:r-x"
+      - "default:u:webuser:rwx"
+    context:
+      user: system_u
+      type: httpd_sys_content_t
+      range: s0
+  - object: /opt/secure-app/config/secrets.conf
+    owner: root
+    group: deploy
+    mode: "0640"
+    type:
+      - file
+    acls:
+      - "u:deploy:rw-"

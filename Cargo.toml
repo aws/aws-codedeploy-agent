@@ -1,0 +1,50 @@
+[workspace]
+members = [".", "crates/codedeploy-commands"]
+
+[package]
+name = "aws-codedeploy-agent"
+edition = "2024"
+version = "0.1.0"
+license = "Apache-2.0"
+homepage = "https://github.com/aws/aws-codedeploy-agent"
+repository = "https://github.com/aws/aws-codedeploy-agent"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1.0"
+thiserror = "1.0"
+bitflags = "2.4"
+indexmap = { version = "2.0", features = ["serde"] }
+globset = "0.4"
+nix = { version = "0.29", features = ["user", "fs", "signal", "process"] }
+signal-hook = "0.3"
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "registry", "time"] }
+tracing-appender = "0.2"
+time = { version = "0.3", features = ["macros", "formatting"] }
+nu-path = "0.110"
+tokio = { version = "1", features = ["process", "io-util", "time", "rt", "macros", "sync"] }
+chrono = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+openssl = "0.10"
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-credential-types = "1"
+aws-sdk-s3 = "1"
+aws-smithy-types = "1"
+codedeploy-commands = { path = "crates/codedeploy-commands" }
+
+[dev-dependencies]
+tempfile = "3"
+filetime = "0.2"
+assert_cmd = "2"
+predicates = "3"
+walkdir = "2"
+
+[profile.release]
+# debug = "limited"
+
+# Allow cfg(coverage) used by cargo-llvm-cov to exclude untestable system command code
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }

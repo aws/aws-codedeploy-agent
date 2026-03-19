@@ -1,0 +1,36 @@
+# Rust formatter configuration (stable features only)
+# See: https://rust-lang.github.io/rustfmt/
+
+edition = "2024"
+
+# Formatting options
+max_width = 100
+hard_tabs = false
+tab_spaces = 4
+newline_style = "Unix"
+
+# Code style
+use_small_heuristics = "Default"
+fn_call_width = 80
+struct_lit_width = 80
+chain_width = 80
+
+# Match formatting
+match_block_trailing_comma = true
+
+# Use field init shorthand
+use_field_init_shorthand = true
+
+# Misc
+remove_nested_parens = true
+
+# Note: The following features require nightly Rust:
+# - wrap_comments, comment_width, normalize_comments
+# - format_code_in_doc_comments, format_strings, format_macro_bodies
+# - imports_granularity, group_imports
+# - overflow_delimited_expr, trailing_comma, trailing_semicolon
+# - blank_lines_upper_bound, blank_lines_lower_bound
+# - reorder_impl_items
+#
+# To use these features, switch to nightly:
+# rustup default nightly

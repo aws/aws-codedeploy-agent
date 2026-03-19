@@ -1,2 +1,0 @@
-  #!/bin/bash
-  [[ $1 == Ruby27x ]] || exit 1

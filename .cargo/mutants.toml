@@ -1,0 +1,33 @@
+# Use nextest as the test runner for mutation testing
+# See: https://nexte.st/docs/integrations/cargo-mutants/
+test_tool = "nextest"
+
+# Only examine source files
+examine_globs = ["src/**/*.rs"]
+
+# Exclude test-only files from mutation
+exclude_globs = ["tests/**/*.rs"]
+
+# Skip mutations on logging/panic macros (no observable behavior to test)
+skip_calls_defaults = true
+skip_calls = [
+    "println!",
+    "eprintln!",
+    "log::debug!",
+    "log::info!",
+    "log::warn!",
+    "log::error!",
+    "log::trace!",
+    "tracing::debug!",
+    "tracing::info!",
+    "tracing::warn!",
+    "tracing::error!",
+    "tracing::trace!",
+]
+
+# Timeout multipliers relative to baseline
+timeout_multiplier = 3.0
+build_timeout_multiplier = 3.0
+
+# Suppress lint warnings in mutated builds
+cap_lints = true

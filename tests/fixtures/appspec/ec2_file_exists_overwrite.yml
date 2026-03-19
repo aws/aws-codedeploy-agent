@@ -1,0 +1,9 @@
+version: 0.0
+os: linux
+file_exists_behavior: OVERWRITE
+files:
+  - source: /
+    destination: /var/www/html
+hooks:
+  AfterInstall:
+    - location: scripts/restart.sh

@@ -1,0 +1,14 @@
+{
+  "DeploymentId": "d-TAR12345A",
+  "DeploymentGroupId": "dg-TAR12345B",
+  "DeploymentGroupName": "tar-deploy",
+  "ApplicationName": "tar-app",
+  "Revision": {
+    "RevisionType": "S3",
+    "S3Revision": {
+      "Bucket": "deploy-artifacts",
+      "Key": "builds/tar-app/release.tar",
+      "BundleType": "tar"
+    }
+  }
+}

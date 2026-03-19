@@ -1,0 +1,18 @@
+{
+  "DeploymentId": "d-A1B2C3D4E",
+  "DeploymentGroupId": "dg-F5G6H7I8J",
+  "DeploymentGroupName": "production-fleet",
+  "ApplicationName": "my-web-app",
+  "DeploymentCreator": "user",
+  "DeploymentType": "IN_PLACE",
+  "Revision": {
+    "RevisionType": "S3",
+    "S3Revision": {
+      "Bucket": "my-deploy-bucket",
+      "Key": "releases/my-web-app/v2.1.0.tar.gz",
+      "BundleType": "tgz",
+      "Version": "abc123def456",
+      "ETag": "d41d8cd98f00b204e9800998ecf8427e"
+    }
+  }
+}
