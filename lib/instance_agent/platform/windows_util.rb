@@ -1,6 +1,5 @@
-require 'archive/tar/minitar'
+require 'minitar'
 require 'zlib'
-include Archive::Tar
 
 module InstanceAgent
 

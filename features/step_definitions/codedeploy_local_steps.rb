@@ -1,7 +1,6 @@
-require 'archive/tar/minitar'
+require 'minitar'
 require 'zlib'
 require 'pathname'
-include Archive::Tar
 
 $:.unshift File.join(File.dirname(File.expand_path('../../..', __FILE__)), 'lib')
 $:.unshift File.join(File.dirname(File.expand_path('../../..', __FILE__)), 'features')

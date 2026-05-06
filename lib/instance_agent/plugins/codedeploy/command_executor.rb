@@ -505,7 +505,12 @@ module InstanceAgent
                 zipfile.each do |f|
                   file_dst = File.join(dst, f.name)
                   FileUtils.mkdir_p(File.dirname(file_dst))
-                  zipfile.extract(f, file_dst) { true }
+                  FileUtils.rm_f(file_dst)
+                  if Gem::Version.new(Gem.loaded_specs['rubyzip'].version) >= Gem::Version.new('3.0')
+                    zipfile.extract(f, destination_directory: dst)
+                  else
+                    zipfile.extract(f, file_dst)
+                  end
                 end
               end
             end

@@ -9,19 +9,19 @@ Gem::Specification.new do |spec|
   spec.bindir        = ['bin']
   spec.require_paths = ['lib']
   spec.license        = 'Apache-2.0'
-  spec.required_ruby_version = '>= 2.7.0'
+  spec.required_ruby_version = '>= 2.7.0', '< 3.4'
 
-  spec.add_dependency('gli', '~> 2.21')
-  spec.add_dependency('json_pure', '~> 1.6')
-  spec.add_dependency('minitar', '~> 0.6.1')
-  spec.add_dependency('rubyzip', '~> 1.3.0')
-  spec.add_dependency('logging', '~> 2.2')
-  spec.add_dependency('aws-sdk-core', '~> 3')
-  spec.add_dependency('aws-sdk-s3', '~> 1')
-  spec.add_dependency('docopt', '~> 0.5.0')
-  spec.add_dependency('concurrent-ruby', '~> 1.1.9')
-  spec.add_dependency('rexml', '~> 3.3.9')
+  spec.add_dependency('gli', '2.22.2')
+  spec.add_dependency('json_pure', '2.8.1')
+  spec.add_dependency('minitar', '0.12.1')
+  spec.add_dependency('rubyzip', '2.4.1')
+  spec.add_dependency('logging', '2.4.0')
+  spec.add_dependency('aws-sdk-core', '3.246.0')
+  spec.add_dependency('aws-sdk-s3', '1.220.0')
+  spec.add_dependency('docopt', '0.5.0')
+  spec.add_dependency('concurrent-ruby', '1.1.10')
+  spec.add_dependency('rexml', '3.3.9')
 
-  spec.add_development_dependency('rake', '~> 12.3.3')
-  spec.add_development_dependency('rspec', '~> 3.2.0')
+  spec.add_development_dependency('rake', '13.4.2')
+  spec.add_development_dependency('rspec', '3.13.2')
 end

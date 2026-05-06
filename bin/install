@@ -245,8 +245,8 @@ IMDS v2 call is failed
 To use a HTTP proxy, specify --proxy followed by the proxy server
 defined by http://hostname:port
 
-This install script needs Ruby versions 2.x or 3.x installed as a prerequisite.
-Currently recommended Ruby versions are 2.0.0, 2.1.8, 2.2.4, 2.3, 2.4, 2.5, 2.6, 2.7, 3.0, 3.1, and 3.2
+This install script needs Ruby versions 2.7 or 3.[1-3] installed as a prerequisite.
+Currently recommended Ruby versions are 2.7, 3.0, 3.1, 3.2, and 3.3
 If multiple Ruby versions are installed, the default ruby version will be used.
 If the default ruby version does not satisfy requirement, the newest version will be used.
 If you do not have a supported Ruby version installed, please install one of them first.
@@ -255,7 +255,7 @@ EOF
   end
 
   def supported_ruby_versions
-    ['3.2','3.1','3.0', '2.7', '2.6', '2.5', '2.4', '2.3', '2.2', '2.1', '2.0']
+    ['3.3', '3.2', '3.1', '3.0', '2.7']
   end
 
   # check ruby version, only version 2.x 3.x works

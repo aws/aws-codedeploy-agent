@@ -28,7 +28,7 @@ class UnpackBundleTest < InstanceAgentTestCase
     end
     # create the bundle as a local zip file
     @local_file_location = File.join(@local_file_directory, "bundle.zip")
-    Zip::File.open(@local_file_location, Zip::File::CREATE) do |zipfile|
+    Zip::File.open(@local_file_location, create: true) do |zipfile|
       input_filenames.each do |filename|
         zipfile.add(filename, File.join(@local_file_directory, filename))
       end
