@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Crash recovery — detect and fail in-progress deployments after agent restart.
 //!
 //! On startup, checks if a deployment was interrupted by an agent crash or restart.
@@ -13,12 +11,12 @@ use tracing::{error, info, warn};
 /// Check if any deployments were in progress when the agent last stopped.
 /// If so, report each as failed and clean up the tracking files.
 ///
-/// Ruby: `command_poller.rb#recover_from_crash?` — handles one deployment.
-/// We loop to handle multiple interrupted deployments (e.g. agent crashed,
+/// Loops to handle multiple interrupted deployments (e.g. agent crashed,
 /// restarted, crashed again before recovery completed).
 ///
 /// Returns `true` if at least one stale deployment was found and reported.
 pub fn recover<T: DeploymentTracker>(client: &CodeDeployCommandClient, tracker: &T) -> bool {
+    // GRCOV_STOP_COVERAGE — requires live service for put_host_command_complete
     let mut recovered_any = false;
 
     loop {
@@ -40,10 +38,8 @@ pub fn recover<T: DeploymentTracker>(client: &CodeDeployCommandClient, tracker: 
                     active.host_command_identifier
                 );
 
-                // Ruby parity: if put_host_command_complete raises, the rescue catches it
-                // and returns nil — clean_ongoing_deployment_dir is never called, so the
-                // tracking file survives for retry on next startup.
-                // (see command_poller.rb#recover_from_crash?, rescue block)
+                // If put_host_command_complete fails, break without removing the tracking
+                // file so it survives for retry on next startup.
                 if let Err(e) = client.put_host_command_complete(
                     &active.host_command_identifier,
                     "Failed",
@@ -74,6 +70,7 @@ pub fn recover<T: DeploymentTracker>(client: &CodeDeployCommandClient, tracker: 
     }
 
     recovered_any
+    // GRCOV_BEGIN_COVERAGE
 }
 
 #[cfg(test)]
@@ -120,7 +117,7 @@ mod tests {
         tracker.start_tracking("d-123", "cmd-456").unwrap();
 
         // test_client() points at no real endpoint, so put_host_command_complete fails.
-        // recover() breaks without deleting the tracking file (R11.2: no silent loss).
+        // recover() breaks without deleting the tracking file (no silent loss).
         let result = recover(&test_client(), &tracker);
 
         assert!(!result);

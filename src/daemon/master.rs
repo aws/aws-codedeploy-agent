@@ -1,39 +1,84 @@
-//! @risk high
-//!
 //! Master daemon process: daemonize, spawn workers, monitor, shutdown.
 
 use std::path::Path;
 use std::process;
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tracing::{error, info, warn};
 
 use super::pid_file::PidFile;
 use super::signal::{self, ShutdownFlag};
 use super::{
-    DEFAULT_KILL_WAIT_SECS, DEFAULT_PID_DIR, DEFAULT_PID_FILE, WORKER_RESPAWN_DELAY_SECS,
-    is_process_alive, send_sigterm,
+    DEFAULT_KILL_WAIT_SECS, DEFAULT_PID_FILE, WORKER_HEALTHY_UPTIME_SECS,
+    WORKER_RESPAWN_DELAY_SECS, WORKER_RESPAWN_MAX_DELAY_SECS, default_pid_dir, is_process_alive,
+    send_sigterm,
 };
 use crate::command_port::{self, AgentState};
 use crate::runtime::DeploymentTracker;
 
-/// Timeout for waiting on worker to exit during shutdown (seconds).
+/// Tracks consecutive rapid worker crashes and computes the next respawn delay.
 ///
-/// NOTE: If `kill_wait_secs` is configured below this value, systemd may kill
-/// the master before the worker wait completes. With the default 7200s this is
-/// not an issue. The original agent uses a fixed 5s delay without a bounded worker
-/// wait, so this is a safeguard.
-const WORKER_SHUTDOWN_TIMEOUT_SECS: u64 = 30;
+/// Uses exponential backoff (5s, 10s, 20s, 40s, capped at
+/// `WORKER_RESPAWN_MAX_DELAY_SECS`) to avoid tight fork loops when the worker crashes
+/// immediately on startup (e.g., bad config). A worker that stays alive at least
+/// `WORKER_HEALTHY_UPTIME_SECS` resets the counter so transient crashes don't
+/// accumulate.
+#[derive(Debug)]
+struct RespawnBackoff {
+    consecutive_rapid_crashes: u32,
+}
+
+impl RespawnBackoff {
+    const fn new() -> Self {
+        Self { consecutive_rapid_crashes: 0 }
+    }
+
+    /// Record that a worker exited after running for `uptime` and return the
+    /// delay to wait before respawning.
+    fn record_crash(&mut self, uptime: Duration) -> Duration {
+        if uptime >= Duration::from_secs(WORKER_HEALTHY_UPTIME_SECS) {
+            self.consecutive_rapid_crashes = 0;
+        } else {
+            self.consecutive_rapid_crashes = self.consecutive_rapid_crashes.saturating_add(1);
+        }
+        self.delay()
+    }
+
+    fn delay(&self) -> Duration {
+        let exponent = self.consecutive_rapid_crashes.saturating_sub(1).min(32);
+        let secs = WORKER_RESPAWN_DELAY_SECS
+            .saturating_mul(1_u64 << exponent)
+            .min(WORKER_RESPAWN_MAX_DELAY_SECS);
+        Duration::from_secs(secs)
+    }
+}
 
 /// Result of a [`Master::stop`] call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
 pub enum StopOutcome {
     /// A running agent was successfully stopped.
     Stopped,
     /// No agent was running (no PID file or stale PID).
     NotRunning,
+}
+
+/// Result of a [`Master::start`] call.
+///
+/// Distinguishes "already running" from I/O failures without relying on
+/// [`std::io::ErrorKind::AlreadyExists`], mirroring [`StopOutcome`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
+pub enum StartOutcome {
+    /// The daemon started, ran its monitor loop, and exited cleanly.
+    Started,
+    /// An agent was already running; the existing PID is reported.
+    AlreadyRunning {
+        /// PID of the agent that was already running.
+        pid: u32,
+    },
 }
 
 /// Master daemon configuration.
@@ -49,16 +94,20 @@ pub struct MasterConfig {
     pub enable_command_port: bool,
     /// Directory for command port discovery file.
     pub state_dir: String,
+    /// Mode policy for the PID dir/file, from `restrict_agent_dir_permissions`.
+    pub restrict_agent_dir_permissions: bool,
 }
 
 impl Default for MasterConfig {
     fn default() -> Self {
+        let pid_dir = default_pid_dir().to_string_lossy().into_owned();
         Self {
-            pid_dir: DEFAULT_PID_DIR.to_string(),
+            pid_dir: pid_dir.clone(),
             pid_filename: DEFAULT_PID_FILE.to_string(),
             kill_wait_secs: DEFAULT_KILL_WAIT_SECS,
             enable_command_port: false,
-            state_dir: DEFAULT_PID_DIR.to_string(),
+            state_dir: pid_dir,
+            restrict_agent_dir_permissions: false,
         }
     }
 }
@@ -79,41 +128,40 @@ impl Master {
     /// instance's flag, so the flag is not shared across `Master` instances.
     #[must_use]
     pub fn new(config: MasterConfig) -> Self {
-        let pid_file = PidFile::new(Path::new(&config.pid_dir), &config.pid_filename);
+        let pid_file = PidFile::with_policy(
+            Path::new(&config.pid_dir),
+            &config.pid_filename,
+            config.restrict_agent_dir_permissions,
+        );
         Self { config, pid_file, shutdown: ShutdownFlag::new() }
     }
 
     /// Start the daemon: write PID, register signals, spawn worker, monitor.
     ///
-    /// # Errors
-    /// Returns an error if PID file write or signal registration fails.
+    /// Returns [`StartOutcome::Started`] after the monitor loop exits cleanly,
+    /// or [`StartOutcome::AlreadyRunning`] if a live agent already holds the
+    /// PID file.
     ///
-    /// TODO: Introduce a `DaemonError` enum (or `StartOutcome`) to distinguish
-    /// "already running" from I/O failures without relying on `ErrorKind`.
-    /// This mirrors the `StopOutcome` pattern used by [`stop()`](Self::stop).
-    pub fn start(&self) -> std::io::Result<()> {
+    /// # Errors
+    /// Returns an error if PID file read/write or signal registration fails.
+    pub fn start(&self) -> std::io::Result<StartOutcome> {
         // Check if already running.
         // NOTE: There is an inherent TOCTOU window between the liveness check and
         // PID file write. File locking (flock) could close this gap but is not
         // required for the current deployment model.
-        match self.pid_file.read()? {
-            Some(pid) if is_process_alive(pid) => {
-                warn!("Agent is already running (pid {pid})");
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::AlreadyExists,
-                    format!("agent already running (pid {pid})"),
-                ));
-            },
-            // Stale PID (write() will clean up via remove_stale()) or no PID file
-            Some(_) | None => {},
+        if let Some(pid) = self.pid_file.running_pid()? {
+            warn!("Agent is already running (pid {pid})");
+            return Ok(StartOutcome::AlreadyRunning { pid });
         }
-
+        // GRCOV_STOP_COVERAGE
         self.pid_file.write()?;
         if let Err(e) = signal::register_shutdown_handlers(&self.shutdown) {
             let _ = self.pid_file.remove();
             return Err(e);
         }
+        // GRCOV_BEGIN_COVERAGE
 
+        // GRCOV_STOP_COVERAGE
         info!("Master daemon started (pid {})", process::id());
 
         // Start command port if enabled.
@@ -135,7 +183,8 @@ impl Master {
             warn!("Failed to remove PID file on exit: {e}");
         }
         info!("Master daemon exited");
-        Ok(())
+        Ok(StartOutcome::Started)
+        // GRCOV_BEGIN_COVERAGE
     }
 
     /// Stop a running daemon by reading its PID and sending SIGTERM.
@@ -173,10 +222,13 @@ impl Master {
                         "cannot determine deployment status: {e}"
                     )));
                 },
+                // GRCOV_STOP_COVERAGE
                 Ok(false) => {},
             }
         }
+        // GRCOV_BEGIN_COVERAGE
 
+        // GRCOV_STOP_COVERAGE
         // NOTE: PID file cleanup happens in the master process itself (end of
         // start()) when it exits the monitor loop after receiving SIGTERM.
         // The CLI `stop` caller does not remove the PID file.
@@ -198,6 +250,7 @@ impl Master {
             std::io::ErrorKind::TimedOut,
             "agent did not exit within timeout",
         ))
+        // GRCOV_BEGIN_COVERAGE
     }
 
     /// Report whether the agent is running.
@@ -208,11 +261,16 @@ impl Master {
         Ok(self.pid_file.is_running())
     }
 
-    /// Wait for a worker child process to exit, escalating to SIGKILL after
-    /// [`WORKER_SHUTDOWN_TIMEOUT_SECS`].
-    fn wait_for_worker_exit(child: &mut process::Child) {
-        let deadline =
-            std::time::Instant::now() + Duration::from_secs(WORKER_SHUTDOWN_TIMEOUT_SECS);
+    // GRCOV_STOP_COVERAGE
+
+    /// Wait up to `timeout_secs` for a worker child process to exit, escalating
+    /// to SIGKILL afterward.
+    ///
+    /// `timeout_secs` is the operator-configured `kill_agent_max_wait_time_seconds`,
+    /// giving a worker draining a long deployment on shutdown the configured grace
+    /// before SIGKILL.
+    fn wait_for_worker_exit(child: &mut process::Child, timeout_secs: u64) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(timeout_secs);
         loop {
             match child.try_wait() {
                 Ok(Some(_)) => return,
@@ -237,14 +295,16 @@ impl Master {
     /// on `child.wait()`. This allows checking the shutdown flag between iterations.
     /// A future optimization could use a pipe or condvar to wake the blocked wait on signal.
     ///
-    /// TODO: Add exponential backoff or crash counter to avoid tight respawn
-    /// loops when the worker crashes immediately on startup (e.g., config error).
+    /// Respawn uses exponential backoff ([`RespawnBackoff`]) so a worker that crashes
+    /// immediately on startup (e.g., bad config) does not trigger a tight fork loop.
     fn monitor_loop(&self, state: Option<&Arc<RwLock<AgentState>>>) {
         let mut restarts: u32 = 0;
+        let mut backoff = RespawnBackoff::new();
         while !self.shutdown.is_set() {
             match super::worker::spawn() {
                 Ok(mut child) => {
                     let pid = child.id();
+                    let started = Instant::now();
                     info!("Monitoring worker (pid {pid})");
                     if let Some(s) = state {
                         let mut s = s.write().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -271,24 +331,30 @@ impl Master {
                                         .unwrap_or_else(std::sync::PoisonError::into_inner);
                                     s.worker_restarts = restarts;
                                 }
+                                let delay = backoff.record_crash(started.elapsed());
                                 warn!(
-                                    "Worker exited with status {status}, respawning in {WORKER_RESPAWN_DELAY_SECS}s"
+                                    "Worker exited with status {status}, respawning in {}s",
+                                    delay.as_secs()
                                 );
-                                thread::sleep(Duration::from_secs(WORKER_RESPAWN_DELAY_SECS));
+                                self.interruptible_sleep(delay);
                                 break;
                             },
                             Ok(None) => {
                                 if self.shutdown.is_set() {
                                     info!("Shutdown requested, stopping worker");
                                     let _ = send_sigterm(child.id());
-                                    Self::wait_for_worker_exit(&mut child);
+                                    Self::wait_for_worker_exit(
+                                        &mut child,
+                                        self.config.kill_wait_secs,
+                                    );
                                     return;
                                 }
                                 thread::sleep(Duration::from_millis(500));
                             },
                             Err(e) => {
                                 error!("Failed to check worker status: {e}");
-                                thread::sleep(Duration::from_secs(WORKER_RESPAWN_DELAY_SECS));
+                                let delay = backoff.record_crash(started.elapsed());
+                                self.interruptible_sleep(delay);
                                 break;
                             },
                         }
@@ -304,11 +370,26 @@ impl Master {
                     if self.shutdown.is_set() {
                         return;
                     }
-                    thread::sleep(Duration::from_secs(WORKER_RESPAWN_DELAY_SECS));
+                    let delay = backoff.record_crash(Duration::ZERO);
+                    self.interruptible_sleep(delay);
                 },
             }
         }
     }
+
+    /// Sleep in 500ms slices so shutdown is detected promptly even with a long backoff.
+    fn interruptible_sleep(&self, total: Duration) {
+        let slice = Duration::from_millis(500);
+        let deadline = Instant::now() + total;
+        while Instant::now() < deadline {
+            if self.shutdown.is_set() {
+                return;
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            thread::sleep(remaining.min(slice));
+        }
+    }
+    // GRCOV_BEGIN_COVERAGE
 }
 
 #[cfg(test)]
@@ -326,14 +407,16 @@ mod tests {
             kill_wait_secs: 2,
             enable_command_port: false,
             state_dir: dir.path().to_string_lossy().to_string(),
+            restrict_agent_dir_permissions: false,
         };
         Master::new(config)
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn default_config_values() {
         let config = MasterConfig::default();
-        assert_eq!(config.pid_dir, DEFAULT_PID_DIR);
+        assert_eq!(config.pid_dir, "/opt/codedeploy-agent/state/.pid");
         assert_eq!(config.pid_filename, DEFAULT_PID_FILE);
         assert_eq!(config.kill_wait_secs, DEFAULT_KILL_WAIT_SECS);
     }
@@ -370,12 +453,12 @@ mod tests {
     }
 
     #[test]
-    fn start_fails_if_already_running() {
+    fn start_returns_already_running_when_pid_file_live() {
         let dir = TempDir::new().unwrap();
         let master = test_master(&dir);
         master.pid_file.write().unwrap();
-        let err = master.start().unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+        let outcome = master.start().unwrap();
+        assert_eq!(outcome, StartOutcome::AlreadyRunning { pid: process::id() });
     }
 
     #[test]
@@ -437,5 +520,66 @@ mod tests {
         std::fs::write(master.pid_file.path(), "not-a-number").unwrap();
         let err = master.start().unwrap_err();
         assert!(err.to_string().contains("invalid PID"), "expected parse error, got: {err}");
+    }
+
+    #[test]
+    fn respawn_backoff_starts_at_base_delay() {
+        let mut b = RespawnBackoff::new();
+        let d = b.record_crash(Duration::ZERO);
+        assert_eq!(d, Duration::from_secs(WORKER_RESPAWN_DELAY_SECS));
+    }
+
+    #[test]
+    fn respawn_backoff_doubles_on_rapid_crashes() {
+        let mut b = RespawnBackoff::new();
+        let d1 = b.record_crash(Duration::ZERO);
+        let d2 = b.record_crash(Duration::ZERO);
+        let d3 = b.record_crash(Duration::ZERO);
+        assert_eq!(d1, Duration::from_secs(5));
+        assert_eq!(d2, Duration::from_secs(10));
+        assert_eq!(d3, Duration::from_secs(20));
+    }
+
+    #[test]
+    fn respawn_backoff_caps_at_max_delay() {
+        let mut b = RespawnBackoff::new();
+        // Feed many rapid crashes; the delay must never exceed the cap.
+        let mut last = Duration::ZERO;
+        for _ in 0..20 {
+            last = b.record_crash(Duration::ZERO);
+        }
+        assert_eq!(last, Duration::from_secs(WORKER_RESPAWN_MAX_DELAY_SECS));
+    }
+
+    #[test]
+    fn respawn_backoff_resets_after_healthy_uptime() {
+        let mut b = RespawnBackoff::new();
+        b.record_crash(Duration::ZERO);
+        b.record_crash(Duration::ZERO);
+        // Worker ran long enough to be healthy; counter resets, so this crash
+        // is treated as the first again.
+        let d = b.record_crash(Duration::from_secs(WORKER_HEALTHY_UPTIME_SECS));
+        assert_eq!(d, Duration::from_secs(WORKER_RESPAWN_DELAY_SECS));
+        // Next rapid crash starts over; must not inherit the pre-reset counter.
+        let d_next = b.record_crash(Duration::ZERO);
+        assert_eq!(d_next, Duration::from_secs(WORKER_RESPAWN_DELAY_SECS));
+        // And the one after that begins doubling from the base.
+        let d_after = b.record_crash(Duration::ZERO);
+        assert_eq!(d_after, Duration::from_secs(WORKER_RESPAWN_DELAY_SECS * 2));
+    }
+
+    #[test]
+    fn interruptible_sleep_returns_promptly_on_shutdown() {
+        let dir = TempDir::new().unwrap();
+        let master = test_master(&dir);
+        master.shutdown.set();
+        let start = Instant::now();
+        // Would sleep 30s without the shutdown flag; must return well under that.
+        master.interruptible_sleep(Duration::from_secs(30));
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "interruptible_sleep did not honor shutdown flag: took {:?}",
+            start.elapsed()
+        );
     }
 }

@@ -1,5 +1,3 @@
-//! @risk low
-//!
 //! Status command — returns current agent state.
 
 use super::AgentState;

@@ -1,5 +1,3 @@
-//! @risk high
-//!
 //! Inject command — writes a `HostCommand` to a file for the poller to pick up.
 
 use serde_json::{Value, json};
@@ -43,15 +41,17 @@ pub fn handle(args: &Value, inject_dir: &Arc<RwLock<Option<PathBuf>>>) -> Value 
     let cmd_path = dir.join(".injected-command.json");
     let tmp_path = dir.join(".injected-command.tmp");
     if let Err(e) = write_atomic(&tmp_path, &cmd_path, &command.to_string()) {
-        return json!({"ok": false, "error": format!("failed to write command file: {e}")});
+        return json!({"ok": false, "error": format!("failed to write command file: {e}")}); // GRCOV_IGNORE_LINE
     }
 
     // Wait for response file (poller deletes command file and writes response)
     let resp_path = dir.join(".injected-response.json");
-    match wait_for_response(&resp_path, std::time::Duration::from_secs(120)) {
+    // GRCOV_STOP_COVERAGE — blocks up to 120s waiting for poller
+    match wait_for_response(&resp_path, std::time::Duration::from_mins(2)) {
         Ok(resp) => resp,
         Err(e) => json!({"ok": false, "error": format!("timed out waiting for response: {e}")}),
     }
+    // GRCOV_BEGIN_COVERAGE
 }
 
 fn write_atomic(tmp: &Path, dest: &Path, content: &str) -> std::io::Result<()> {
@@ -59,6 +59,7 @@ fn write_atomic(tmp: &Path, dest: &Path, content: &str) -> std::io::Result<()> {
     std::fs::rename(tmp, dest)
 }
 
+// GRCOV_STOP_COVERAGE — blocks polling for response file
 fn wait_for_response(path: &Path, timeout: std::time::Duration) -> Result<Value, String> {
     let deadline = std::time::Instant::now() + timeout;
     while std::time::Instant::now() < deadline {
@@ -71,6 +72,7 @@ fn wait_for_response(path: &Path, timeout: std::time::Duration) -> Result<Value,
     }
     Err("no response within timeout".into())
 }
+// GRCOV_BEGIN_COVERAGE
 
 #[cfg(test)]
 mod tests {

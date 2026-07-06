@@ -1,6 +1,6 @@
 //! Integration tests for deployment specification parsing using fixture files.
 
-use aws_codedeploy_agent::deployment_specification::types::{
+use codedeploy_agent::deployment_specification::types::{
     DeploymentSpec, RevisionLocation, RevisionSource,
 };
 

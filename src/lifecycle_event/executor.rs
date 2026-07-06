@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Hook executor — orchestrates running lifecycle event scripts.
 //!
 //! Selects the correct deployment directory, parses the appspec, and executes
@@ -14,7 +12,7 @@
 use super::LifecycleEventType;
 use super::deployment_selector::select_deployment_dir;
 use super::error::{ErrorCode, ScriptError};
-use super::script::Script;
+use super::script::{HookEnvPolicy, Script};
 use super::script_run_log::ScriptRunLog;
 use crate::application_specification::AppSpec;
 use crate::deployment_specification::types::{DeploymentSpec, RevisionLocation, RevisionSource};
@@ -32,6 +30,18 @@ pub struct LifecycleEventExecutor {
     deployment_archive_dir: Option<PathBuf>,
     app_spec: Option<AppSpec>,
     child_envs: HashMap<String, String>,
+    /// Opt-in hook-env hardening. Default (all-`false`) = full inheritance.
+    /// Set via [`Self::with_env_policy`].
+    env_policy: HookEnvPolicy,
+    /// Opt-in: reject a hook whose `location` resolves outside the deployment
+    /// archive. Default `false`, preserving backwards-compatible behavior.
+    /// Reuses the same `reject_path_traversal_in_bundle` flag as the
+    /// installer's `source` check.
+    reject_path_traversal: bool,
+    /// Mode policy for `logs/scripts.log` and its parent dir, from
+    /// `restrict_agent_dir_permissions`. Default `false` (world-readable
+    /// 0755/0644); `true` = hardened 0750/0640.
+    restrict_log_permissions: bool,
 }
 
 impl LifecycleEventExecutor {
@@ -53,7 +63,7 @@ impl LifecycleEventExecutor {
             spec.deployment_type.parse().unwrap_or(super::DeploymentType::InPlace);
 
         let selected_dir = select_deployment_dir(
-            lifecycle_event,
+            &lifecycle_event,
             &spec.deployment_creator,
             deployment_type,
             deployment_root_dir,
@@ -68,7 +78,7 @@ impl LifecycleEventExecutor {
             app_spec = Some(parse_app_spec(&archive_dir, &spec.app_spec_path)?);
         }
 
-        let child_envs = build_child_envs(lifecycle_event, spec);
+        let child_envs = build_child_envs(&lifecycle_event, spec, deployment_root_dir);
 
         Ok(Self {
             lifecycle_event,
@@ -80,7 +90,34 @@ impl LifecycleEventExecutor {
             },
             app_spec,
             child_envs,
+            env_policy: HookEnvPolicy::default(),
+            reject_path_traversal: false,
+            restrict_log_permissions: false,
         })
+    }
+
+    /// Set the opt-in hook-environment hardening policy. Defaults to
+    /// [`HookEnvPolicy::default`] (full env inheritance).
+    #[must_use]
+    pub fn with_env_policy(mut self, env_policy: HookEnvPolicy) -> Self {
+        self.env_policy = env_policy;
+        self
+    }
+
+    /// Enable opt-in rejection of hooks whose `location` escapes the deployment
+    /// archive. Defaults to `false`, preserving backwards-compatible behavior.
+    #[must_use]
+    pub fn with_reject_path_traversal(mut self, reject: bool) -> Self {
+        self.reject_path_traversal = reject;
+        self
+    }
+
+    /// Set the mode policy for `logs/scripts.log`, from
+    /// `restrict_agent_dir_permissions`. Defaults to `false` (0755/0644).
+    #[must_use]
+    pub fn with_restrict_log_permissions(mut self, restrict: bool) -> Self {
+        self.restrict_log_permissions = restrict;
+        self
     }
 
     /// Returns true if there are no scripts to run for this lifecycle event.
@@ -128,15 +165,18 @@ impl LifecycleEventExecutor {
             return Ok(Vec::new());
         }
 
+        // GRCOV_STOP_COVERAGE
         info!(
             event = %event_name,
             script_count = scripts.len(),
             "Executing lifecycle event"
         );
+        // GRCOV_BEGIN_COVERAGE
 
         let log_path = self.current_deployment_root_dir.join("logs/scripts.log");
         let log = Arc::new(Mutex::new(
-            ScriptRunLog::open(&log_path).unwrap_or_else(|_| ScriptRunLog::in_memory()),
+            ScriptRunLog::open_with_policy(&log_path, self.restrict_log_permissions)
+                .unwrap_or_else(|_| ScriptRunLog::in_memory()),
         ));
 
         log.lock().unwrap().write_line("", &format!("LifecycleEvent - {event_name}"));
@@ -157,12 +197,43 @@ impl LifecycleEventExecutor {
         log: &Arc<Mutex<ScriptRunLog>>,
     ) -> Result<(), ScriptError> {
         let location = script_info.location().to_string();
-        let script_path = archive_dir.join(&location);
-        let err = |code, msg: String| ScriptError::new(code, location.clone(), Vec::new(), msg);
+        // Strip leading '/' so a leading slash in the location does not discard
+        // the base path (unlike Rust's PathBuf::join).
+        let location_relative = location.strip_prefix('/').unwrap_or(&location);
+        let script_path = archive_dir.join(location_relative);
+        // `entries()` is the bounded stdout/stderr tail the stream tasks buffered;
+        // it becomes the diagnostic's log so the service sees the script's output.
+        let err = |code, msg: String| {
+            let log_tail = log.lock().map(|l| l.entries()).unwrap_or_default();
+            ScriptError::new(code, location.clone(), log_tail, msg)
+        };
 
         log.lock().unwrap().write_line("", &format!("Script - {location}"));
 
         debug!(script = %location, "Running lifecycle script");
+
+        // Reject a `location` that escapes the archive via `..`. Normalize
+        // both sides LEXICALLY (resolve `.`/`..` without touching the
+        // filesystem) rather than via `canonicalize`: `starts_with` treats
+        // `..` as an ordinary component, so comparing un-normalized paths
+        // (e.g. `<archive>/../../etc/evil`) would spuriously pass containment,
+        // and `canonicalize` fails on a nonexistent target — which would turn
+        // a merely-missing script into a misleading "resolves outside" error
+        // instead of the precise "does not exist" reported below. Lexical
+        // normalization is existence-independent and still rejects the escape.
+        // Mirrors the `files.source` check in installer/core.rs (nu_path).
+        if self.reject_path_traversal {
+            let normalized_script = nu_path::expand_path(&script_path, true);
+            let normalized_archive = nu_path::expand_path(archive_dir, true);
+            if !normalized_script.starts_with(&normalized_archive) {
+                return Err(err(
+                    ErrorCode::ScriptMissing,
+                    format!(
+                        "Script at specified location: {location} resolves outside the deployment archive"
+                    ),
+                ));
+            }
+        }
 
         if !script_path.exists() {
             return Err(err(
@@ -171,6 +242,7 @@ impl LifecycleEventExecutor {
             ));
         }
 
+        // GRCOV_STOP_COVERAGE
         if let Err(e) = ensure_executable(&script_path) {
             return Err(err(
                 ErrorCode::ScriptExecutability,
@@ -179,16 +251,12 @@ impl LifecycleEventExecutor {
                 ),
             ));
         }
+        // GRCOV_BEGIN_COVERAGE
 
         let timeout = Duration::from_secs(u64::from(script_info.timeout()));
-        let script = Script::new(
-            script_path,
-            script_info.runas().map(String::from),
-            false,
-            &self.child_envs,
-            Arc::clone(log),
-        );
+        let script = self.build_script(script_info, script_path, log);
 
+        // GRCOV_STOP_COVERAGE
         let exit_code = match script.execute(timeout) {
             Ok(code) => code,
             Err(e) if e == "timeout" => {
@@ -224,13 +292,58 @@ impl LifecycleEventExecutor {
                 format!("Script at specified location: {who} failed with exit code {exit_code}"),
             ));
         }
+        // GRCOV_BEGIN_COVERAGE
 
         Ok(())
     }
+
+    /// Build a [`Script`] from an appspec
+    /// [`ScriptInfo`](crate::application_specification::ScriptInfo).
+    ///
+    /// This is the single source of truth for translating appspec fields into
+    /// [`Script`] constructor arguments.
+    fn build_script(
+        &self,
+        script_info: &crate::application_specification::ScriptInfo,
+        script_path: PathBuf,
+        log: &Arc<Mutex<ScriptRunLog>>,
+    ) -> Script {
+        Script::with_env_policy(
+            script_path,
+            script_info.runas().map(String::from),
+            script_info.sudo().unwrap_or(false),
+            &self.child_envs,
+            self.env_policy,
+            Arc::clone(log),
+        )
+    }
+}
+
+/// Resolve the `AppSpec` in a revision's archive, tolerating a filename mismatch
+/// across revisions.
+///
+/// Pre-DownloadBundle events run the previous revision's scripts but only know
+/// the current deploy's `--appspec-filename`, so prefer the requested name then
+/// fall back to `appspec.yaml`/`appspec.yml` (mirrors `install::resolve_appspec_path`).
+fn resolve_appspec_path(archive_dir: &Path, app_spec_path: &str) -> PathBuf {
+    let requested = archive_dir.join(app_spec_path);
+    if requested.exists() {
+        return requested;
+    }
+    let long_ext = archive_dir.join("appspec.yaml");
+    if long_ext.exists() {
+        return long_ext;
+    }
+    let short_ext = archive_dir.join("appspec.yml");
+    if short_ext.exists() {
+        return short_ext;
+    }
+    // Nothing found — return the requested path so the error names it.
+    requested
 }
 
 fn parse_app_spec(archive_dir: &Path, app_spec_path: &str) -> Result<AppSpec, ScriptError> {
-    let path = archive_dir.join(app_spec_path);
+    let path = resolve_appspec_path(archive_dir, app_spec_path);
 
     let mut error_msg = format!(
         "The CodeDeploy agent did not find an AppSpec file within the unpacked revision \
@@ -261,8 +374,9 @@ fn parse_app_spec(archive_dir: &Path, app_spec_path: &str) -> Result<AppSpec, Sc
 }
 
 fn build_child_envs(
-    lifecycle_event: LifecycleEventType,
+    lifecycle_event: &LifecycleEventType,
     spec: &DeploymentSpec,
+    deployment_root_dir: &Path,
 ) -> HashMap<String, String> {
     let mut envs = HashMap::new();
     envs.insert("LIFECYCLE_EVENT".into(), lifecycle_event.to_string());
@@ -278,8 +392,17 @@ fn build_child_envs(
             if let Some(v) = version {
                 envs.insert("BUNDLE_VERSION".into(), v.clone());
             }
-            if let Some(e) = etag {
-                envs.insert("BUNDLE_ETAG".into(), e.clone());
+            // The service frequently sends a null ETag in the spec, so fall back
+            // to the ETag the agent persisted on download.
+            let resolved_etag = etag.clone().or_else(|| {
+                let etag_path = deployment_root_dir.join(crate::host_command::BUNDLE_ETAG_FILE);
+                std::fs::read_to_string(&etag_path)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+            });
+            if let Some(e) = resolved_etag {
+                envs.insert("BUNDLE_ETAG".into(), e);
             }
         },
         (RevisionSource::GitHub, RevisionLocation::GitHub { commit_id, .. }) => {
@@ -374,7 +497,8 @@ hooks:
     #[test]
     fn build_envs_s3() {
         let spec = s3_spec();
-        let envs = build_child_envs(LifecycleEventType::AfterInstall, &spec);
+        let envs =
+            build_child_envs(&LifecycleEventType::AfterInstall, &spec, Path::new("/nonexistent"));
         assert_eq!(envs["LIFECYCLE_EVENT"], "AfterInstall");
         assert_eq!(envs["DEPLOYMENT_ID"], "d-123");
         assert_eq!(envs["APPLICATION_NAME"], "MyApp");
@@ -387,9 +511,41 @@ hooks:
     }
 
     #[test]
+    fn build_envs_s3_etag_fallback_from_persisted_file() {
+        // Spec carries no etag (service sent null); the persisted .bundle-etag
+        // file should supply BUNDLE_ETAG.
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join(crate::host_command::BUNDLE_ETAG_FILE), "deadbeef123\n")
+            .unwrap();
+        let spec = make_spec(
+            RevisionSource::S3,
+            RevisionLocation::S3 {
+                bucket: "b".into(),
+                key: "k".into(),
+                bundle_type: "zip".into(),
+                version: None,
+                etag: None,
+            },
+        );
+        let envs = build_child_envs(&LifecycleEventType::AfterInstall, &spec, dir.path());
+        assert_eq!(envs["BUNDLE_ETAG"], "deadbeef123");
+    }
+
+    #[test]
+    fn build_envs_s3_spec_etag_wins_over_file() {
+        // When the spec carries an etag it takes precedence over the file.
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join(crate::host_command::BUNDLE_ETAG_FILE), "fromfile").unwrap();
+        let spec = s3_spec(); // etag: Some("abc")
+        let envs = build_child_envs(&LifecycleEventType::AfterInstall, &spec, dir.path());
+        assert_eq!(envs["BUNDLE_ETAG"], "abc");
+    }
+
+    #[test]
     fn build_envs_github() {
         let spec = github_spec();
-        let envs = build_child_envs(LifecycleEventType::BeforeInstall, &spec);
+        let envs =
+            build_child_envs(&LifecycleEventType::BeforeInstall, &spec, Path::new("/nonexistent"));
         assert_eq!(envs["BUNDLE_COMMIT"], "sha123");
         assert!(!envs.contains_key("BUNDLE_BUCKET"));
     }
@@ -397,7 +553,8 @@ hooks:
     #[test]
     fn build_envs_local() {
         let spec = local_spec();
-        let envs = build_child_envs(LifecycleEventType::BeforeInstall, &spec);
+        let envs =
+            build_child_envs(&LifecycleEventType::BeforeInstall, &spec, Path::new("/nonexistent"));
         assert!(!envs.contains_key("BUNDLE_BUCKET"));
         assert!(!envs.contains_key("BUNDLE_COMMIT"));
     }
@@ -428,6 +585,25 @@ hooks:
         std::fs::write(dir.path().join("appspec.yml"), APPSPEC_WITH_HOOKS).unwrap();
         let result = parse_app_spec(dir.path(), "appspec.yml");
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_app_spec_falls_back_when_requested_name_absent() {
+        // Prior revision has only appspec.yml while the current deploy requested
+        // my-spec.yml; resolution falls back to appspec.yml.
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("appspec.yml"), APPSPEC_WITH_HOOKS).unwrap();
+        let result = parse_app_spec(dir.path(), "my-spec.yml");
+        assert!(result.is_ok(), "should fall back to appspec.yml in the prior revision");
+    }
+
+    #[test]
+    fn resolve_appspec_path_prefers_requested_name() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("my-spec.yml"), "version: 0.0\nos: linux\n").unwrap();
+        std::fs::write(dir.path().join("appspec.yml"), "version: 0.0\nos: linux\n").unwrap();
+        // Both present: the explicitly-requested name wins.
+        assert_eq!(resolve_appspec_path(dir.path(), "my-spec.yml"), dir.path().join("my-spec.yml"));
     }
 
     // --- new ---
@@ -621,6 +797,41 @@ hooks:
 
     #[cfg(unix)]
     #[test]
+    fn execute_leading_slash_location_resolves_inside_archive() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = TempDir::new().unwrap();
+        let appspec = r"
+version: 0.0
+os: linux
+hooks:
+  AfterInstall:
+    - location: /scripts/ok.sh
+      timeout: 10
+";
+        setup_appspec(dir.path(), appspec);
+
+        let scripts_dir = dir.path().join("deployment-archive/scripts");
+        std::fs::create_dir_all(&scripts_dir).unwrap();
+        std::fs::write(scripts_dir.join("ok.sh"), "#!/bin/sh\necho done\n").unwrap();
+        std::fs::set_permissions(scripts_dir.join("ok.sh"), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+
+        let spec = s3_spec();
+        let he = LifecycleEventExecutor::new(
+            LifecycleEventType::AfterInstall,
+            &spec,
+            dir.path(),
+            None,
+            None,
+        )
+        .unwrap();
+        let entries = he.execute().unwrap();
+        assert!(entries.iter().any(|e| e.contains("Script - /scripts/ok.sh")));
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn execute_failing_script() {
         use std::os::unix::fs::PermissionsExt;
 
@@ -658,5 +869,343 @@ hooks:
         let err = result.unwrap_err();
         assert_eq!(err.error_code, ErrorCode::ScriptFailed);
         assert!(err.message.contains("exit code 1"));
+    }
+
+    #[test]
+    fn script_info_sudo_true_parses_through_to_accessor() {
+        // Arrange
+        let yaml = r"
+version: 0.0
+os: linux
+hooks:
+  AfterInstall:
+    - location: scripts/install.sh
+      sudo: true
+";
+
+        // Act
+        let spec = AppSpec::parse(yaml).unwrap();
+        let scripts = spec.hooks().get("AfterInstall");
+
+        // Assert
+        assert_eq!(scripts[0].sudo(), Some(true));
+    }
+
+    #[test]
+    fn script_info_sudo_false_parses_through_to_accessor() {
+        // Arrange
+        let yaml = r"
+version: 0.0
+os: linux
+hooks:
+  AfterInstall:
+    - location: scripts/install.sh
+      sudo: false
+";
+
+        // Act
+        let spec = AppSpec::parse(yaml).unwrap();
+        let scripts = spec.hooks().get("AfterInstall");
+
+        // Assert
+        assert_eq!(scripts[0].sudo(), Some(false));
+    }
+
+    #[test]
+    fn script_info_sudo_missing_is_none() {
+        // Arrange
+        let yaml = r"
+version: 0.0
+os: linux
+hooks:
+  AfterInstall:
+    - location: scripts/install.sh
+";
+
+        // Act
+        let spec = AppSpec::parse(yaml).unwrap();
+        let scripts = spec.hooks().get("AfterInstall");
+
+        // Assert
+        assert_eq!(scripts[0].sudo(), None);
+    }
+
+    fn build_test_executor(appspec: &str) -> (TempDir, LifecycleEventExecutor) {
+        let dir = TempDir::new().unwrap();
+        setup_appspec(dir.path(), appspec);
+        let spec = s3_spec();
+        let executor = LifecycleEventExecutor::new(
+            LifecycleEventType::AfterInstall,
+            &spec,
+            dir.path(),
+            None,
+            None,
+        )
+        .unwrap();
+        (dir, executor)
+    }
+
+    fn sample_log() -> Arc<Mutex<ScriptRunLog>> {
+        Arc::new(Mutex::new(ScriptRunLog::in_memory()))
+    }
+
+    #[test]
+    fn build_script_forwards_sudo_true_from_appspec() {
+        // Arrange
+        let yaml = r"
+version: 0.0
+os: linux
+hooks:
+  AfterInstall:
+    - location: scripts/install.sh
+      sudo: true
+";
+        let (_dir, executor) = build_test_executor(yaml);
+        let script_info = &executor.app_spec.as_ref().unwrap().hooks().get("AfterInstall")[0];
+
+        // Act
+        let script = executor.build_script(
+            script_info,
+            PathBuf::from("/archive/scripts/install.sh"),
+            &sample_log(),
+        );
+
+        // Assert — the executor forwarded `sudo: true` into Script::new.
+        assert!(script.sudo(), "executor must forward appspec sudo: true into Script");
+        assert_eq!(script.runas(), None);
+    }
+
+    #[test]
+    fn build_script_forwards_sudo_false_from_appspec() {
+        // Arrange
+        let yaml = r"
+version: 0.0
+os: linux
+hooks:
+  AfterInstall:
+    - location: scripts/install.sh
+      sudo: false
+";
+        let (_dir, executor) = build_test_executor(yaml);
+        let script_info = &executor.app_spec.as_ref().unwrap().hooks().get("AfterInstall")[0];
+
+        // Act
+        let script = executor.build_script(
+            script_info,
+            PathBuf::from("/archive/scripts/install.sh"),
+            &sample_log(),
+        );
+
+        // Assert
+        assert!(!script.sudo());
+    }
+
+    #[test]
+    fn build_script_defaults_missing_sudo_to_false() {
+        // Arrange — no `sudo` key in the appspec; omitted sudo defaults to false.
+        let yaml = r"
+version: 0.0
+os: linux
+hooks:
+  AfterInstall:
+    - location: scripts/install.sh
+";
+        let (_dir, executor) = build_test_executor(yaml);
+        let script_info = &executor.app_spec.as_ref().unwrap().hooks().get("AfterInstall")[0];
+
+        // Act
+        let script = executor.build_script(
+            script_info,
+            PathBuf::from("/archive/scripts/install.sh"),
+            &sample_log(),
+        );
+
+        // Assert — omitted `sudo` must default to false.
+        assert!(!script.sudo());
+    }
+
+    #[test]
+    fn build_script_forwards_runas_and_sudo_together() {
+        // Arrange — exercises the (runas=Some, sudo=true) cell of the
+        // four-way switch in script::build_command.
+        let yaml = r"
+version: 0.0
+os: linux
+hooks:
+  AfterInstall:
+    - location: scripts/install.sh
+      runas: deploy
+      sudo: true
+";
+        let (_dir, executor) = build_test_executor(yaml);
+        let script_info = &executor.app_spec.as_ref().unwrap().hooks().get("AfterInstall")[0];
+
+        // Act
+        let script = executor.build_script(
+            script_info,
+            PathBuf::from("/archive/scripts/install.sh"),
+            &sample_log(),
+        );
+
+        // Assert
+        assert!(script.sudo());
+        assert_eq!(script.runas(), Some("deploy"));
+    }
+
+    #[test]
+    fn build_script_forwards_runas_without_sudo() {
+        // Arrange — completes the four-way matrix: runas=Some, sudo=false.
+        // Under the script::build_command switch this yields `su <user> -c <script>`
+        // with no sudo wrapper.
+        let yaml = r"
+version: 0.0
+os: linux
+hooks:
+  AfterInstall:
+    - location: scripts/install.sh
+      runas: deploy
+";
+        let (_dir, executor) = build_test_executor(yaml);
+        let script_info = &executor.app_spec.as_ref().unwrap().hooks().get("AfterInstall")[0];
+
+        // Act
+        let script = executor.build_script(
+            script_info,
+            PathBuf::from("/archive/scripts/install.sh"),
+            &sample_log(),
+        );
+
+        // Assert — runas is propagated, sudo defaults to false.
+        assert_eq!(script.runas(), Some("deploy"));
+        assert!(!script.sudo());
+    }
+
+    /// With `reject_path_traversal` on, a hook whose `location` escapes the
+    /// archive is rejected without executing the target (planted as a real
+    /// executable, so the containment check — not a missing file — stops it).
+    #[cfg(unix)]
+    #[test]
+    fn execute_rejects_hook_location_escaping_archive_when_enabled() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = TempDir::new().unwrap();
+        // ../outside/evil.sh from <dir>/deployment-archive resolves to
+        // <dir>/outside/evil.sh — outside the archive.
+        let appspec = r"
+version: 0.0
+os: linux
+hooks:
+  AfterInstall:
+    - location: ../outside/evil.sh
+      timeout: 10
+";
+        setup_appspec(dir.path(), appspec);
+
+        let outside = dir.path().join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        let marker = dir.path().join("PWNED");
+        std::fs::write(outside.join("evil.sh"), format!("#!/bin/sh\ntouch {}\n", marker.display()))
+            .unwrap();
+        std::fs::set_permissions(outside.join("evil.sh"), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+
+        let spec = s3_spec();
+        let he = LifecycleEventExecutor::new(
+            LifecycleEventType::AfterInstall,
+            &spec,
+            dir.path(),
+            None,
+            None,
+        )
+        .unwrap()
+        .with_reject_path_traversal(true);
+
+        let err = he.execute().unwrap_err();
+        assert_eq!(err.error_code, ErrorCode::ScriptMissing);
+        assert!(
+            err.message.contains("outside the deployment archive"),
+            "unexpected message: {}",
+            err.message
+        );
+        assert!(!marker.exists(), "escaping hook must NOT have executed");
+    }
+
+    /// Regression: an escaping `location` whose target does NOT exist must
+    /// still be rejected as out-of-archive. The earlier check canonicalized
+    /// the script path and fell back to the raw (un-normalized) path on
+    /// failure — and `canonicalize` fails for a nonexistent target — so
+    /// `starts_with` compared `<archive>/../outside/nope.sh` against
+    /// `<archive>` and spuriously passed containment (fail-open). Lexical
+    /// normalization rejects it regardless of existence.
+    #[cfg(unix)]
+    #[test]
+    fn execute_rejects_nonexistent_escaping_hook_location_when_enabled() {
+        let dir = TempDir::new().unwrap();
+        let appspec = r"
+version: 0.0
+os: linux
+hooks:
+  AfterInstall:
+    - location: ../outside/nope.sh
+      timeout: 10
+";
+        setup_appspec(dir.path(), appspec);
+        // Note: no file planted at ../outside/nope.sh — the escape target does
+        // not exist, which is exactly the case the old fall-open missed.
+
+        let spec = s3_spec();
+        let he = LifecycleEventExecutor::new(
+            LifecycleEventType::AfterInstall,
+            &spec,
+            dir.path(),
+            None,
+            None,
+        )
+        .unwrap()
+        .with_reject_path_traversal(true);
+
+        let err = he.execute().unwrap_err();
+        assert_eq!(err.error_code, ErrorCode::ScriptMissing);
+        assert!(
+            err.message.contains("outside the deployment archive"),
+            "escaping location must be rejected as out-of-archive, not merely missing: {}",
+            err.message
+        );
+    }
+
+    /// With `reject_path_traversal` off (default), the containment check does
+    /// not fire: an escaping location surfaces as the normal "does not exist"
+    /// `ScriptMissing`, not the containment message.
+    #[cfg(unix)]
+    #[test]
+    fn execute_does_not_check_hook_location_containment_when_disabled() {
+        let dir = TempDir::new().unwrap();
+        let appspec = r"
+version: 0.0
+os: linux
+hooks:
+  AfterInstall:
+    - location: ../../../outside/evil.sh
+      timeout: 10
+";
+        setup_appspec(dir.path(), appspec);
+
+        let spec = s3_spec();
+        let he = LifecycleEventExecutor::new(
+            LifecycleEventType::AfterInstall,
+            &spec,
+            dir.path(),
+            None,
+            None,
+        )
+        .unwrap(); // reject_path_traversal defaults to false
+
+        let err = he.execute().unwrap_err();
+        assert_eq!(err.error_code, ErrorCode::ScriptMissing);
+        assert!(
+            err.message.contains("does not exist"),
+            "with the flag off, the containment check must not fire; got: {}",
+            err.message
+        );
     }
 }

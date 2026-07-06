@@ -1,5 +1,3 @@
-//! @risk none
-//!
 //! Deployment specification error types.
 use std::fmt;
 

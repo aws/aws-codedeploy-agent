@@ -74,7 +74,7 @@ pub fn assert_no_suid_sgid(dir: &Path) {
         if !entry.file_type().is_file() {
             continue;
         }
-        let mode = entry.metadata().unwrap().permissions().mode();
+        let mode = entry.metadata().expect("read entry metadata").permissions().mode();
         assert_eq!(
             mode & 0o6000,
             0,
@@ -92,7 +92,11 @@ pub fn assert_no_suid_sgid(dir: &Path) {
 #[cfg(unix)]
 pub fn assert_file_mode(path: &Path, expected_mask: u32) {
     use std::os::unix::fs::PermissionsExt;
-    let mode = std::fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+    let mode = std::fs::metadata(path)
+        .expect("read file metadata for mode check")
+        .permissions()
+        .mode()
+        & 0o7777;
     assert_eq!(
         mode,
         expected_mask,
@@ -107,7 +111,11 @@ pub fn assert_file_mode(path: &Path, expected_mask: u32) {
 #[cfg(unix)]
 pub fn assert_not_world_readable(path: &Path) {
     use std::os::unix::fs::PermissionsExt;
-    let mode = std::fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+    let mode = std::fs::metadata(path)
+        .expect("read file metadata for world-readable check")
+        .permissions()
+        .mode()
+        & 0o7777;
     assert_eq!(mode & 0o004, 0, "File {} is world-readable: mode={:04o}", path.display(), mode);
 }
 
@@ -115,7 +123,11 @@ pub fn assert_not_world_readable(path: &Path) {
 #[cfg(unix)]
 pub fn assert_not_group_readable(path: &Path) {
     use std::os::unix::fs::PermissionsExt;
-    let mode = std::fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+    let mode = std::fs::metadata(path)
+        .expect("read file metadata for group-readable check")
+        .permissions()
+        .mode()
+        & 0o7777;
     assert_eq!(mode & 0o040, 0, "File {} is group-readable: mode={:04o}", path.display(), mode);
 }
 
@@ -126,7 +138,11 @@ pub fn assert_not_group_readable(path: &Path) {
 #[cfg(unix)]
 pub fn assert_owner_only_permissions(path: &Path) {
     use std::os::unix::fs::PermissionsExt;
-    let mode = std::fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+    let mode = std::fs::metadata(path)
+        .expect("read file metadata for owner-only check")
+        .permissions()
+        .mode()
+        & 0o7777;
     assert_eq!(
         mode & 0o077,
         0,

@@ -1,5 +1,3 @@
-//! @risk none
-//!
 //! Ping command — liveness check.
 
 use serde_json::{Value, json};

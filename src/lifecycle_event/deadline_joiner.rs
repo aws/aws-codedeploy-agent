@@ -1,28 +1,16 @@
-//! @risk low
-//!
 //! Deadline-based thread/task joiner.
 //!
-//! Ruby source: `lib/instance_agent/platform/thread_joiner.rb`
+//! Takes a timeout at creation, computes a deadline, then joins multiple tasks
+//! sequentially — each getting only the *remaining* time. This lets the caller
+//! distinguish "process timed out" from "stdout/stderr streams didn't close in
+//! time" (`OUTPUTS_LEFT_OPEN`).
 //!
-//! Ruby's `ThreadJoiner` takes a timeout at creation, computes a deadline, then
-//! joins multiple threads sequentially — each getting only the *remaining* time.
-//! This lets the caller distinguish "process timed out" from "stdout/stderr
-//! streams didn't close in time" (`OUTPUTS_LEFT_OPEN`).
-//!
-//! We provide the same abstraction for async tasks via [`DeadlineJoiner`].
+//! See [`DeadlineJoiner`] for the async implementation.
 
 use std::time::Duration;
 use tokio::time::Instant;
 
 /// A shared deadline that tracks remaining time across sequential joins.
-///
-/// ```text
-/// // Ruby equivalent:
-/// // joiner = ThreadJoiner.new(30)        # deadline = now + 30s
-/// // joiner.joinOrFail(wait_thr) { kill } # uses up to 30s
-/// // joiner.joinOrFail(stdout_thr) { … }  # uses remaining time
-/// // joiner.joinOrFail(stderr_thr) { … }  # uses remaining time
-/// ```
 #[derive(Debug)]
 pub struct DeadlineJoiner {
     deadline: Instant,

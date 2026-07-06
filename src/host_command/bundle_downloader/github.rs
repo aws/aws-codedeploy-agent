@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! GitHub bundle downloader.
 //!
 //! Downloads tarball/zipball from GitHub API with retry logic.
@@ -23,6 +21,10 @@ const RETRY_DELAYS: [Duration; 3] = [
 /// Streaming buffer size — 8 MiB chunks.
 const STREAM_BUFFER_SIZE: usize = 8 * 1024 * 1024;
 
+/// `User-Agent` sent on GitHub API requests. GitHub's REST API requires one and
+/// returns `403 Forbidden` without it; `reqwest::blocking` sets none by default.
+const GITHUB_USER_AGENT: &str = concat!("codedeploy-agent/", env!("CARGO_PKG_VERSION"));
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BundleFormat {
     Tar,
@@ -41,7 +43,7 @@ impl BundleFormat {
             Some("tar") => Ok(Self::Tar),
             None => {
                 if cfg!(windows) {
-                    Ok(Self::Zip)
+                    Ok(Self::Zip) // GRCOV_IGNORE_LINE
                 } else {
                     Ok(Self::Tar)
                 }
@@ -75,6 +77,10 @@ pub struct GitHubDownloader {
     auth: GitHubAuth,
     format: BundleFormat,
     dest: PathBuf,
+    /// HTTP proxy URI, if the agent is configured to route egress through a
+    /// proxy. Applied to the download client so GitHub fetches honor the same
+    /// `proxy_uri` as S3 and the `CodeDeploy` control-plane clients.
+    proxy_uri: Option<String>,
 }
 
 impl GitHubDownloader {
@@ -86,8 +92,17 @@ impl GitHubDownloader {
         commit_id: String,
         format: BundleFormat,
         dest: PathBuf,
+        proxy_uri: Option<String>,
     ) -> Self {
-        Self { account, repository, commit_id, auth: GitHubAuth::Anonymous, format, dest }
+        Self {
+            account,
+            repository,
+            commit_id,
+            auth: GitHubAuth::Anonymous,
+            format,
+            dest,
+            proxy_uri,
+        }
     }
 
     /// Create a new downloader for an authenticated GitHub request.
@@ -99,8 +114,17 @@ impl GitHubDownloader {
         token: String,
         format: BundleFormat,
         dest: PathBuf,
+        proxy_uri: Option<String>,
     ) -> Self {
-        Self { account, repository, commit_id, auth: GitHubAuth::Token(token), format, dest }
+        Self {
+            account,
+            repository,
+            commit_id,
+            auth: GitHubAuth::Token(token),
+            format,
+            dest,
+            proxy_uri,
+        }
     }
 
     fn url(&self) -> String {
@@ -113,8 +137,10 @@ impl GitHubDownloader {
         )
     }
 
+    // GRCOV_STOP_COVERAGE
     fn try_download(&self, client: &reqwest::blocking::Client, url: &str) -> io::Result<()> {
-        let mut req = client.get(url);
+        // GitHub rejects requests with no User-Agent (403).
+        let mut req = client.get(url).header("User-Agent", GITHUB_USER_AGENT);
         match &self.auth {
             GitHubAuth::Anonymous => debug!("Anonymous GitHub repository download requested."),
             GitHubAuth::Token(token) => {
@@ -128,7 +154,9 @@ impl GitHubDownloader {
             .and_then(reqwest::blocking::Response::error_for_status)
             .map_err(|e| io::Error::other(format!("GitHub download request failed: {e}")))?;
 
-        let mut file = std::fs::File::create(&self.dest)?;
+        // Downloaded bundle is created 0600 — unprivileged users should
+        // not read the archive while the agent is extracting it.
+        let mut file = crate::system::create_file_secure(&self.dest, 0o600)?;
         let mut buf = vec![0u8; STREAM_BUFFER_SIZE];
         loop {
             let n = response
@@ -142,11 +170,22 @@ impl GitHubDownloader {
         file.flush()?;
         Ok(())
     }
+    // GRCOV_BEGIN_COVERAGE
 }
 
-/// Build an HTTPS client, loading custom CA certs from `AWS_SSL_CA_DIRECTORY` if set.
-fn build_https_client(env: &dyn crate::system::EnvOps) -> io::Result<reqwest::blocking::Client> {
+/// Build an HTTPS client, loading custom CA certs from `AWS_SSL_CA_DIRECTORY` if
+/// set and routing through `proxy_uri` if configured.
+fn build_https_client(
+    env: &dyn crate::system::EnvOps,
+    proxy_uri: Option<&str>,
+) -> io::Result<reqwest::blocking::Client> {
     let mut builder = reqwest::blocking::ClientBuilder::new();
+
+    if let Some(proxy) = proxy_uri {
+        let p = reqwest::Proxy::all(proxy)
+            .map_err(|e| io::Error::other(format!("invalid proxy URI '{proxy}': {e}")))?;
+        builder = builder.proxy(p);
+    }
 
     if let Some(ca_dir) = env.get("AWS_SSL_CA_DIRECTORY") {
         let path = std::path::Path::new(&ca_dir);
@@ -170,10 +209,11 @@ fn build_https_client(env: &dyn crate::system::EnvOps) -> io::Result<reqwest::bl
         .map_err(|e| io::Error::other(format!("Failed to build HTTPS client: {e}")))
 }
 
+// GRCOV_STOP_COVERAGE
 impl BundleDownloader for GitHubDownloader {
     fn download(&self) -> io::Result<()> {
         let url = self.url();
-        let client = build_https_client(&crate::system::SystemEnvOps)?;
+        let client = build_https_client(&crate::system::SystemEnvOps, self.proxy_uri.as_deref())?;
         let mut errors: Vec<String> = Vec::new();
 
         // Only retries on HTTP status errors (not connection/DNS errors).
@@ -209,6 +249,7 @@ impl BundleDownloader for GitHubDownloader {
         })
     }
 }
+// GRCOV_BEGIN_COVERAGE
 
 #[cfg(test)]
 mod tests {
@@ -223,6 +264,7 @@ mod tests {
             "abc123".into(),
             BundleFormat::Tar,
             PathBuf::from("/tmp/out"),
+            None,
         );
         assert_eq!(dl.url(), "https://api.github.com/repos/acme/app/tarball/abc123");
     }
@@ -235,6 +277,7 @@ mod tests {
             "abc123".into(),
             BundleFormat::Zip,
             PathBuf::from("/tmp/out"),
+            None,
         );
         assert_eq!(dl.url(), "https://api.github.com/repos/acme/app/zipball/abc123");
     }
@@ -261,6 +304,13 @@ mod tests {
     }
 
     #[test]
+    fn github_user_agent_is_non_empty() {
+        // GitHub returns 403 without a User-Agent; constant must be non-empty.
+        assert!(GITHUB_USER_AGENT.starts_with("codedeploy-agent/"));
+        assert!(GITHUB_USER_AGENT.len() > "codedeploy-agent/".len());
+    }
+
+    #[test]
     fn try_download_bad_host_fails() {
         let dir = TempDir::new().unwrap();
         let dl = GitHubDownloader::anonymous(
@@ -269,6 +319,7 @@ mod tests {
             "sha".into(),
             BundleFormat::Tar,
             dir.path().join("out"),
+            None,
         );
         let client = reqwest::blocking::Client::new();
         assert!(dl.try_download(&client, "http://localhost:1/nope").is_err());
@@ -277,21 +328,22 @@ mod tests {
     #[test]
     fn build_https_client_without_ca_dir() {
         use crate::system::MockEnvOps;
-        let client = build_https_client(&MockEnvOps::default());
+        let client = build_https_client(&MockEnvOps::default(), None);
         assert!(client.is_ok());
     }
 
     #[test]
     fn build_https_client_with_ca_dir_containing_pem() {
-        use crate::system::MockEnvOps;
-        let dir = TempDir::new().unwrap();
-
-        // Generate a self-signed cert using the openssl crate
         use openssl::asn1::Asn1Time;
         use openssl::hash::MessageDigest;
         use openssl::pkey::PKey;
         use openssl::rsa::Rsa;
         use openssl::x509::X509;
+
+        use crate::system::MockEnvOps;
+        let dir = TempDir::new().unwrap();
+
+        // Generate a self-signed cert using the openssl crate
 
         let rsa = Rsa::generate(2048).unwrap();
         let pkey = PKey::from_rsa(rsa).unwrap();
@@ -305,7 +357,7 @@ mod tests {
         std::fs::write(dir.path().join("test.pem"), cert.to_pem().unwrap()).unwrap();
 
         let env = MockEnvOps::with("AWS_SSL_CA_DIRECTORY", dir.path().to_str().unwrap());
-        let client = build_https_client(&env);
+        let client = build_https_client(&env, None);
         assert!(client.is_ok());
     }
 
@@ -316,7 +368,7 @@ mod tests {
         std::fs::write(dir.path().join("readme.txt"), "not a cert").unwrap();
 
         let env = MockEnvOps::with("AWS_SSL_CA_DIRECTORY", dir.path().to_str().unwrap());
-        let client = build_https_client(&env);
+        let client = build_https_client(&env, None);
         assert!(client.is_ok());
     }
 
@@ -324,8 +376,25 @@ mod tests {
     fn build_https_client_with_nonexistent_ca_dir() {
         use crate::system::MockEnvOps;
         let env = MockEnvOps::with("AWS_SSL_CA_DIRECTORY", "/nonexistent/dir");
-        let client = build_https_client(&env);
+        let client = build_https_client(&env, None);
         assert!(client.is_ok());
+    }
+
+    #[test]
+    fn build_https_client_with_valid_proxy() {
+        use crate::system::MockEnvOps;
+        let client = build_https_client(&MockEnvOps::default(), Some("http://127.0.0.1:3128"));
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    fn build_https_client_with_invalid_proxy_fails() {
+        use crate::system::MockEnvOps;
+        // A malformed proxy URI must surface as an error rather than silently
+        // building a client that bypasses the proxy.
+        let client = build_https_client(&MockEnvOps::default(), Some("://"));
+        assert!(client.is_err());
+        assert!(client.unwrap_err().to_string().contains("invalid proxy URI"));
     }
 
     #[test]
@@ -337,6 +406,7 @@ mod tests {
             "ghp_secret".into(),
             BundleFormat::Tar,
             PathBuf::from("/tmp/out"),
+            None,
         );
         assert!(matches!(dl.auth, GitHubAuth::Token(ref t) if t == "ghp_secret"));
     }

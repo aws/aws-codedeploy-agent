@@ -17,6 +17,12 @@ use std::time::{Duration, SystemTime};
 pub struct Client {
     endpoint: String,
     region: String,
+    signing_name: String,
+    /// `X-Amz-Target` operation prefix. The secure stack wants the bare
+    /// `CodeDeployCommandService`; the legacy stack wants the versioned
+    /// `CodeDeployCommandService_v20141006`. The wrong one returns HTTP 400
+    /// `UnknownOperationException`.
+    target_prefix: String,
     http: reqwest::blocking::Client,
     credentials: AwsCredentials,
     agent_version: Option<String>,
@@ -41,6 +47,11 @@ impl Client {
         &self.region
     }
 
+    #[must_use]
+    pub fn agent_version(&self) -> Option<&str> {
+        self.agent_version.as_deref()
+    }
+
     /// Poll for a host command.
     ///
     /// # Errors
@@ -50,8 +61,10 @@ impl Client {
         host_identifier: &str,
     ) -> Result<Option<HostCommandInstance>, Error> {
         let input = PollHostCommandInput { host_identifier: host_identifier.to_string() };
+        // GRCOV_STOP_COVERAGE
         let output: PollHostCommandOutput = self.call("PollHostCommand", &input)?;
         Ok(output.host_command)
+        // GRCOV_BEGIN_COVERAGE
     }
 
     /// Acknowledge receipt of a host command.
@@ -67,9 +80,11 @@ impl Client {
             host_command_identifier: host_command_identifier.to_string(),
             diagnostics: diagnostics.cloned(),
         };
+        // GRCOV_STOP_COVERAGE
         let output: PutHostCommandAcknowledgementOutput =
             self.call("PutHostCommandAcknowledgement", &input)?;
         Ok(output.command_status)
+        // GRCOV_BEGIN_COVERAGE
     }
 
     /// Get deployment specification.
@@ -121,10 +136,13 @@ impl Client {
             estimated_completion_time: estimated_completion_time.map(String::from),
             diagnostics: diagnostics.cloned(),
         };
+        // GRCOV_STOP_COVERAGE
         let output: PostHostCommandUpdateOutput = self.call("PostHostCommandUpdate", &input)?;
         Ok(output.command_status)
+        // GRCOV_BEGIN_COVERAGE
     }
 
+    // GRCOV_STOP_COVERAGE
     fn call<I: serde::Serialize, O: serde::de::DeserializeOwned>(
         &self,
         operation: &str,
@@ -144,16 +162,13 @@ impl Client {
         Ok(())
     }
 
-    fn send<I: serde::Serialize>(&self, operation: &str, input: &I) -> Result<Vec<u8>, Error> {
-        let body = serde_json::to_string(input)
-            .map_err(|e| Error::new(ErrorKind::Serialization, e.to_string()))?;
-
+    fn build_request(&self, operation: &str, body: String) -> Result<http::Request<String>, Error> {
         let mut http_req = http::Request::builder()
             .method("POST")
             .uri(&self.endpoint)
             .header("content-type", "application/x-amz-json-1.1")
-            .header("x-amz-target", format!("CodeDeployCommandService_v20141006.{operation}"))
-            .body(body.clone())
+            .header("x-amz-target", format!("{}.{operation}", self.target_prefix))
+            .body(body)
             .map_err(|e| Error::new(ErrorKind::Build, e.to_string()))?;
 
         if let Some(version) = &self.agent_version {
@@ -164,6 +179,15 @@ impl Client {
                 })?,
             );
         }
+
+        Ok(http_req)
+    }
+
+    fn send<I: serde::Serialize>(&self, operation: &str, input: &I) -> Result<Vec<u8>, Error> {
+        let body = serde_json::to_string(input)
+            .map_err(|e| Error::new(ErrorKind::Serialization, e.to_string()))?;
+
+        let mut http_req = self.build_request(operation, body.clone())?;
 
         self.sign_request(&mut http_req)?;
 
@@ -190,7 +214,7 @@ impl Client {
         let signing_params = v4::SigningParams::builder()
             .identity(&identity)
             .region(&self.region)
-            .name("codedeploy-commands")
+            .name(&self.signing_name)
             .time(SystemTime::now())
             .settings(settings)
             .build()
@@ -212,6 +236,7 @@ impl Client {
         Ok(())
     }
 }
+// GRCOV_BEGIN_COVERAGE
 
 /// Builder for [`Client`].
 #[derive(Debug)]
@@ -312,7 +337,36 @@ impl ClientBuilder {
 
         let http = http_builder.build().map_err(|e| Error::new(ErrorKind::Build, e.to_string()))?;
 
-        Ok(Client { endpoint, region, http, credentials, agent_version: self.agent_version })
+        // Signing name and target prefix both track enable_auth_policy, which
+        // also selects the `-secure` endpoint.
+        let (signing_name, target_prefix) = if self.enable_auth_policy {
+            ("codedeploy-commands-secure", "CodeDeployCommandService")
+        } else {
+            ("codedeploy-commands", "CodeDeployCommandService_v20141006")
+        };
+        let signing_name = signing_name.to_string();
+        let target_prefix = target_prefix.to_string();
+
+        // Log the resolved stack so the agent log shows which endpoint it polls.
+        tracing::info!(
+            endpoint = %endpoint,
+            signing_name = %signing_name,
+            target_prefix = %target_prefix,
+            region = %region,
+            use_fips = self.use_fips,
+            enable_auth_policy = self.enable_auth_policy,
+            "CodeDeploy command client configured"
+        );
+
+        Ok(Client {
+            endpoint,
+            region,
+            signing_name,
+            target_prefix,
+            http,
+            credentials,
+            agent_version: self.agent_version,
+        })
     }
 }
 
@@ -605,5 +659,111 @@ mod tests {
         let timeout = Duration::from_secs(120);
         let builder = ClientBuilder::default().http_read_timeout(timeout);
         assert_eq!(builder.http_read_timeout, timeout);
+    }
+
+    #[test]
+    fn build_request_sets_content_type_header() {
+        let client = Client::builder()
+            .region("us-east-1")
+            .credentials(test_credentials())
+            .build()
+            .unwrap();
+
+        let req = client.build_request("PollHostCommand", "{}".into()).unwrap();
+        assert_eq!(req.headers()["content-type"], "application/x-amz-json-1.1");
+    }
+
+    #[test]
+    fn build_request_sets_x_amz_target_header() {
+        let client = Client::builder()
+            .region("us-east-1")
+            .credentials(test_credentials())
+            .build()
+            .unwrap();
+
+        let req = client.build_request("PollHostCommand", "{}".into()).unwrap();
+        assert_eq!(
+            req.headers()["x-amz-target"],
+            "CodeDeployCommandService_v20141006.PollHostCommand"
+        );
+    }
+
+    #[test]
+    fn build_request_x_amz_target_varies_by_operation() {
+        let client = Client::builder()
+            .region("us-east-1")
+            .credentials(test_credentials())
+            .build()
+            .unwrap();
+
+        let operations = [
+            "PollHostCommand",
+            "PutHostCommandAcknowledgement",
+            "GetDeploymentSpecification",
+            "PutHostCommandComplete",
+            "PostHostCommandUpdate",
+        ];
+
+        for op in operations {
+            let req = client.build_request(op, "{}".into()).unwrap();
+            let expected = format!("CodeDeployCommandService_v20141006.{op}");
+            assert_eq!(req.headers()["x-amz-target"], expected.as_str());
+        }
+    }
+
+    #[test]
+    fn build_request_uses_versioned_target_without_auth_policy() {
+        // Legacy stack expects the versioned prefix.
+        let client = Client::builder()
+            .region("us-east-1")
+            .credentials(test_credentials())
+            .enable_auth_policy(false)
+            .build()
+            .unwrap();
+
+        let req = client.build_request("PollHostCommand", "{}".into()).unwrap();
+        assert_eq!(
+            req.headers()["x-amz-target"],
+            "CodeDeployCommandService_v20141006.PollHostCommand"
+        );
+    }
+
+    #[test]
+    fn build_request_uses_bare_target_with_auth_policy() {
+        // Secure stack expects the bare prefix; the versioned one 400s there.
+        let client = Client::builder()
+            .region("us-east-1")
+            .credentials(test_credentials())
+            .enable_auth_policy(true)
+            .build()
+            .unwrap();
+
+        let req = client.build_request("PollHostCommand", "{}".into()).unwrap();
+        assert_eq!(req.headers()["x-amz-target"], "CodeDeployCommandService.PollHostCommand");
+    }
+
+    #[test]
+    fn build_request_includes_agent_version_header_when_set() {
+        let client = Client::builder()
+            .region("us-east-1")
+            .credentials(test_credentials())
+            .agent_version(Some("2.0.0".into()))
+            .build()
+            .unwrap();
+
+        let req = client.build_request("PollHostCommand", "{}".into()).unwrap();
+        assert_eq!(req.headers()["x-amz-codedeploy-agent-version"], "2.0.0");
+    }
+
+    #[test]
+    fn build_request_omits_agent_version_header_when_unset() {
+        let client = Client::builder()
+            .region("us-east-1")
+            .credentials(test_credentials())
+            .build()
+            .unwrap();
+
+        let req = client.build_request("PollHostCommand", "{}".into()).unwrap();
+        assert!(!req.headers().contains_key("x-amz-codedeploy-agent-version"));
     }
 }

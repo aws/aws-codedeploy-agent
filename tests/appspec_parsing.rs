@@ -2,7 +2,7 @@
 //!
 //! Tests the application_specification module against real-world AppSpec examples.
 
-use aws_codedeploy_agent::application_specification::{AppSpec, ParseError};
+use codedeploy_agent::application_specification::{AppSpec, ParseError};
 
 mod common;
 use common::{appspec_fixture, read_fixture};

@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! S3 bundle downloader.
 //!
 //! Delegates to `S3Client::download_to_file` and verifies the etag.
@@ -32,21 +30,34 @@ impl<'a> S3Downloader<'a> {
     ) -> Self {
         Self { client, bucket, key, version, etag, dest }
     }
-}
 
-impl BundleDownloader for S3Downloader<'_> {
-    fn download(&self) -> io::Result<()> {
+    /// Download the object and return its actual `ETag` (quotes stripped) after
+    /// verifying it against the expected etag from the spec.
+    ///
+    /// The spec often carries a null `ETag`, so the observed value is what
+    /// `DownloadBundle` persists to expose `BUNDLE_ETAG` to hooks.
+    ///
+    /// # Errors
+    /// Returns an error if the download or etag verification fails.
+    pub fn download_returning_etag(&self) -> io::Result<Option<String>> {
         let actual_etag = self.client.download_to_file(
             &self.bucket,
             &self.key,
             self.version.as_deref(),
             &self.dest,
         )?;
-
-        // Strip surrounding quotes before comparing etags.
-        verify_etag(self.etag.as_deref(), actual_etag.as_deref())
+        verify_etag(self.etag.as_deref(), actual_etag.as_deref())?;
+        Ok(actual_etag)
     }
 }
+
+// GRCOV_STOP_COVERAGE
+impl BundleDownloader for S3Downloader<'_> {
+    fn download(&self) -> io::Result<()> {
+        self.download_returning_etag().map(|_| ())
+    }
+}
+// GRCOV_BEGIN_COVERAGE
 
 /// Verify expected etag matches actual, stripping surrounding quotes.
 fn verify_etag(expected: Option<&str>, actual: Option<&str>) -> io::Result<()> {

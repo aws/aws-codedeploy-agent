@@ -1,5 +1,3 @@
-//! @risk low
-//!
 //! `SELinux` context types for `AppSpec` permissions.
 use crate::application_specification::ParseError;
 

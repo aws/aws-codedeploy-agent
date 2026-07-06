@@ -10,7 +10,7 @@ mod security;
 
 #[test]
 fn integration_test_appspec_parse() {
-    use aws_codedeploy_agent::application_specification::AppSpec;
+    use codedeploy_agent::application_specification::AppSpec;
 
     let yaml = "version: 0.0\nos: linux\n";
     let spec = AppSpec::parse(yaml).unwrap();

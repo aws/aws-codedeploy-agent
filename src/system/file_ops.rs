@@ -44,18 +44,47 @@ pub fn ensure_executable(path: &Path) -> Result<(), String> {
 }
 
 /// Linux implementation - no retry needed
+///
+/// `restrict` mirrors `restrict_agent_dir_permissions`: tracker state files
+/// are written 0644 by default (world-readable, backwards-compatible) and
+/// 0600 under opt-in hardening.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct LinuxFileOperations;
+pub struct LinuxFileOperations {
+    pub restrict: bool,
+}
+
+impl LinuxFileOperations {
+    #[must_use]
+    pub fn with_policy(restrict: bool) -> Self {
+        Self { restrict }
+    }
+}
 
 impl PlatformFileOperations for LinuxFileOperations {
     fn write_with_retry(&self, path: &Path, content: &str) -> io::Result<()> {
-        std::fs::write(path, content)
+        crate::system::secure_files::write_file_secure(
+            path,
+            content.as_bytes(),
+            crate::system::agent_file_mode(self.restrict),
+        )
     }
 }
 
 /// Windows implementation - retries on EACCES errors
+///
+/// `restrict` is accepted for interface parity but has no effect on Windows:
+/// `write_file_secure` always applies the SYSTEM+Administrators DACL there.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct WindowsFileOperations;
+pub struct WindowsFileOperations {
+    pub restrict: bool,
+}
+
+impl WindowsFileOperations {
+    #[must_use]
+    pub fn with_policy(restrict: bool) -> Self {
+        Self { restrict }
+    }
+}
 
 // Windows retry logic excluded from coverage on Linux builds where PermissionDenied
 // retry behavior cannot be meaningfully tested. Tested on Windows CI.
@@ -65,8 +94,11 @@ impl PlatformFileOperations for WindowsFileOperations {
         const RETRY_DELAYS_MS: [u64; 3] = [1000, 2000, 5000];
 
         for (attempt, &delay_ms) in RETRY_DELAYS_MS.iter().enumerate() {
-            match std::fs::write(path, content) {
+            // `mode` is ignored on Windows; `write_file_secure` applies the
+            // SYSTEM+Administrators DACL atomically via CreateFileW.
+            match crate::system::secure_files::write_file_secure(path, content.as_bytes(), 0o600) {
                 Ok(()) => return Ok(()),
+                // GRCOV_STOP_COVERAGE — Windows retry logic, untestable on Linux
                 Err(e)
                     if e.kind() == io::ErrorKind::PermissionDenied
                         && attempt < RETRY_DELAYS_MS.len() - 1 =>
@@ -77,13 +109,14 @@ impl PlatformFileOperations for WindowsFileOperations {
             }
         }
         Ok(())
+        // GRCOV_BEGIN_COVERAGE
     }
 }
 
 #[cfg(coverage)]
 impl PlatformFileOperations for WindowsFileOperations {
     fn write_with_retry(&self, path: &Path, content: &str) -> io::Result<()> {
-        std::fs::write(path, content)
+        crate::system::secure_files::write_file_secure(path, content.as_bytes(), 0o600)
     }
 }
 
@@ -106,16 +139,27 @@ pub fn copy_dir_recursive(src: &Path, dest: &Path) -> io::Result<()> {
         let file_type = entry.file_type()?;
 
         if file_type.is_symlink() {
-            let target = std::fs::read_link(entry.path())?;
             #[cfg(unix)]
-            std::os::unix::fs::symlink(&target, &entry_dest)?;
+            {
+                let target = std::fs::read_link(entry.path())?;
+                std::os::unix::fs::symlink(&target, &entry_dest)?;
+            }
             #[cfg(not(unix))]
-            std::fs::copy(entry.path(), &entry_dest)?;
+            std::fs::copy(entry.path(), &entry_dest)?; // GRCOV_IGNORE_LINE
         } else if file_type.is_dir() {
             copy_dir_recursive(&entry.path(), &entry_dest)?;
         } else {
             std::fs::copy(entry.path(), &entry_dest)?;
         }
+    }
+    // Preserve the source dir's mode (create_dir_all applies umask instead,
+    // dropping e.g. a bundle's 0755 scripts/ to 0750 and breaking runas: hooks).
+    // Set last, after children are written in.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(src)?.permissions().mode();
+        std::fs::set_permissions(dest, std::fs::Permissions::from_mode(mode))?;
     }
     Ok(())
 }
@@ -147,17 +191,68 @@ mod tests {
     fn linux_write_with_retry() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("test.txt");
-        let ops = LinuxFileOperations;
+        let ops = LinuxFileOperations::default();
 
         ops.write_with_retry(&path, "content").unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "content");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn linux_write_with_retry_default_applies_0644_mode() {
+        // Tracking files are world-readable by default so host tooling
+        // outside the agent can keep reading them.
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("d-tracking-perms");
+        let ops = LinuxFileOperations::default();
+
+        ops.write_with_retry(&path, "cmd-456").unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o644, "tracking file mode {mode:#o}, want 0644 (world-readable)");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn linux_write_with_retry_restricted_applies_0600_mode() {
+        // Opt-in hardening: tracking files hold deployment ID + command ID
+        // used by crash recovery — owner-only.
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("d-tracking-perms");
+        let ops = LinuxFileOperations::with_policy(true);
+
+        ops.write_with_retry(&path, "cmd-456").unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "tracking file mode {mode:#o}, want 0600");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial(umask)]
+    fn linux_write_with_retry_ignores_umask() {
+        // Mode is applied via fchmod, not umask, so a permissive umask
+        // can't widen the result.
+        use nix::sys::stat::{Mode, umask};
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("d-tracking-umask");
+        let ops = LinuxFileOperations::default();
+
+        let prev = umask(Mode::from_bits_truncate(0o000));
+        let result = ops.write_with_retry(&path, "cmd-456");
+        umask(prev);
+        result.unwrap();
+
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o644, "tracking file mode {mode:#o}, want 0644 despite umask 0000");
     }
 
     #[test]
     fn windows_write_with_retry_success() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("test.txt");
-        let ops = WindowsFileOperations;
+        let ops = WindowsFileOperations::default();
 
         ops.write_with_retry(&path, "content").unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "content");
@@ -199,5 +294,26 @@ mod tests {
             std::fs::read_link(dest.join("link.txt")).unwrap().to_str().unwrap(),
             "file.txt"
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn copy_dir_recursive_preserves_dir_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::TempDir::new().unwrap();
+        let src = dir.path().join("src");
+        let dest = dir.path().join("dest");
+        // 0751: not reachable from `mkdir(0777) & ~umask` under any common
+        // umask (0022->0755, 0027->0750), so this fails if mode preservation
+        // is removed regardless of the test runner's umask.
+        std::fs::create_dir_all(src.join("scripts")).unwrap();
+        std::fs::set_permissions(src.join("scripts"), std::fs::Permissions::from_mode(0o751))
+            .unwrap();
+        std::fs::write(src.join("scripts/h.sh"), "#!/bin/sh\n").unwrap();
+
+        copy_dir_recursive(&src, &dest).unwrap();
+
+        let mode = std::fs::metadata(dest.join("scripts")).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o751, "expected 0751 preserved, got {mode:#o}");
     }
 }

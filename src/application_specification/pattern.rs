@@ -1,11 +1,27 @@
-//! @risk low
-//!
 //! Glob pattern matching for file mappings.
-#[derive(Debug, Clone, PartialEq)]
+//!
+//! Backed by [`globset`] (DFA-backed, linear-time matching). Replaces the
+//! previous hand-rolled `simple_glob_match` which had exponential worst-case
+//! behavior on patterns with multiple `*`s (CWE-1333).
+
+use globset::{Glob, GlobMatcher};
+
+#[derive(Debug, Clone)]
 pub(crate) enum GlobPattern {
     MatchAll,
     Exact(String),
-    Wildcard(String),
+    Wildcard(GlobMatcher),
+}
+
+impl PartialEq for GlobPattern {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (GlobPattern::MatchAll, GlobPattern::MatchAll) => true,
+            (GlobPattern::Exact(a), GlobPattern::Exact(b)) => a == b,
+            (GlobPattern::Wildcard(a), GlobPattern::Wildcard(b)) => a.glob() == b.glob(),
+            _ => false,
+        }
+    }
 }
 
 impl GlobPattern {
@@ -16,72 +32,45 @@ impl GlobPattern {
         if !pattern.contains('*') {
             return GlobPattern::Exact(pattern.to_string());
         }
-        GlobPattern::Wildcard(pattern.to_string())
+        match Glob::new(pattern) {
+            Ok(glob) => GlobPattern::Wildcard(glob.compile_matcher()),
+            Err(_) => GlobPattern::Exact(pattern.to_string()),
+        }
+    }
+
+    /// Returns the original source string of this pattern.
+    ///
+    /// Used to surface the user's own glob in error messages instead of the
+    /// compiled matcher's `Debug` output, which leaks ~4KB of regex-automata
+    /// internals (NFA/DFA/PikeVM state tables) into user-visible errors.
+    pub(crate) fn as_str(&self) -> &str {
+        match self {
+            GlobPattern::MatchAll => "**",
+            GlobPattern::Exact(s) => s,
+            GlobPattern::Wildcard(matcher) => matcher.glob().glob(),
+        }
     }
 
     /// Checks if a filename matches this glob pattern.
     ///
-    /// Note: Currently unused in production code but tested and ready for future use.
-    /// The current implementation only validates that permissions use `MatchAll` (**) patterns.
-    /// When file filtering is implemented, this method will be used for actual matching.
+    /// `Wildcard` patterns use a pre-compiled [`GlobMatcher`]
+    /// (linear-time regardless of `*` count).
+    ///
+    /// Note: Currently unused in production; the installer only validates
+    /// that permissions use `MatchAll` (**). Tested for future use.
     #[allow(dead_code)]
     pub(crate) fn matches(&self, name: &str) -> bool {
         match self {
             GlobPattern::MatchAll => true,
             GlobPattern::Exact(s) => name == s,
-            GlobPattern::Wildcard(pattern) => simple_glob_match(name, pattern),
-        }
-    }
-}
-
-/// Simple glob pattern matching for filenames (no path separators).
-///
-/// Supports wildcards (*) matching zero or more characters.
-/// Rejects names containing path separators (/ or \).
-///
-/// Note: Currently unused in production code but tested and ready for future use.
-/// This provides the matching logic for `GlobPattern::matches()`.
-#[allow(dead_code)]
-fn simple_glob_match(name: &str, pattern: &str) -> bool {
-    if name.contains('/') || name.contains('\\') {
-        return false;
-    }
-
-    let name_chars: Vec<char> = name.chars().collect();
-    let pattern_chars: Vec<char> = pattern.chars().collect();
-
-    let mut options = vec![pattern_chars.clone()];
-
-    for &ch in &name_chars {
-        let mut new_options = Vec::new();
-
-        for mut option in options {
-            if option.is_empty() {
-                continue;
-            }
-
-            if option[0] == '*' {
-                new_options.push(option.clone());
-                option.remove(0);
-                if !option.is_empty() {
-                    new_options.push(option.clone());
+            GlobPattern::Wildcard(matcher) => {
+                if name.contains('/') || name.contains('\\') {
+                    return false;
                 }
-            }
-
-            if !option.is_empty() && option[0] == ch {
-                option.remove(0);
-                new_options.push(option);
-            }
-        }
-
-        options = new_options;
-
-        if options.iter().any(|o| o.len() == 1 && o[0] == '*') {
-            return true;
+                matcher.is_match(name)
+            },
         }
     }
-
-    options.iter().any(|o| o.is_empty() || (o.len() == 1 && o[0] == '*'))
 }
 
 #[cfg(test)]
@@ -211,7 +200,7 @@ mod tests {
     #[test]
     fn glob_compile_wildcard() {
         let pattern = GlobPattern::compile("*.txt");
-        assert_eq!(pattern, GlobPattern::Wildcard("*.txt".to_string()));
+        assert!(matches!(pattern, GlobPattern::Wildcard(_)));
     }
 
     #[test]
@@ -232,7 +221,7 @@ mod tests {
 
     #[test]
     fn glob_matches_wildcard_start() {
-        let pattern = GlobPattern::Wildcard("*.txt".to_string());
+        let pattern = GlobPattern::compile("*.txt");
         assert!(pattern.matches("file.txt"));
         assert!(pattern.matches("test.txt"));
         assert!(!pattern.matches("file.log"));
@@ -240,7 +229,7 @@ mod tests {
 
     #[test]
     fn glob_matches_wildcard_end() {
-        let pattern = GlobPattern::Wildcard("file*".to_string());
+        let pattern = GlobPattern::compile("file*");
         assert!(pattern.matches("file"));
         assert!(pattern.matches("file.txt"));
         assert!(pattern.matches("filename"));
@@ -249,7 +238,7 @@ mod tests {
 
     #[test]
     fn glob_matches_wildcard_middle() {
-        let pattern = GlobPattern::Wildcard("file*.txt".to_string());
+        let pattern = GlobPattern::compile("file*.txt");
         assert!(pattern.matches("file.txt"));
         assert!(pattern.matches("filename.txt"));
         assert!(!pattern.matches("file.log"));
@@ -257,7 +246,7 @@ mod tests {
 
     #[test]
     fn glob_matches_multiple_wildcards() {
-        let pattern = GlobPattern::Wildcard("*file*txt*".to_string());
+        let pattern = GlobPattern::compile("*file*txt*");
         assert!(pattern.matches("myfiletxt"));
         assert!(pattern.matches("file.txt.bak"));
         assert!(!pattern.matches("other"));
@@ -265,23 +254,95 @@ mod tests {
 
     #[test]
     fn glob_matches_rejects_path_separators() {
-        let pattern = GlobPattern::Wildcard("*.txt".to_string());
+        let pattern = GlobPattern::compile("*.txt");
         assert!(!pattern.matches("dir/file.txt"));
         assert!(!pattern.matches("dir\\file.txt"));
     }
 
     #[test]
     fn glob_matches_empty_pattern() {
-        let pattern = GlobPattern::Wildcard("*".to_string());
+        let pattern = GlobPattern::compile("*");
         assert!(pattern.matches("file"));
         assert!(pattern.matches(""));
     }
 
     #[test]
     fn glob_matches_complex_pattern() {
-        let pattern = GlobPattern::Wildcard("a*b*c".to_string());
+        let pattern = GlobPattern::compile("a*b*c");
         assert!(pattern.matches("abc"));
         assert!(pattern.matches("aXbYc"));
         assert!(!pattern.matches("abcd"));
+    }
+
+    #[test]
+    fn glob_match_completes_quickly_on_redos_shaped_pattern() {
+        // Regression test: 10K-char pattern previously took ~40s in the
+        // exponential matcher. globset is linear-time.
+        let pattern_str = format!("{}!", "a".repeat(10_000));
+        let pattern = GlobPattern::compile(&pattern_str);
+        let input = "a".repeat(10_000);
+
+        let start = std::time::Instant::now();
+        let result = pattern.matches(&input);
+        let elapsed = start.elapsed();
+
+        assert!(!result, "trailing '!' must not match input without '!'");
+        assert!(
+            elapsed < std::time::Duration::from_millis(500),
+            "match should be linear-time; took {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn glob_match_completes_quickly_on_redos_shaped_star_pattern() {
+        // Adversarial shape: many `*a` repeats with a non-matching trailing
+        // literal. Old matcher branched exponentially on every `*`.
+        let pattern_str = format!("{}!", "*a".repeat(50));
+        let pattern = GlobPattern::compile(&pattern_str);
+        let input = "a".repeat(100);
+
+        let start = std::time::Instant::now();
+        let result = pattern.matches(&input);
+        let elapsed = start.elapsed();
+
+        assert!(!result, "trailing '!' never matches");
+        assert!(
+            elapsed < std::time::Duration::from_millis(500),
+            "exponential-shape pattern should still match in linear time; took {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn wildcard_partial_eq_same_glob() {
+        let a = GlobPattern::compile("*.txt");
+        let b = GlobPattern::compile("*.txt");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn wildcard_partial_eq_different_glob() {
+        let a = GlobPattern::compile("*.txt");
+        let b = GlobPattern::compile("*.log");
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn partial_eq_wildcard_vs_exact_is_false() {
+        let wildcard = GlobPattern::compile("*.txt");
+        let exact = GlobPattern::Exact("*.txt".to_string());
+        assert_ne!(wildcard, exact);
+    }
+
+    #[test]
+    fn partial_eq_exact_vs_match_all_is_false() {
+        let exact = GlobPattern::Exact("**".to_string());
+        let match_all = GlobPattern::MatchAll;
+        assert_ne!(exact, match_all);
+    }
+
+    #[test]
+    fn compile_invalid_glob_falls_back_to_exact() {
+        let pattern = GlobPattern::compile("[unclosed");
+        assert_eq!(pattern, GlobPattern::Exact("[unclosed".to_string()));
     }
 }

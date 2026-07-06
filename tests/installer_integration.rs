@@ -1,7 +1,7 @@
 //! Integration tests for the file installer using bundle fixtures.
 
-use aws_codedeploy_agent::application_specification::{AppSpec, FileExistsBehavior};
-use aws_codedeploy_agent::installer::Installer;
+use codedeploy_agent::application_specification::{AppSpec, FileExistsBehavior};
+use codedeploy_agent::installer::Installer;
 use std::fs;
 use std::path::Path;
 use tempfile::TempDir;

@@ -1,36 +1,23 @@
 # AppSpec Parser
 
-Rust implementation of the AWS CodeDeploy AppSpec YAML parser, migrated from the Ruby CodeDeploy agent.
+Parser and validator for the AWS CodeDeploy AppSpec YAML file.
 
 ## Overview
 
-This module parses and validates AppSpec files for EC2/On-Premises deployments. It provides type-safe parsing with comprehensive validation matching the original Ruby implementation exactly.
+This module parses and validates AppSpec files for EC2/On-Premises deployments,
+providing type-safe access to the deployment's hooks, file mappings, and
+permissions. Parsing rejects malformed or contradictory specifications up front
+so that the rest of the agent only ever sees a valid AppSpec.
 
-**Entry Point**: `AppSpec::parse(yaml_string)`
-
-## Ruby to Rust Mapping
-
-| Ruby File | Rust File(s) | Description |
-|-----------|--------------|-------------|
-| `application_specification.rb` | `parse.rs`, `types.rs`, `mod.rs` | Main parser and core types |
-| `script_info.rb` | `hooks.rs` | Lifecycle hook scripts |
-| `file_info.rb` | `files.rs` | File mappings (source → destination) |
-| `mode_info.rb` | `mode.rs` | Unix file permissions (octal mode bits) |
-| `ace_info.rb` | `acl.rs` | POSIX ACL entries |
-| `acl_info.rb` | `acl.rs` | POSIX ACL collections |
-| `linux_permission_info.rb` | `permissions.rs` | Permission validation and constraints |
-| `context_info.rb` | `selinux.rs` | SELinux security context |
-| `range_info.rb` | `selinux.rs` | SELinux MLS range |
-| *(Ruby inline)* | `pattern.rs` | Glob pattern matching |
-| *(Ruby inline)* | `error.rs` | Error types with exact Ruby messages |
+**Entry point**: `AppSpec::parse(yaml_string)`
 
 ## Module Structure
 
 ```
-appspec/
+application_specification/
 ├── mod.rs              # Public API exports
-├── error.rs            # 23 error types
-├── types.rs            # Core types (AppSpec, Version, Os, etc.)
+├── error.rs            # Error types (23 variants)
+├── types.rs            # Core types (AppSpec, Version, Os, FileExistsBehavior)
 ├── parse.rs            # Main parsing logic
 ├── hooks.rs            # ScriptInfo, Timeout
 ├── files.rs            # FileMapping
@@ -38,22 +25,23 @@ appspec/
 ├── permissions.rs      # Permission validation
 ├── acl.rs              # POSIX ACL parsing
 ├── selinux.rs          # SELinux context and MLS range
-├── pattern.rs          # Glob pattern matching
-└── *_tests.rs          # Test files (per Rust conventions)
+└── pattern.rs          # Glob pattern matching
 ```
+
+Each file carries its own `#[cfg(test)] mod tests`.
 
 ## Key Design Principles
 
-1. **Parse → Validate → Construct**: Invalid states are unrepresentable
-2. **Type Safety**: Enums for fixed values, newtypes for validated strings
+1. **Parse → Validate → Construct**: invalid states are unrepresentable
+2. **Type Safety**: enums for fixed values, newtypes for validated strings
 3. **Memory Safety**: `#![forbid(unsafe_code)]`
-4. **Error Compatibility**: All error messages match Ruby exactly
-5. **Test Coverage**: 191 unit tests + 6 integration tests = 91.7% coverage
+4. **Stable Error Messages**: error text is part of the operator-facing contract
+   and surfaces in the agent log and the CodeDeploy console
 
 ## Example Usage
 
 ```rust
-use aws_codedeploy_agent::appspec::AppSpec;
+use codedeploy_agent::application_specification::AppSpec;
 
 let yaml = r#"
 version: 0.0
@@ -95,7 +83,10 @@ assert_eq!(spec.os().as_str(), "linux");
 - Pattern must be `**` (match all)
 - No `except` patterns allowed
 - No default ACLs allowed
-- Enforced in `permissions.rs`
+- Enforced in `permissions.rs`, at apply time rather than parse time: these
+  constraints only apply once a permission resolves to an actual copied file, so
+  a directory `object:` with `type: [file]` plus a `pattern:`/`except:` is valid
+  input and must parse.
 
 ### Timeout Validation
 - Must be > 0
@@ -127,14 +118,11 @@ assert_eq!(spec.os().as_str(), "linux");
 # Run all tests
 cargo test
 
-# Current metrics
-# Tests: 198 (191 unit + 6 integration + 1 lib)
-# Coverage: 91.7% (510/556 lines)
-# Warnings: 0
+# Run only this module's tests
+cargo test application_specification
 ```
 
 ## References
 
-- **Ruby Source**: `aws-codedeploy-agent/lib/instance_agent/plugins/codedeploy/application_specification/`
-- **Design Doc**: `BoltCommonContext/CodeDeploy/Agent/Migrations/application-specification/rust-design.md`
-- **AWS Docs**: https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-example.html
+- [AppSpec file reference](https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file.html)
+- [AppSpec file example](https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-example.html)

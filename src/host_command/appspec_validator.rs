@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Appspec hook validation.
 //!
 //! Validates that lifecycle events in the appspec and hook mapping are allowed

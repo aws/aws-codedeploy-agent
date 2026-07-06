@@ -1,5 +1,3 @@
-//! @risk low
-//!
 //! `AppSpec` lifecycle hook types.
 use crate::application_specification::ParseError;
 use indexmap::IndexMap;

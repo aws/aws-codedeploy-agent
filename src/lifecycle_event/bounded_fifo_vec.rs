@@ -1,5 +1,3 @@
-//! @risk none
-//!
 //! Bounded FIFO buffer for log collection
 
 #[allow(dead_code)]

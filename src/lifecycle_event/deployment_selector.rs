@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Deployment directory selection logic
 
 use crate::lifecycle_event::{DeploymentType, LifecycleEventType};
@@ -11,7 +9,7 @@ const CURRENT: &str = "Current";
 
 /// Select the correct deployment directory based on lifecycle event, deployment creator, and type
 pub fn select_deployment_dir(
-    lifecycle_event: LifecycleEventType,
+    lifecycle_event: &LifecycleEventType,
     deployment_creator: &str,
     deployment_type: DeploymentType,
     current_dir: &Path,
@@ -39,7 +37,7 @@ pub fn select_deployment_dir(
     }
 }
 
-fn standard_mapping(event: LifecycleEventType) -> &'static str {
+fn standard_mapping(event: &LifecycleEventType) -> &'static str {
     match event {
         LifecycleEventType::BeforeBlockTraffic
         | LifecycleEventType::AfterBlockTraffic
@@ -49,11 +47,12 @@ fn standard_mapping(event: LifecycleEventType) -> &'static str {
         | LifecycleEventType::ApplicationStart
         | LifecycleEventType::BeforeAllowTraffic
         | LifecycleEventType::AfterAllowTraffic
-        | LifecycleEventType::ValidateService => CURRENT,
+        | LifecycleEventType::ValidateService
+        | LifecycleEventType::Custom(_) => CURRENT,
     }
 }
 
-fn rollback_mapping(event: LifecycleEventType) -> &'static str {
+fn rollback_mapping(event: &LifecycleEventType) -> &'static str {
     match event {
         LifecycleEventType::BeforeBlockTraffic | LifecycleEventType::AfterBlockTraffic => {
             MOST_RECENT
@@ -64,7 +63,8 @@ fn rollback_mapping(event: LifecycleEventType) -> &'static str {
         LifecycleEventType::BeforeInstall
         | LifecycleEventType::AfterInstall
         | LifecycleEventType::ApplicationStart
-        | LifecycleEventType::ValidateService => CURRENT,
+        | LifecycleEventType::ValidateService
+        | LifecycleEventType::Custom(_) => CURRENT,
     }
 }
 
@@ -83,7 +83,7 @@ mod tests {
         fs::create_dir_all(&last_successful).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::BeforeBlockTraffic,
+            &LifecycleEventType::BeforeBlockTraffic,
             "user",
             DeploymentType::InPlace,
             &current,
@@ -102,7 +102,7 @@ mod tests {
         fs::create_dir_all(&last_successful).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::AfterBlockTraffic,
+            &LifecycleEventType::AfterBlockTraffic,
             "user",
             DeploymentType::InPlace,
             &current,
@@ -121,7 +121,7 @@ mod tests {
         fs::create_dir_all(&last_successful).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::ApplicationStop,
+            &LifecycleEventType::ApplicationStop,
             "user",
             DeploymentType::InPlace,
             &current,
@@ -138,7 +138,7 @@ mod tests {
         fs::create_dir_all(&current).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::BeforeInstall,
+            &LifecycleEventType::BeforeInstall,
             "user",
             DeploymentType::InPlace,
             &current,
@@ -155,7 +155,7 @@ mod tests {
         fs::create_dir_all(&current).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::AfterInstall,
+            &LifecycleEventType::AfterInstall,
             "user",
             DeploymentType::InPlace,
             &current,
@@ -172,7 +172,7 @@ mod tests {
         fs::create_dir_all(&current).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::ApplicationStart,
+            &LifecycleEventType::ApplicationStart,
             "user",
             DeploymentType::InPlace,
             &current,
@@ -189,7 +189,7 @@ mod tests {
         fs::create_dir_all(&current).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::BeforeAllowTraffic,
+            &LifecycleEventType::BeforeAllowTraffic,
             "user",
             DeploymentType::InPlace,
             &current,
@@ -206,7 +206,7 @@ mod tests {
         fs::create_dir_all(&current).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::AfterAllowTraffic,
+            &LifecycleEventType::AfterAllowTraffic,
             "user",
             DeploymentType::InPlace,
             &current,
@@ -223,7 +223,7 @@ mod tests {
         fs::create_dir_all(&current).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::ValidateService,
+            &LifecycleEventType::ValidateService,
             "user",
             DeploymentType::InPlace,
             &current,
@@ -242,7 +242,7 @@ mod tests {
         fs::create_dir_all(&most_recent).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::BeforeBlockTraffic,
+            &LifecycleEventType::BeforeBlockTraffic,
             "codeDeployRollback",
             DeploymentType::BlueGreen,
             &current,
@@ -261,7 +261,7 @@ mod tests {
         fs::create_dir_all(&most_recent).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::AfterBlockTraffic,
+            &LifecycleEventType::AfterBlockTraffic,
             "codeDeployRollback",
             DeploymentType::BlueGreen,
             &current,
@@ -280,7 +280,7 @@ mod tests {
         fs::create_dir_all(&last_successful).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::ApplicationStop,
+            &LifecycleEventType::ApplicationStop,
             "codeDeployRollback",
             DeploymentType::BlueGreen,
             &current,
@@ -297,7 +297,7 @@ mod tests {
         fs::create_dir_all(&current).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::BeforeInstall,
+            &LifecycleEventType::BeforeInstall,
             "codeDeployRollback",
             DeploymentType::BlueGreen,
             &current,
@@ -314,7 +314,7 @@ mod tests {
         fs::create_dir_all(&current).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::AfterInstall,
+            &LifecycleEventType::AfterInstall,
             "codeDeployRollback",
             DeploymentType::BlueGreen,
             &current,
@@ -331,7 +331,7 @@ mod tests {
         fs::create_dir_all(&current).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::ApplicationStart,
+            &LifecycleEventType::ApplicationStart,
             "codeDeployRollback",
             DeploymentType::BlueGreen,
             &current,
@@ -350,7 +350,7 @@ mod tests {
         fs::create_dir_all(&last_successful).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::BeforeAllowTraffic,
+            &LifecycleEventType::BeforeAllowTraffic,
             "codeDeployRollback",
             DeploymentType::BlueGreen,
             &current,
@@ -369,7 +369,7 @@ mod tests {
         fs::create_dir_all(&last_successful).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::AfterAllowTraffic,
+            &LifecycleEventType::AfterAllowTraffic,
             "codeDeployRollback",
             DeploymentType::BlueGreen,
             &current,
@@ -386,7 +386,7 @@ mod tests {
         fs::create_dir_all(&current).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::ValidateService,
+            &LifecycleEventType::ValidateService,
             "codeDeployRollback",
             DeploymentType::BlueGreen,
             &current,
@@ -404,11 +404,30 @@ mod tests {
         fs::create_dir_all(&archive).unwrap();
 
         let result = select_deployment_dir(
-            LifecycleEventType::ApplicationStop,
+            &LifecycleEventType::ApplicationStop,
             "user",
             DeploymentType::InPlace,
             &current,
             None,
+            None,
+        );
+        assert_eq!(result, current);
+    }
+
+    #[test]
+    fn custom_event_uses_current_deployment() {
+        let temp = TempDir::new().unwrap();
+        let current = temp.path().join("current");
+        let last_successful = temp.path().join("last_successful");
+        fs::create_dir_all(&current).unwrap();
+        fs::create_dir_all(&last_successful).unwrap();
+
+        let result = select_deployment_dir(
+            &LifecycleEventType::Custom("HealthCheck".to_string()),
+            "user",
+            DeploymentType::InPlace,
+            &current,
+            Some(&last_successful),
             None,
         );
         assert_eq!(result, current);

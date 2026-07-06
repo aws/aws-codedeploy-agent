@@ -1,5 +1,3 @@
-//! @risk low
-//!
 //! `AppSpec` file permission mode parsing.
 use crate::application_specification::ParseError;
 use bitflags::bitflags;
@@ -28,7 +26,7 @@ impl Mode {
     ///
     /// # Examples
     /// ```
-    /// # use aws_codedeploy_agent::application_specification::Mode;
+    /// # use codedeploy_agent::application_specification::Mode;
     /// let mode = Mode::from_octal("755").unwrap();   // rwxr-xr-x
     /// let mode = Mode::from_octal("0644").unwrap();  // rw-r--r--
     /// ```
@@ -116,7 +114,7 @@ impl FromStr for Mode {
     ///
     /// # Examples
     /// ```
-    /// # use aws_codedeploy_agent::application_specification::Mode;
+    /// # use codedeploy_agent::application_specification::Mode;
     /// # use std::str::FromStr;
     /// let mode: Mode = "755".parse().unwrap();   // rwxr-xr-x
     /// let mode: Mode = "0644".parse().unwrap();  // rw-r--r--

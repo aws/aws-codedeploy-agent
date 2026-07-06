@@ -1,5 +1,3 @@
-//! @risk none
-//!
 //! Installer error types.
 use std::fmt;
 use std::path::PathBuf;
@@ -38,9 +36,25 @@ pub enum InstallerError {
         path: String,
         base: PathBuf,
     },
+    DestinationEscapesRoot {
+        destination: String,
+    },
+    InvalidSourceFileName {
+        source: String,
+    },
 
     // Permission errors
+    SymlinkDestinationRejected {
+        object: PathBuf,
+    },
     SelinuxRoleNotSupported,
+    UnconfinedSelinuxRejected {
+        type_: String,
+    },
+    UnsafePermissionRejected {
+        object: PathBuf,
+        mode: String,
+    },
     AclCommandFailed {
         object: PathBuf,
         command: String,
@@ -60,9 +74,14 @@ pub enum InstallerError {
 }
 
 impl fmt::Display for InstallerError {
+    // One `write!` arm per error variant; splitting the match would add
+    // indirection without improving readability.
+    #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // NOTE: Error messages intentionally include full file paths for debugging.
-        // This aids troubleshooting but may expose internal paths in logs.
+        // Error messages intentionally include full file paths: they surface to
+        // the operator (agent log + CodeDeploy console) so they can see which
+        // AppSpec path failed. The paths are the customer's own values on a host
+        // they control, not a secret.
         match self {
             Self::MissingOption(opt) => write!(f, "the {opt} option is required"),
 
@@ -119,6 +138,20 @@ impl fmt::Display for InstallerError {
                 )
             },
 
+            Self::DestinationEscapesRoot { destination } => {
+                write!(
+                    f,
+                    "The deployment failed because a file destination path ({destination}) uses '..' components that climb above its own root, which would write outside the intended destination. Correct the files section of the AppSpec file, and then try again."
+                )
+            },
+
+            Self::InvalidSourceFileName { source } => {
+                write!(
+                    f,
+                    "The deployment failed because a file source path ({source}) has no final path component (it ends in '..' or is a root path), so no destination file name can be derived. Correct the files section of the AppSpec file, and then try again."
+                )
+            },
+
             Self::InvalidFileExistsBehavior { behavior } => {
                 write!(
                     f,
@@ -126,10 +159,33 @@ impl fmt::Display for InstallerError {
                 )
             },
 
+            Self::SymlinkDestinationRejected { object } => {
+                write!(
+                    f,
+                    "The deployment failed because the permission target {} is a symbolic link. The agent does not follow symbolic links when applying ownership, mode, ACL, or SELinux context. Reference the real target path in the AppSpec permissions section, and then try again.",
+                    object.display()
+                )
+            },
+
             Self::SelinuxRoleNotSupported => {
                 write!(
                     f,
                     "The deployment failed because the application specification file specifies a role, but roles are not supported. Remove the role from the AppSpec file, and then try again."
+                )
+            },
+
+            Self::UnconfinedSelinuxRejected { type_ } => {
+                write!(
+                    f,
+                    "deployment rejected: AppSpec specifies SELinux type '{type_}' which disables mandatory access controls; set reject_unconfined_selinux_in_bundle: false to allow"
+                )
+            },
+
+            Self::UnsafePermissionRejected { object, mode } => {
+                write!(
+                    f,
+                    "deployment rejected: file {} requests SUID/SGID mode {mode}; set reject_unsafe_permissions_in_bundle: false to allow",
+                    object.display()
                 )
             },
 
@@ -254,9 +310,48 @@ mod tests {
     }
 
     #[test]
+    fn destination_escapes_root_display() {
+        let err =
+            InstallerError::DestinationEscapesRoot { destination: "../../etc/cron.d".to_string() };
+        let msg = err.to_string();
+        assert!(msg.contains("../../etc/cron.d"));
+        assert!(msg.contains("climb above its own root"));
+    }
+
+    #[test]
+    fn invalid_source_file_name_display() {
+        let err = InstallerError::InvalidSourceFileName { source: "foo/..".to_string() };
+        let msg = err.to_string();
+        assert!(msg.contains("foo/.."));
+        assert!(msg.contains("no final path component"));
+    }
+
+    #[test]
     fn selinux_role_not_supported_display() {
         let err = InstallerError::SelinuxRoleNotSupported;
         assert!(err.to_string().contains("roles are not supported"));
+    }
+
+    #[test]
+    fn unconfined_selinux_rejected_display() {
+        let err = InstallerError::UnconfinedSelinuxRejected { type_: "unconfined_t".to_string() };
+        let msg = err.to_string();
+        assert!(msg.contains("unconfined_t"));
+        assert!(msg.contains("disables mandatory access controls"));
+        assert!(msg.contains("reject_unconfined_selinux_in_bundle"));
+    }
+
+    #[test]
+    fn unsafe_permission_rejected_display() {
+        let err = InstallerError::UnsafePermissionRejected {
+            object: PathBuf::from("/path/to/binary"),
+            mode: "4755".to_string(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("/path/to/binary"));
+        assert!(msg.contains("4755"));
+        assert!(msg.contains("SUID/SGID"));
+        assert!(msg.contains("reject_unsafe_permissions_in_bundle"));
     }
 
     #[test]

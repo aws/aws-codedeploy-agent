@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Local file downloader — symlink (Unix) or copy (Windows).
 
 use super::BundleDownloader;

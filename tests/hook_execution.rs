@@ -1,11 +1,9 @@
 //! Integration tests for lifecycle hook execution using bundle fixtures.
 
-use aws_codedeploy_agent::deployment_specification::types::{
+use codedeploy_agent::deployment_specification::types::{
     DeploymentSpec, RevisionLocation, RevisionSource,
 };
-use aws_codedeploy_agent::lifecycle_event::{
-    ErrorCode, LifecycleEventExecutor, LifecycleEventType,
-};
+use codedeploy_agent::lifecycle_event::{ErrorCode, LifecycleEventExecutor, LifecycleEventType};
 use std::path::Path;
 use tempfile::TempDir;
 

@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Command implementations for the executor.
 
 mod download_bundle;

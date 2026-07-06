@@ -1,5 +1,3 @@
-//! @risk none
-//!
 //! `AppSpec` parsing errors.
 use thiserror::Error;
 

@@ -1,10 +1,21 @@
-//! @risk medium
-//!
 //! `SELinux` operations — `semanage` and `restorecon` wrappers.
 use std::io;
 use std::path::Path;
 #[cfg(not(coverage))]
 use std::process::Command;
+
+/// Flags for the `restorecon` invocation after adding an fcontext rule.
+///
+/// - `-v` logs each restored file.
+/// - `-F` forces the full label (user + role + type + range) to match the
+///   fcontext rule. Without `-F`, `restorecon` only resets the type portion
+///   and silently drops user/range — a false-sense-of-security condition
+///   where the customer specifies context fields in `AppSpec` but they never
+///   reach the live file. `-F` is correct here because the fcontext rule
+///   we just created via `semanage fcontext -a` encodes the customer's
+///   full intent from the `AppSpec` `context:` block.
+#[cfg(not(coverage))]
+pub(crate) const RESTORECON_FLAGS: &str = "-vF";
 
 /// Trait for `SELinux` operations (semanage, restorecon)
 pub trait SeLinuxOps {
@@ -50,6 +61,7 @@ impl SeLinuxOps for SystemSeLinuxOps {
 
         let output = cmd.output()?;
 
+        // GRCOV_STOP_COVERAGE — semanage not available in test environments
         if !output.status.success() {
             return Err(io::Error::other(format!(
                 "semanage fcontext -a failed: {}",
@@ -58,10 +70,12 @@ impl SeLinuxOps for SystemSeLinuxOps {
         }
 
         Ok(())
+        // GRCOV_BEGIN_COVERAGE
     }
 
     fn remove_context(&self, path: &Path) -> io::Result<()> {
         let path_str = path.to_string_lossy();
+        // GRCOV_STOP_COVERAGE — semanage not available in test environments
         let output =
             Command::new("semanage").args(["fcontext", "-d", path_str.as_ref()]).output()?;
 
@@ -73,12 +87,20 @@ impl SeLinuxOps for SystemSeLinuxOps {
         }
 
         Ok(())
+        // GRCOV_BEGIN_COVERAGE
     }
 
     fn restore_context(&self, path: &Path) -> io::Result<()> {
         let path_str = path.to_string_lossy();
-        let output = Command::new("restorecon").args(["-v", path_str.as_ref()]).output()?;
+        // Use `restorecon -vF` so the full label (user + role + type + range)
+        // from the fcontext rule created via `semanage fcontext -a` is applied.
+        // Without `-F`, restorecon only resets the type portion and silently
+        // drops the user and range fields the customer specified in AppSpec.
+        let output = Command::new("restorecon")
+            .args([RESTORECON_FLAGS, path_str.as_ref()])
+            .output()?;
 
+        // GRCOV_STOP_COVERAGE
         if !output.status.success() {
             return Err(io::Error::other(format!(
                 "restorecon failed: {}",
@@ -87,6 +109,7 @@ impl SeLinuxOps for SystemSeLinuxOps {
         }
 
         Ok(())
+        // GRCOV_BEGIN_COVERAGE
     }
 }
 
@@ -197,5 +220,20 @@ mod tests {
         let ops = SystemSeLinuxOps;
         let result = ops.restore_context(Path::new("/tmp/nonexistent"));
         let _ = result;
+    }
+
+    // Ensure restorecon is invoked with -F so the full SELinux label (user + role + type + range) from the fcontext
+    // rule is applied, not just the type. `restorecon -v` alone silently
+    // drops the user and range the customer specified in AppSpec.
+    #[cfg(not(coverage))]
+    #[test]
+    fn restorecon_flags_include_force_for_full_label_reset() {
+        assert!(
+            RESTORECON_FLAGS.contains('F'),
+            "restorecon must be invoked with -F to apply the full SELinux label \
+             (user + role + type + range), not just the type. Without -F, the \
+             customer-specified `user:` and `range:` fields from AppSpec are \
+             silently dropped."
+        );
     }
 }

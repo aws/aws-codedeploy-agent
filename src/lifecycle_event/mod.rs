@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Lifecycle event execution.
 //!
 //! Orchestrates running deployment hook scripts. The executor selects the correct
@@ -20,5 +18,5 @@ pub use deployment_type::DeploymentType;
 pub use error::{ErrorCode, ScriptError};
 pub use executor::LifecycleEventExecutor;
 pub use lifecycle_event_type::LifecycleEventType;
-pub use script::Script;
+pub use script::{HookEnvPolicy, Script};
 pub use script_run_log::ScriptRunLog;

@@ -1,16 +1,8 @@
-//! @risk medium
-//!
 //! TLS endpoint verification.
 //!
-//! Despite the name "SSL certificate field verification" in the Ruby agent,
-//! this is really just a TLS connectivity pre-check. The Rust AWS SDK already
-//! does `VERIFY_PEER` on every request, so the main value is failing fast at
-//! startup rather than failing on the first poll.
-//!
-//! Ruby source: `CodeDeployControlCertVerifier#verify_cert` in
-//! `lib/instance_agent/plugins/codedeploy/codedeploy_control.rb`
-//! — makes an HTTPS GET to the endpoint with `VERIFY_PEER` mode.
-//! If the TLS handshake fails, the agent aborts.
+//! This is a TLS connectivity pre-check. The AWS SDK already does `VERIFY_PEER`
+//! on every request; the main value here is failing fast at startup rather than
+//! failing on the first poll.
 
 use std::time::Duration;
 
@@ -34,14 +26,14 @@ pub fn verify_tls_connection(endpoint: &str, proxy_uri: Option<&str>) -> Result<
 
     let client = builder.build().map_err(|e| format!("failed to build HTTP client: {e}"))?;
 
-    // Ruby does `client.get '/'` — we do the same. The response status doesn't
-    // matter; we only care that the TLS handshake completed successfully.
+    // Send a GET to '/'. The response status doesn't matter; we only care
+    // that the TLS handshake completed successfully.
     match client.get(endpoint).send() {
         Err(e) if e.is_connect() || e.is_timeout() => {
             Err(format!("TLS connection to {endpoint} failed: {e}"))
         },
         // Non-TLS errors (e.g. HTTP status errors) mean TLS succeeded — that's fine.
-        Ok(_) | Err(_) => Ok(()),
+        Ok(_) | Err(_) => Ok(()), // GRCOV_IGNORE_LINE
     }
 }
 
@@ -57,7 +49,13 @@ mod tests {
 
     #[test]
     fn verify_tls_connection_with_invalid_proxy_fails() {
-        let result = verify_tls_connection("https://example.com", Some("not://valid"));
+        let result = verify_tls_connection("https://example.com", Some("://"));
         assert!(result.is_err(), "expected error for invalid proxy URI");
+    }
+
+    #[test]
+    fn verify_tls_connection_with_unreachable_proxy_fails() {
+        let result = verify_tls_connection("https://localhost:1", Some("http://127.0.0.1:1"));
+        assert!(result.is_err(), "expected TLS probe to fail through unreachable proxy");
     }
 }

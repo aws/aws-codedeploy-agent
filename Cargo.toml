@@ -2,12 +2,16 @@
 members = [".", "crates/codedeploy-commands"]
 
 [package]
-name = "aws-codedeploy-agent"
+name = "codedeploy-agent"
 edition = "2024"
-version = "0.1.0"
-license = "Apache-2.0"
-homepage = "https://github.com/aws/aws-codedeploy-agent"
+rust-version = "1.91"
+homepage = "https://aws.amazon.com/codedeploy/"
 repository = "https://github.com/aws/aws-codedeploy-agent"
+version = "2.0.0"
+description = "AWS CodeDeploy agent responsible for deploying software on an individual EC2/On-prem instance"
+license = "Apache-2.0"
+authors = ["Amazon Web Services"]
+publish = false
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -17,8 +21,6 @@ thiserror = "1.0"
 bitflags = "2.4"
 indexmap = { version = "2.0", features = ["serde"] }
 globset = "0.4"
-nix = { version = "0.29", features = ["user", "fs", "signal", "process"] }
-signal-hook = "0.3"
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "registry", "time"] }
@@ -28,19 +30,50 @@ nu-path = "0.110"
 tokio = { version = "1", features = ["process", "io-util", "time", "rt", "macros", "sync"] }
 chrono = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
-openssl = "0.10"
+# `vendored`: ship OpenSSL inside the binary so one artifact runs across
+# distros with mismatched system OpenSSL majors.
+openssl = { version = "0.10", features = ["vendored"] }
 aws-config = { version = "1", features = ["behavior-version-latest"] }
 aws-credential-types = "1"
 aws-sdk-s3 = "1"
+aws-smithy-http-client = { version = "1", features = ["rustls-aws-lc"] }
 aws-smithy-types = "1"
 codedeploy-commands = { path = "crates/codedeploy-commands" }
-
-[dev-dependencies]
 tempfile = "3"
 filetime = "0.2"
+tar = "0.4"
+flate2 = "1.1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+walkdir = "2"
+getrandom = "0.2"
+subtle = "2"
+# Strips ANSI escape sequences from script stdout/stderr before writing to
+# `scripts.log` so a malicious hook script can't forge log entries via
+# cursor positioning, screen clearing, or color codes.
+strip-ansi-escapes = "0.2"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29", features = ["user", "fs", "signal", "process", "resource"] }
+signal-hook = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "0.7"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_JobObjects", "Win32_System_Console", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Diagnostics_Debug"] }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-acl = "0.3"
+
+[dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
-walkdir = "2"
+proptest = "1"
+wiremock = "0.6"
+# Serializes tests that mutate process-wide state (umask).
+serial_test = "3"
+# Captures `tracing` events for assertion in tests.
+# `no-env-filter` disables the macro's default crate-name-scoped filter so we
+# can capture events emitted by `codedeploy-agent` from integration tests.
+tracing-test = { version = "0.2", features = ["no-env-filter"] }
 
 [profile.release]
 # debug = "limited"
@@ -48,3 +81,97 @@ walkdir = "2"
 # Allow cfg(coverage) used by cargo-llvm-cov to exclude untestable system command code
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
+
+# .deb packaging via cargo-deb. Asset paths are relative to Cargo.toml.
+[package.metadata.deb]
+maintainer = "Amazon Web Services <codedeploy-agent@amazon.com>"
+section = "admin"
+priority = "optional"
+extended-description = "The AWS CodeDeploy agent runs on EC2 and on-premises instances and executes deployments issued by the AWS CodeDeploy service. See https://docs.aws.amazon.com/codedeploy/ for documentation."
+# Explicit (non-$auto) deps skip cargo-deb's dpkg-shlibdeps call, which isn't
+# available on the AL2 build host. The agent links only glibc dynamically
+# (rustls + vendored OpenSSL), and the build pins the floor via zigbuild .2.17.
+depends = "libc6 (>= 2.17)"
+# `maintainer-scripts` MUST be set for cargo-deb to generate the systemd
+# postinst/prerm/postrm (see [package.metadata.deb.systemd-units] below). The
+# `debian/` directory is intentionally empty — cargo-deb creates the scripts
+# from scratch when no templates are present.
+maintainer-scripts = "debian"
+# The systemd unit is installed via [package.metadata.deb.systemd-units] below
+# (not listed here) so cargo-deb both ships the unit and generates the
+# maintainer scripts that enable/start/stop it. Listing it as an asset too
+# would install it twice.
+assets = [
+    ["target/release/codedeploy-agent", "opt/codedeploy-agent/bin/", "755"],
+    ["conf/codedeployagent.yml", "etc/codedeploy-agent/conf/", "644"],
+    # Backwards-compat: the local-deployment tool used to ship as a standalone
+    # `codedeploy-local` executable in this same bin directory. It is now a
+    # subcommand of the agent binary; this symlink keeps the documented
+    # `codedeploy-local [options]` invocation working via argv[0] dispatch
+    # (see `legacy_local_argv` in src/main.rs).
+    { dest = "opt/codedeploy-agent/bin/codedeploy-local", link_name = "codedeploy-agent" },
+]
+
+# Generate postinst/prerm/postrm that enable + start the service on install,
+# restart it after an upgrade, and stop + disable it on removal. cargo-deb emits
+# the corresponding `deb-systemd-helper` / `deb-systemd-invoke` calls. The unit
+# file is picked up from `unit-scripts`. All shipping targets are systemd, so no
+# SysV (update-rc.d) fallback is needed.
+[package.metadata.deb.systemd-units]
+unit-scripts = "systemd"
+unit-name = "codedeploy-agent"
+enable = true
+start = true
+restart-after-upgrade = true
+
+# .rpm packaging via cargo-generate-rpm.
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/codedeploy-agent", dest = "/opt/codedeploy-agent/bin/codedeploy-agent", mode = "0755" },
+    { source = "systemd/codedeploy-agent.service", dest = "/lib/systemd/system/codedeploy-agent.service", mode = "0644" },
+    { source = "conf/codedeployagent.yml", dest = "/etc/codedeploy-agent/conf/codedeployagent.yml", mode = "0644", config = "noreplace" },
+]
+
+# cargo-generate-rpm writes the RPM directly (it does not run rpmbuild), so the
+# `%systemd_post`/`%systemd_preun`/`%systemd_postun_with_restart` macros are NOT
+# expanded — these scriptlets are the hand-written equivalent. `$1` is the count
+# of package versions that will remain after the operation: on %post, 1 = fresh
+# install and >1 = upgrade; on %preun, 0 = final erase. It enables + starts on
+# first install, restarts on upgrade, and stops on erase using systemd directly,
+# with no chkconfig/SysV fallback.
+#
+# The upgrade branch runs `daemon-reload` before `try-restart`: in an RPM
+# upgrade transaction, %post of the NEW package ($1=2) runs while systemd still
+# has the OLD unit cached — the old package's %postun (with its own
+# daemon-reload) doesn't run until later in the transaction. Without the reload
+# here, the service would restart against stale unit config (ExecStart,
+# Environment=, TimeoutStopSec). This is what %systemd_postun_with_restart does.
+# Backwards-compat: recreate the `codedeploy-local` symlink on every install and
+# upgrade. cargo-generate-rpm has no symlink-asset support (unlike cargo-deb), so
+# the link is created here in %post rather than shipped as an asset. `ln -sf`
+# makes this idempotent across reinstalls and upgrades. The link is removed in
+# %postun only on final erase ($1 == 0) so an upgrade transaction's erase of the
+# old package doesn't delete the link the new package just recreated. See
+# `legacy_local_argv` in src/main.rs.
+post_install_script = """
+ln -sf codedeploy-agent /opt/codedeploy-agent/bin/codedeploy-local >/dev/null 2>&1 || :
+systemctl --no-reload enable codedeploy-agent.service >/dev/null 2>&1 || :
+if [ "$1" -eq 1 ]; then
+    systemctl start codedeploy-agent.service >/dev/null 2>&1 || :
+else
+    systemctl daemon-reload >/dev/null 2>&1 || :
+    systemctl try-restart codedeploy-agent.service >/dev/null 2>&1 || :
+fi
+"""
+pre_uninstall_script = """
+if [ "$1" -eq 0 ]; then
+    systemctl --no-reload disable codedeploy-agent.service >/dev/null 2>&1 || :
+    systemctl stop codedeploy-agent.service >/dev/null 2>&1 || :
+fi
+"""
+post_uninstall_script = """
+if [ "$1" -eq 0 ]; then
+    rm -f /opt/codedeploy-agent/bin/codedeploy-local >/dev/null 2>&1 || :
+fi
+systemctl daemon-reload >/dev/null 2>&1 || :
+"""

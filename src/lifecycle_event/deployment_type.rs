@@ -1,5 +1,3 @@
-//! @risk none
-//!
 //! Deployment type enums
 
 use std::fmt;
