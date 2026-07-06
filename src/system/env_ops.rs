@@ -1,5 +1,3 @@
-//! @risk low
-//!
 //! Testable environment variable access.
 /// Environment variable access abstraction.
 ///
@@ -34,6 +32,7 @@ mod mock {
     }
 
     impl MockEnvOps {
+        #[must_use]
         pub fn with(key: &str, value: &str) -> Self {
             let mut vars = HashMap::new();
             vars.insert(key.to_string(), value.to_string());

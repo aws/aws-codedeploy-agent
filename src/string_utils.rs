@@ -1,12 +1,8 @@
-//! @risk none
-//!
-//! String utility functions matching the Ruby `CodeDeploy` agent.
-//!
-//! Ruby reference: `lib/instance_agent/string_utils.rb` (lines 1-16, branch 1.9)
+//! String utility functions for the `CodeDeploy` agent.
 
 /// Converts a `PascalCase` or `camelCase` string to `snake_case`.
 ///
-/// Replicates the Ruby `StringUtils.underscore` behavior:
+/// Algorithm:
 /// 1. `gsub(/([A-Z0-9]+)([A-Z][a-z])/, '\1_\2')` — split runs of caps before a cap+lower
 /// 2. `scan(/[a-z0-9]+|\d+|[A-Z0-9]+[a-z]*/)` — extract tokens
 /// 3. `join('_').downcase` — join and lowercase
@@ -19,15 +15,13 @@ pub fn underscore(s: &str) -> String {
     // Step 2: scan for tokens matching [a-z0-9]+ | \d+ | [A-Z0-9]+[a-z]*
     let tokens = scan_tokens(&expanded);
 
-    // Step 3: join with '_' and downcase
     tokens.join("_").to_lowercase()
 }
 
 /// Returns `true` if the string is in `PascalCase` format.
 ///
-/// Matches Ruby: `!!(string =~ /^([A-Z][a-z0-9]+)+/)`
 /// Each word must start with an uppercase letter followed by one or more lowercase/digit chars.
-/// Uses prefix matching (not full-string), matching Ruby's `=~` behavior.
+/// Uses prefix matching (not full-string): `^([A-Z][a-z0-9]+)+`.
 #[must_use]
 pub fn is_pascal_case(s: &str) -> bool {
     let bytes = s.as_bytes();
@@ -59,7 +53,7 @@ pub fn is_pascal_case(s: &str) -> bool {
     words > 0
 }
 
-/// Step 1: replicate `gsub(/([A-Z0-9]+)([A-Z][a-z])/, '\1_\2')`
+/// Step 1: `gsub(/([A-Z0-9]+)([A-Z][a-z])/, '\1_\2')`
 ///
 /// Inserts '_' when a run of uppercase/digit chars is followed by an uppercase+lowercase pair.
 fn gsub_caps(s: &str) -> String {
@@ -88,10 +82,10 @@ fn gsub_caps(s: &str) -> String {
     out
 }
 
-/// Step 2: replicate `scan(/[a-z0-9]+|\d+|[A-Z0-9]+[a-z]*/)`
+/// Step 2: `scan(/[a-z0-9]+|\d+|[A-Z0-9]+[a-z]*/)`
 ///
-/// The Ruby regex has a `\d+` alternative, but it's redundant — digits are already
-/// matched by `[a-z0-9]+` which Ruby tries first. We implement two branches instead of three.
+/// The `\d+` alternative is redundant — digits are already matched by `[a-z0-9]+`
+/// which is tried first. We implement two branches instead of three.
 fn scan_tokens(s: &str) -> Vec<&str> {
     let bytes = s.as_bytes();
     let len = bytes.len();
@@ -238,7 +232,6 @@ mod tests {
         assert!(is_pascal_case("Ab"));
     }
 
-    // Ruby test: test_is_camel_case_second_uppercase ("downloadbUndle")
     #[test]
     fn pascal_case_rejects_mid_word_uppercase() {
         assert!(!is_pascal_case("downloadbUndle"));

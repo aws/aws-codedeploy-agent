@@ -1,7 +1,7 @@
 //! Integration tests for file-based deployment tracking.
 
-use aws_codedeploy_agent::runtime::{DeploymentTracker, FileBasedDeploymentTracker};
-use aws_codedeploy_agent::system::SystemFileOperations;
+use codedeploy_agent::runtime::{DeploymentTracker, FileBasedDeploymentTracker};
+use codedeploy_agent::system::SystemFileOperations;
 use tempfile::TempDir;
 
 // --- Basic tracking lifecycle ---

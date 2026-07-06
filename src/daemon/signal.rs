@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Signal handling for graceful shutdown.
 
 use std::sync::Arc;
@@ -17,6 +15,16 @@ impl ShutdownFlag {
     #[must_use]
     pub fn new() -> Self {
         Self { flag: Arc::new(AtomicBool::new(false)) }
+    }
+
+    /// Create a `ShutdownFlag` from an existing `Arc<AtomicBool>`.
+    ///
+    /// Used by the Windows service handler which owns the raw atomic flag
+    /// and needs to wrap it for the worker polling loop.
+    #[cfg(windows)]
+    #[must_use]
+    pub fn from_arc(flag: Arc<AtomicBool>) -> Self {
+        Self { flag }
     }
 
     /// Returns `true` if shutdown has been requested.
@@ -51,8 +59,61 @@ pub fn register_shutdown_handlers(flag: &ShutdownFlag) -> std::io::Result<()> {
     Ok(())
 }
 
-#[cfg(not(unix))]
-pub fn register_shutdown_handlers(_flag: &ShutdownFlag) -> std::io::Result<()> {
+/// Register a Windows console control handler that sets the shutdown flag
+/// on Ctrl+C, Ctrl+Break, console close, logoff, or system shutdown.
+///
+/// # Errors
+/// Returns an error if `SetConsoleCtrlHandler` fails.
+#[cfg(windows)]
+#[allow(unsafe_code)]
+pub fn register_shutdown_handlers(flag: &ShutdownFlag) -> std::io::Result<()> {
+    use std::sync::OnceLock;
+    use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
+
+    /// Process-wide storage for the shutdown flag, needed because the console
+    /// control handler callback is a plain `extern "system" fn` with no closure state.
+    static SHUTDOWN_FLAG: OnceLock<Arc<AtomicBool>> = OnceLock::new();
+
+    // Windows console control event constants.
+    const CTRL_C_EVENT: u32 = 0;
+    const CTRL_BREAK_EVENT: u32 = 1;
+    const CTRL_CLOSE_EVENT: u32 = 2;
+    const CTRL_LOGOFF_EVENT: u32 = 5;
+    const CTRL_SHUTDOWN_EVENT: u32 = 6;
+
+    unsafe extern "system" fn ctrl_handler(ctrl_type: u32) -> i32 {
+        match ctrl_type {
+            CTRL_C_EVENT | CTRL_BREAK_EVENT | CTRL_CLOSE_EVENT | CTRL_LOGOFF_EVENT
+            | CTRL_SHUTDOWN_EVENT => {
+                if let Some(flag) = SHUTDOWN_FLAG.get() {
+                    flag.store(true, Ordering::SeqCst);
+                }
+                1 // TRUE — handled
+            },
+            _ => 0, // FALSE — let default handler run
+        }
+    }
+
+    // Guard against double-registration first.
+    if SHUTDOWN_FLAG.get().is_some() {
+        tracing::warn!("Shutdown flag already registered; ignoring subsequent registration");
+        return Ok(());
+    }
+
+    // Register the handler before storing the flag so that a
+    // `SetConsoleCtrlHandler` failure doesn't poison the `OnceLock`.
+    // SAFETY: `ctrl_handler` has the correct signature for `SetConsoleCtrlHandler`.
+    // The second argument `1` (TRUE) means "add handler".
+    let ret = unsafe { SetConsoleCtrlHandler(Some(ctrl_handler), 1) };
+    if ret == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    // If a concurrent call raced past the guard above, the `set()`
+    // failure is benign: the flag is already present.
+    let _ = SHUTDOWN_FLAG.set(Arc::clone(&flag.flag));
+
+    info!("Registered Windows console control handler");
     Ok(())
 }
 

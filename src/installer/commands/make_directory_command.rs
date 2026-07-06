@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! `mkdir` command — creates destination directories.
 use crate::installer::Result;
 use serde_json::{Value, json};

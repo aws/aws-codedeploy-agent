@@ -3,6 +3,8 @@
 //! Per-deployment log file writer.
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 use chrono::Local;
@@ -11,6 +13,14 @@ use super::LogConfig;
 
 const MAX_FILE_SIZE: u64 = 64 * 1024 * 1024; // 64 MB
 const MAX_FILES: usize = 8;
+
+/// Per-deployment log file mode for the given policy: 0644 by default
+/// (world-readable — non-root log collectors ship this file), 0640 under
+/// opt-in hardening, since script output can carry customer-sensitive data.
+#[cfg(unix)]
+pub(crate) fn log_file_mode(restrict: bool) -> u32 {
+    if restrict { 0o640 } else { 0o644 }
+}
 
 /// Deployment-specific logger that writes to a separate log file.
 ///
@@ -21,22 +31,29 @@ const MAX_FILES: usize = 8;
 pub struct DeploymentLogger {
     path: PathBuf,
     file: File,
+    restrict_permissions: bool,
 }
 
 impl DeploymentLogger {
     /// Creates a new deployment logger, creating the log directory if needed.
+    ///
+    /// Dir/file modes follow `LogConfig::restrict_permissions`: 0755/0644 by
+    /// default, since non-root log collectors read the deployment log the same
+    /// way they read the deployment-root dirs; 0750/0640 under the opt-in
+    /// `restrict_agent_dir_permissions` hardening (script output can carry
+    /// customer-sensitive data).
     ///
     /// # Errors
     ///
     /// Returns an error if the log directory or file cannot be created.
     pub fn new(config: &LogConfig) -> io::Result<Self> {
         let dir = config.root_dir.join("deployment-logs");
-        fs::create_dir_all(&dir)?;
+        crate::system::create_deployment_dir(&dir, 0o750, config.restrict_permissions)?;
 
         let path = dir.join(format!("{}-deployments.log", config.program_name));
-        let file = OpenOptions::new().create(true).append(true).open(&path)?;
+        let file = open_log_file(&path, config.restrict_permissions)?;
 
-        Ok(Self { path, file })
+        Ok(Self { path, file, restrict_permissions: config.restrict_permissions })
     }
 
     /// Logs a deployment event message.
@@ -72,9 +89,30 @@ impl DeploymentLogger {
         let first_rotated = rotated_path(&self.path, 1);
         fs::rename(&self.path, &first_rotated)?;
 
-        self.file = OpenOptions::new().create(true).append(true).open(&self.path)?;
+        self.file = open_log_file(&self.path, self.restrict_permissions)?;
 
         Ok(())
+    }
+}
+
+/// Open (or create) the deployment log file with the policy mode.
+/// Unix: 0644 default, 0640 restricted. The mode is force-set
+/// on every open so a file a tightened agent left 0640 heals to 0644 on the
+/// next deployment (and converges to 0640 if the flag is turned on).
+/// Other platforms: platform defaults.
+fn open_log_file(path: &Path, restrict: bool) -> io::Result<File> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = log_file_mode(restrict);
+        let f = OpenOptions::new().create(true).append(true).mode(mode).open(path)?;
+        f.set_permissions(std::fs::Permissions::from_mode(mode))?;
+        Ok(f)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = restrict;
+        OpenOptions::new().create(true).append(true).open(path)
     }
 }
 
@@ -93,6 +131,8 @@ mod tests {
             verbose: false,
             program_name: "test-agent".to_string(),
             root_dir: dir.to_path_buf(),
+            restrict_permissions: false,
+            restrict_log_permissions: false,
         }
     }
 
@@ -104,6 +144,62 @@ mod tests {
 
         assert!(dir.path().join("deployment-logs").exists());
         assert!(logger.path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn default_creates_world_readable_dir_and_file() {
+        // Non-root log collectors ship the deployment log, so the dir must be
+        // 0755 and the file 0644 by default.
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let logger = DeploymentLogger::new(&config).unwrap();
+
+        let dir_mode =
+            fs::metadata(dir.path().join("deployment-logs")).unwrap().permissions().mode() & 0o777;
+        let file_mode = fs::metadata(&logger.path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o755, "deployment-logs dir mode {dir_mode:#o}, want 0755");
+        assert_eq!(file_mode, 0o644, "deployment log file mode {file_mode:#o}, want 0644");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn restricted_creates_hardened_dir_and_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = test_config(dir.path());
+        config.restrict_permissions = true;
+        let logger = DeploymentLogger::new(&config).unwrap();
+
+        let dir_mode =
+            fs::metadata(dir.path().join("deployment-logs")).unwrap().permissions().mode() & 0o777;
+        let file_mode = fs::metadata(&logger.path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o750, "deployment-logs dir mode {dir_mode:#o}, want 0750");
+        assert_eq!(file_mode, 0o640, "deployment log file mode {file_mode:#o}, want 0640");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn default_loosens_file_tightened_by_previous_agent() {
+        // Upgrade path: a tightened 2.0.0 agent left the file 0640; the next
+        // open under default policy must heal it to 0644.
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let logs_dir = dir.path().join("deployment-logs");
+        fs::create_dir_all(&logs_dir).unwrap();
+        let path = logs_dir.join("test-agent-deployments.log");
+        fs::write(&path, "old\n").unwrap();
+        fs::set_permissions(&logs_dir, fs::Permissions::from_mode(0o750)).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).unwrap();
+
+        let config = test_config(dir.path());
+        let _logger = DeploymentLogger::new(&config).unwrap();
+
+        let dir_mode = fs::metadata(&logs_dir).unwrap().permissions().mode() & 0o777;
+        let file_mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o755, "expected 0750 -> 0755 heal, got {dir_mode:#o}");
+        assert_eq!(file_mode, 0o644, "expected 0640 -> 0644 heal, got {file_mode:#o}");
     }
 
     #[test]
@@ -214,6 +310,8 @@ mod tests {
             verbose: false,
             program_name: "my-agent".to_string(),
             root_dir: dir.path().to_path_buf(),
+            restrict_permissions: false,
+            restrict_log_permissions: false,
         };
         let logger = DeploymentLogger::new(&config).unwrap();
 

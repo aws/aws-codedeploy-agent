@@ -2,9 +2,6 @@
 //!
 //! Implements the private `CodeDeployCommandService_v20141006` JSON-RPC API
 //! used by the `CodeDeploy` agent to poll for and report on deployments.
-//!
-//! Ruby reference: `vendor/gems/codedeploy-commands-1.0.0/` in the
-//! [Ruby CodeDeploy agent](https://github.com/aws/aws-codedeploy-agent).
 
 #![deny(clippy::all)]
 #![warn(clippy::pedantic)]

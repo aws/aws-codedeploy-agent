@@ -1,5 +1,3 @@
-//! @risk high
-//!
 //! Deployment specification parsing and verification.
 //!
 //! Handles the full pipeline from raw envelope to typed `DeploymentSpec`:

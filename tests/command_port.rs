@@ -2,7 +2,7 @@
 //!
 //! Starts a real command port, connects over TCP, and exercises all commands.
 
-use aws_codedeploy_agent::command_port;
+use codedeploy_agent::command_port;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::time::Duration;
@@ -117,10 +117,10 @@ fn multiple_commands_on_same_connection() {
 
 #[test]
 fn inject_command_via_tcp() {
-    let (port, token, _state) = start_and_discover();
+    let (_port, _token, _state) = start_and_discover();
 
     // Read discovery file to find inject dir
-    let dir = tempfile::TempDir::new().unwrap();
+    let _dir = tempfile::TempDir::new().unwrap();
     // The inject dir is the parent of the discovery path — which is the leaked TempDir.
     // We can't access it, so let's start a fresh command port with a known dir.
     drop(_state);

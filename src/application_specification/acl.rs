@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! `AppSpec` ACL (Access Control List) parsing and generation.
 use crate::application_specification::ParseError;
 

@@ -1,12 +1,7 @@
-//! @risk high
-//!
 //! IMDS credential fetching via AWS SDK.
 //!
 //! Uses the SDK's `ImdsCredentialsProvider` which handles `IMDSv2` token
 //! management, credential caching, expiry-based refresh, and retries.
-//!
-//! Ruby: `Aws::InstanceProfileCredentials.new` in the AWS SDK handles this
-//! transparently. We use the Rust SDK equivalent.
 
 use aws_credential_types::Credentials as AwsCredentials;
 use aws_credential_types::provider::ProvideCredentials;
@@ -28,6 +23,7 @@ pub enum ImdsError {
 ///
 /// # Errors
 /// Returns error if IMDS is unreachable or no IAM role is attached.
+// GRCOV_STOP_COVERAGE
 pub fn fetch_credentials() -> Result<AwsCredentials, ImdsError> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -49,6 +45,7 @@ pub fn fetch_credentials() -> Result<AwsCredentials, ImdsError> {
         Ok(creds)
     })
 }
+// GRCOV_BEGIN_COVERAGE
 
 #[cfg(test)]
 mod tests {

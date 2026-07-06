@@ -1,5 +1,3 @@
-//! @risk high
-//!
 //! Deployment spec builder — validates required fields and constructs `DeploymentSpec`.
 //!
 //! Extracts deployment metadata (ID, group, app name, creator, type) from the

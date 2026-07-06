@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! `AppSpec` YAML parser — deserializes appspec.yml into typed structs.
 use crate::application_specification::{
     Acl, FileExistsBehavior, FileMapping, Files, Hooks, MlsRange, Mode, ObjectType, Os, ParseError,
@@ -174,9 +172,9 @@ impl RawPermission {
             None => None,
         };
 
-        Permission::new(
+        Ok(Permission::new(
             object, pattern, &except, &types, self.owner, self.group, mode, acls, context,
-        )
+        ))
     }
 }
 

@@ -1,5 +1,3 @@
-//! @risk none
-//!
 //! Command port command implementations.
 
 pub use super::AgentState;

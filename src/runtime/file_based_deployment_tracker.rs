@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Deployment tracking functionality
 //!
 //! This module provides traits and implementations for tracking active deployments
@@ -12,6 +10,39 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::warn;
+
+/// Upper bound on host command identifier length. Real values are
+/// base64-encoded JSON blobs ~500 chars; 4096 gives headroom while bounding
+/// memory and log spam on corrupted or hostile input.
+const MAX_HOST_COMMAND_IDENTIFIER_LEN: usize = 4096;
+
+/// Reject tracking-file content that can't be a legitimate host command
+/// identifier (empty, oversized, control chars, inner whitespace, non-ASCII).
+/// Trims trailing whitespace because older agent versions wrote a newline.
+fn validate_host_command_identifier(raw: &str) -> Result<String, DeploymentTrackerError> {
+    let trimmed = raw.trim_end_matches(['\n', '\r', ' ', '\t']);
+    if trimmed.is_empty() {
+        return Err(DeploymentTrackerError::InvalidDeploymentId(
+            "tracking file is empty or whitespace-only".to_string(),
+        ));
+    }
+    if trimmed.len() > MAX_HOST_COMMAND_IDENTIFIER_LEN {
+        return Err(DeploymentTrackerError::InvalidDeploymentId(format!(
+            "tracking file content exceeds {MAX_HOST_COMMAND_IDENTIFIER_LEN} chars (got {})",
+            trimmed.len()
+        )));
+    }
+    // ASCII-printable, no control chars, no whitespace inside.
+    if !trimmed
+        .chars()
+        .all(|c| c.is_ascii() && !c.is_ascii_control() && !c.is_ascii_whitespace())
+    {
+        return Err(DeploymentTrackerError::InvalidDeploymentId(
+            "tracking file contains non-ASCII or control characters".to_string(),
+        ));
+    }
+    Ok(trimmed.to_string())
+}
 
 #[derive(Debug)]
 pub struct FileBasedDeploymentTracker<F: PlatformFileOperations = SystemFileOperations> {
@@ -35,7 +66,9 @@ impl<F: PlatformFileOperations> FileBasedDeploymentTracker<F> {
         }
     }
 
-    #[cfg(test)]
+    /// Construct with explicit file ops (e.g. a mode policy from
+    /// `restrict_agent_dir_permissions` via
+    /// `SystemFileOperations::with_policy`).
     pub fn new_with_ops(tracking_dir: PathBuf, file_ops: F) -> Self {
         Self {
             tracking_dir,
@@ -44,8 +77,17 @@ impl<F: PlatformFileOperations> FileBasedDeploymentTracker<F> {
         }
     }
 
-    fn tracking_file_path(&self, deployment_id: &str) -> PathBuf {
-        self.tracking_dir.join(deployment_id)
+    fn tracking_file_path(&self, deployment_id: &str) -> Result<PathBuf, DeploymentTrackerError> {
+        if deployment_id.contains('/')
+            || deployment_id.contains('\\')
+            || deployment_id.contains("..")
+            || deployment_id.is_empty()
+        {
+            return Err(DeploymentTrackerError::InvalidDeploymentId(format!(
+                "deployment_id contains path traversal characters: {deployment_id:?}"
+            )));
+        }
+        Ok(self.tracking_dir.join(deployment_id))
     }
 
     fn is_stale(&self, path: &PathBuf) -> Result<bool, DeploymentTrackerError> {
@@ -90,14 +132,20 @@ impl<F: PlatformFileOperations> DeploymentTracker for FileBasedDeploymentTracker
         deployment_id: &str,
         host_command_identifier: &str,
     ) -> Result<(), DeploymentTrackerError> {
+        // Validate before persisting so we catch malformed identifiers
+        // early. Symmetric with the read side in `get_active_deployment`.
+        let validated = validate_host_command_identifier(host_command_identifier)?;
         fs::create_dir_all(&self.tracking_dir)?;
-        let path = self.tracking_file_path(deployment_id);
-        self.file_ops.write_with_retry(&path, host_command_identifier)?;
+        let path = self.tracking_file_path(deployment_id)?;
+        // `write_with_retry` delegates to `secure_files::write_file_secure`
+        // which fixes the file mode to 0600 (Unix) / SYSTEM+Admin DACL
+        // (Windows) regardless of umask.
+        self.file_ops.write_with_retry(&path, &validated)?;
         Ok(())
     }
 
     fn stop_tracking(&self, deployment_id: &str) -> Result<(), DeploymentTrackerError> {
-        let path = self.tracking_file_path(deployment_id);
+        let path = self.tracking_file_path(deployment_id)?;
         if path.exists() {
             fs::remove_file(path)?;
         } else {
@@ -146,7 +194,9 @@ impl<F: PlatformFileOperations> DeploymentTracker for FileBasedDeploymentTracker
                 })?
                 .to_string();
 
-            let host_command_identifier = fs::read_to_string(&path)?;
+            let host_command_identifier_raw = fs::read_to_string(&path)?;
+            let host_command_identifier =
+                validate_host_command_identifier(&host_command_identifier_raw)?;
             let timestamp = modified.duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_secs();
 
             Ok(Some(ActiveDeployment { deployment_id, host_command_identifier, timestamp }))
@@ -172,6 +222,106 @@ mod tests {
     use super::*;
     use crate::system::{MockFileOperations, SystemFileOperations};
     use tempfile::TempDir;
+
+    #[test]
+    fn validate_host_command_identifier_accepts_typical_value() {
+        let result = validate_host_command_identifier("cmd-XYZ789").unwrap();
+        assert_eq!(result, "cmd-XYZ789");
+    }
+
+    #[test]
+    fn validate_host_command_identifier_trims_trailing_whitespace() {
+        // Older agent versions wrote a trailing newline; handle gracefully.
+        let result = validate_host_command_identifier("cmd-1\n").unwrap();
+        assert_eq!(result, "cmd-1");
+    }
+
+    #[test]
+    fn validate_host_command_identifier_rejects_empty() {
+        assert!(validate_host_command_identifier("").is_err());
+        assert!(validate_host_command_identifier("   ").is_err());
+        assert!(validate_host_command_identifier("\n").is_err());
+    }
+
+    #[test]
+    fn validate_host_command_identifier_rejects_too_long() {
+        let long = "a".repeat(MAX_HOST_COMMAND_IDENTIFIER_LEN + 1);
+        let err = validate_host_command_identifier(&long).unwrap_err();
+        assert!(err.to_string().contains("exceeds"));
+    }
+
+    #[test]
+    fn validate_host_command_identifier_accepts_max_length() {
+        let max = "a".repeat(MAX_HOST_COMMAND_IDENTIFIER_LEN);
+        assert!(validate_host_command_identifier(&max).is_ok());
+    }
+
+    #[test]
+    fn validate_host_command_identifier_rejects_control_chars() {
+        // \x00 (NUL), \x07 (BEL), \x1b (ESC), DEL are all control characters.
+        for c in ['\x00', '\x07', '\x1b', '\x7f'] {
+            let s = format!("cmd-{c}1");
+            let err = validate_host_command_identifier(&s).unwrap_err();
+            assert!(
+                err.to_string().contains("control"),
+                "expected control-char rejection for {c:?}, got {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_host_command_identifier_rejects_inner_whitespace() {
+        // Inner whitespace would break the API call (server expects an opaque token).
+        assert!(validate_host_command_identifier("cmd-1 cmd-2").is_err());
+        assert!(validate_host_command_identifier("cmd\t1").is_err());
+    }
+
+    #[test]
+    fn validate_host_command_identifier_rejects_non_ascii() {
+        // Defensive: keep the surface ASCII-only.
+        let err = validate_host_command_identifier("cmd-€1").unwrap_err();
+        assert!(err.to_string().contains("non-ASCII"));
+    }
+
+    #[test]
+    fn start_tracking_rejects_invalid_identifier() {
+        let dir = TempDir::new().unwrap();
+        let tracker =
+            FileBasedDeploymentTracker::<SystemFileOperations>::new(dir.path().to_path_buf());
+        let result = tracker.start_tracking("d-bad", "cmd-\x001");
+        assert!(result.is_err());
+        assert!(!dir.path().join("d-bad").exists());
+    }
+
+    #[test]
+    fn get_active_deployment_rejects_corrupted_content() {
+        // Two layers of defense: `read_to_string` rejects invalid UTF-8;
+        // the validator catches valid-UTF-8-but-garbage content.
+        let dir = TempDir::new().unwrap();
+        let tracker =
+            FileBasedDeploymentTracker::<SystemFileOperations>::new(dir.path().to_path_buf());
+        std::fs::create_dir_all(dir.path()).unwrap();
+        std::fs::write(dir.path().join("d-corrupt"), b"\x01\x02\x03binary garbage\xff").unwrap();
+
+        let result = tracker.get_active_deployment();
+        assert!(result.is_err(), "expected error, got {result:?}");
+    }
+
+    #[test]
+    fn get_active_deployment_rejects_valid_utf8_with_control_chars() {
+        let dir = TempDir::new().unwrap();
+        let tracker =
+            FileBasedDeploymentTracker::<SystemFileOperations>::new(dir.path().to_path_buf());
+        std::fs::create_dir_all(dir.path()).unwrap();
+        // \x07 (BEL) is valid UTF-8 but a control character.
+        std::fs::write(dir.path().join("d-bel"), "cmd-\x071").unwrap();
+
+        let err = tracker.get_active_deployment().unwrap_err();
+        assert!(
+            err.to_string().contains("control"),
+            "expected control-char rejection, got {err}"
+        );
+    }
 
     #[test]
     fn new() {
@@ -322,7 +472,7 @@ mod tests {
         let file_path = dir.path().join("d-old");
 
         // Manually set file modification time to 25 hours ago (past 24h threshold)
-        let old_time = std::time::SystemTime::now() - std::time::Duration::from_secs(25 * 3600);
+        let old_time = std::time::SystemTime::now() - std::time::Duration::from_hours(25);
         filetime::set_file_mtime(&file_path, filetime::FileTime::from_system_time(old_time))
             .unwrap();
 
@@ -394,6 +544,7 @@ mod edge_case_tests {
     use crate::system::SystemFileOperations;
     use tempfile::TempDir;
 
+    #[cfg(unix)]
     #[test]
     fn stale_file_deletion_failure_warning() {
         // Test the eprintln warning path when stale file removal fails
@@ -417,7 +568,7 @@ mod edge_case_tests {
         let file_path = dir.path().join("d-stale");
 
         // Set file to stale (25 hours ago)
-        let old_time = std::time::SystemTime::now() - std::time::Duration::from_secs(25 * 3600);
+        let old_time = std::time::SystemTime::now() - std::time::Duration::from_hours(25);
         filetime::set_file_mtime(&file_path, filetime::FileTime::from_system_time(old_time))
             .unwrap();
 
@@ -459,6 +610,7 @@ mod edge_case_tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn get_active_deployment_invalid_filename() {
         use std::ffi::OsStr;

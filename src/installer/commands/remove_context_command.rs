@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! `SELinux` context removal command — removes fcontext mappings during cleanup.
 use crate::installer::Result;
 use crate::system::{SeLinuxOps, SystemSeLinuxOps};

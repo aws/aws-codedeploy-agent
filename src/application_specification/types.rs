@@ -1,5 +1,3 @@
-//! @risk none
-//!
 //! Core `AppSpec` types — `AppSpec`, `FileMapping`, `ScriptInfo`.
 use crate::application_specification::{Files, Hooks, ParseError, Permissions, parse};
 use std::path::Path;

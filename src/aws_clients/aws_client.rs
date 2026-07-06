@@ -1,5 +1,3 @@
-//! @risk none
-//!
 //! AWS client trait definition.
 use crate::aws_clients::credentials::Credentials;
 

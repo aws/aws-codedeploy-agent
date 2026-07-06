@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! File removal command — deletes files during cleanup.
 use crate::installer::Result;
 use serde_json::{Value, json};

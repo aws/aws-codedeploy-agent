@@ -1,5 +1,3 @@
-//! @risk low
-//!
 //! Diagnostics formatting for host command results.
 //!
 //! Formats success/error/script diagnostics as JSON payloads for

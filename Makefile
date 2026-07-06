@@ -1,4 +1,4 @@
-.PHONY: help build test check fmt lint clean coverage install-tools nextest mutants setup coverage-serve unused-deps
+.PHONY: help build test check fmt lint clean coverage install-tools nextest mutants setup coverage-serve unused-deps audit
 
 # Ensure cargo and tools are on PATH
 export PATH := $(HOME)/.cargo/bin:$(PATH)
@@ -20,6 +20,7 @@ help:
 	@echo "  make coverage-serve - Generate and serve coverage report on localhost:8080"
 	@echo "  make coverage-ci    - Generate coverage report for CI (LCOV)"
 	@echo "  make unused-deps    - Check for unused dependencies"
+	@echo "  make audit          - Run dependency security audit"
 	@echo "  make clean          - Clean build artifacts"
 	@echo "  make install-tools  - Install required development tools"
 	@echo "  make ci             - Run all CI checks (fmt, lint, test)"
@@ -98,16 +99,18 @@ install-tools:
 	cargo install cargo-mutants
 	@echo "Installing cargo-machete for unused dependency detection..."
 	cargo install cargo-machete
+	@echo "Installing cargo-audit for dependency security auditing..."
+	cargo install cargo-audit
 	@echo "All tools installed successfully!"
 
 # Run all CI checks (coverage-check runs tests internally with instrumentation)
 ci: fmt-check lint coverage-check
 	@echo "All CI checks passed!"
 
-# Check coverage meets 91% threshold (runs tests internally)
+# Check coverage meets 95% threshold (runs tests internally)
 coverage-check:
 	@command -v cargo-llvm-cov >/dev/null 2>&1 || { echo "cargo-llvm-cov not installed. Run 'make install-tools' first."; exit 1; }
-	cargo llvm-cov --fail-under-lines 91 --all-targets --all-features
+	cargo llvm-cov --fail-under-lines 95 --all-targets --all-features
 
 # Watch for changes and run tests
 watch:
@@ -136,3 +139,8 @@ coverage-serve: coverage
 unused-deps:
 	@command -v cargo-machete >/dev/null 2>&1 || { echo "cargo-machete not installed. Run 'make install-tools' first."; exit 1; }
 	cargo machete
+
+# Run dependency security audit (RustSec advisory database)
+audit:
+	@command -v cargo-audit >/dev/null 2>&1 || { echo "cargo-audit not installed. Run 'make install-tools' first."; exit 1; }
+	cargo audit

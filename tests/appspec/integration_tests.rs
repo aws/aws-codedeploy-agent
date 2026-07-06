@@ -1,7 +1,7 @@
 // Integration tests using real-world AppSpec examples from AWS documentation
 // https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-example.html
 
-use aws_codedeploy_agent::application_specification::AppSpec;
+use codedeploy_agent::application_specification::AppSpec;
 
 #[test]
 fn test_aws_docs_ec2_example() {
@@ -172,4 +172,38 @@ hooks:
     assert!(!spec.hooks().get("AfterInstall").is_empty());
     assert!(!spec.hooks().get("ApplicationStart").is_empty());
     assert!(!spec.hooks().get("ValidateService").is_empty());
+}
+
+#[test]
+fn directory_object_with_file_glob_pattern_parses() {
+    // A directory `object:` with `pattern: file_*` + `type: [file]` (files under
+    // the directory selected by the glob) is valid input and must parse;
+    // the file-strictness check is deferred to apply time.
+    let yaml = r#"
+version: 0.0
+os: linux
+files:
+  - source: /
+    destination: /agent_test
+hooks:
+  BeforeInstall:
+    - location: scripts/test_cleanup.sh
+      timeout: 30
+      runas: root
+    - location: scripts/test_bash_features.sh
+      timeout: 30
+    - location: scripts/test_bash_features_runas.sh
+      timeout: 30
+      runas: root
+permissions:
+  - object: /agent_test
+    pattern: 'file_*'
+    except: ['file_755']
+    mode: 777
+    type:
+      - file
+"#;
+
+    let spec = AppSpec::parse(yaml).expect("directory object with file-glob pattern must parse");
+    assert_eq!(spec.permissions().iter().count(), 1);
 }

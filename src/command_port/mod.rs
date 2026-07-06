@@ -1,5 +1,3 @@
-//! @risk high
-//!
 //! Command port — lightweight local TCP interface for agent management and debugging.
 //!
 //! Binds to `127.0.0.1` on a dynamic port, writes a discovery file with the
@@ -98,6 +96,8 @@ mod tests {
 
     #[test]
     fn start_and_connect() {
+        use std::io::{BufRead, BufReader, Write};
+
         let dir = tempfile::TempDir::new().unwrap();
         let discovery_path = dir.path().join(".command-port");
         let (_handle, _state) = start(&discovery_path).unwrap();
@@ -105,11 +105,10 @@ mod tests {
         // Read discovery file
         let content = std::fs::read_to_string(&discovery_path).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
-        let port = parsed["port"].as_u64().unwrap() as u16;
+        let port = u16::try_from(parsed["port"].as_u64().unwrap()).unwrap();
         let token = parsed["token"].as_str().unwrap();
 
         // Connect and ping
-        use std::io::{BufRead, BufReader, Write};
         let mut stream = std::net::TcpStream::connect(format!("127.0.0.1:{port}")).unwrap();
         stream.set_read_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
 

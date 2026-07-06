@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! PID file management for the agent daemon.
 
 use std::fs;
@@ -14,13 +12,24 @@ use super::is_process_alive;
 #[derive(Debug)]
 pub struct PidFile {
     path: PathBuf,
+    /// Mode policy from `restrict_agent_dir_permissions`: 0755/0644 by default
+    /// (world-readable, so health checks can read the pidfile as non-root),
+    /// 0700/0600 when hardened.
+    restrict: bool,
 }
 
 impl PidFile {
-    /// Create a new `PidFile` manager for the given directory and filename.
+    /// Create a new `PidFile` manager with the default (world-readable) modes.
     #[must_use]
     pub fn new(dir: &Path, filename: &str) -> Self {
-        Self { path: dir.join(filename) }
+        Self { path: dir.join(filename), restrict: false }
+    }
+
+    /// Create a new `PidFile` manager with an explicit mode policy
+    /// (`restrict_agent_dir_permissions`).
+    #[must_use]
+    pub fn with_policy(dir: &Path, filename: &str, restrict: bool) -> Self {
+        Self { path: dir.join(filename), restrict }
     }
 
     /// Path to the PID file.
@@ -34,26 +43,23 @@ impl PidFile {
     /// Creates parent directories if needed. Removes stale PID files first.
     /// Uses atomic temp file + rename for crash safety.
     ///
+    /// Modes follow the `restrict_agent_dir_permissions` policy: 0755 dir /
+    /// 0644 file by default (non-root health checks read the pidfile),
+    /// 0700/0600 under opt-in hardening.
+    ///
     /// # Errors
     /// Returns an error if directory creation or file write fails.
     pub fn write(&self) -> io::Result<()> {
+        use crate::system::{agent_file_mode, create_deployment_dir, write_file_secure};
+
+        // GRCOV_STOP_COVERAGE
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
+            create_deployment_dir(parent, 0o700, self.restrict)?;
         }
+        // GRCOV_BEGIN_COVERAGE
         self.remove_stale()?;
         let pid = std::process::id();
-        // Append `.tmp.{pid}` to the full path rather than using `with_extension`
-        // which replaces the last extension. This is more predictable if the
-        // PID filename ever contains multiple dots.
-        let tmp = self.path.with_file_name(format!(
-            "{}.tmp.{pid}",
-            self.path.file_name().unwrap_or_default().to_string_lossy()
-        ));
-        fs::write(&tmp, pid.to_string())?;
-        if let Err(e) = fs::rename(&tmp, &self.path) {
-            let _ = fs::remove_file(&tmp);
-            return Err(e);
-        }
+        write_file_secure(&self.path, pid.to_string().as_bytes(), agent_file_mode(self.restrict))?;
         debug!("Wrote PID {pid} to {}", self.path.display());
         Ok(())
     }
@@ -103,14 +109,28 @@ impl PidFile {
         Ok(())
     }
 
-    /// Check if a process with the given PID is alive.
+    /// Return the PID if the file exists and the referenced process is alive.
+    ///
+    /// Returns `Ok(None)` when the PID file is absent or the process is not
+    /// running (stale PID). Returns `Err` only on I/O errors reading the file.
+    ///
+    /// # Errors
+    /// Returns an I/O error if the PID file cannot be read or parsed.
+    pub fn running_pid(&self) -> io::Result<Option<u32>> {
+        match self.read()? {
+            Some(pid) if is_process_alive(pid) => Ok(Some(pid)),
+            _ => Ok(None),
+        }
+    }
+
+    /// Convenience wrapper over [`running_pid`](Self::running_pid).
+    ///
     /// Returns `true` if the PID file exists and the process is running.
+    /// Swallows I/O errors; use [`running_pid`](Self::running_pid) if you
+    /// need to distinguish "not running" from "could not read PID file".
     #[must_use]
     pub fn is_running(&self) -> bool {
-        match self.read() {
-            Ok(Some(pid)) => is_process_alive(pid),
-            _ => false,
-        }
+        matches!(self.running_pid(), Ok(Some(_)))
     }
 }
 
@@ -211,6 +231,7 @@ mod tests {
         assert_eq!(pf.path(), dir.path().join("test.pid"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn read_permission_error() {
         use std::os::unix::fs::PermissionsExt;
@@ -219,9 +240,10 @@ mod tests {
         std::fs::write(pf.path(), "12345").unwrap();
         std::fs::set_permissions(pf.path(), std::fs::Permissions::from_mode(0o000)).unwrap();
         assert!(pf.read().is_err());
-        std::fs::set_permissions(pf.path(), std::fs::Permissions::from_mode(0o644)).unwrap();
+        std::fs::set_permissions(pf.path(), std::fs::Permissions::from_mode(0o600)).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn remove_permission_error() {
         use std::os::unix::fs::PermissionsExt;
@@ -233,16 +255,18 @@ mod tests {
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn write_rename_failure() {
-        use std::os::unix::fs::PermissionsExt;
         let dir = TempDir::new().unwrap();
         let pf = pid_file(&dir);
-        // Create the target file as read-only to make rename fail
-        std::fs::write(pf.path(), "12345").unwrap();
-        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o444)).unwrap();
+        // A non-empty directory at the PID path makes the atomic rename fail.
+        // (A read-only parent dir no longer works to force this: the
+        // policy-driven dir creation heals agent-owned dirs back to the
+        // policy mode, restoring writability.)
+        std::fs::create_dir(pf.path()).unwrap();
+        std::fs::write(pf.path().join("occupied"), "x").unwrap();
         assert!(pf.write().is_err());
-        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 
     #[test]
@@ -250,5 +274,43 @@ mod tests {
         let pf = PidFile::new(Path::new(""), "test.pid");
         // Should handle path with no parent gracefully
         let _ = pf.write();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_default_creates_world_readable_pid_file() {
+        // Non-root health checks read the pidfile.
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TempDir::new().unwrap();
+        let pf = pid_file(&dir);
+        pf.write().unwrap();
+        let mode = std::fs::metadata(pf.path()).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o644, "PID file must be 0644 by default, got {mode:#o}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_default_creates_world_readable_parent_dir() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TempDir::new().unwrap();
+        let nested = dir.path().join("nested/state");
+        let pf = PidFile::new(&nested, "agent.pid");
+        pf.write().unwrap();
+        let mode = std::fs::metadata(&nested).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o755, "PID parent dir must be 0755 by default, got {mode:#o}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_restricted_creates_hardened_pid_file_and_dir() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TempDir::new().unwrap();
+        let nested = dir.path().join("nested/state");
+        let pf = PidFile::with_policy(&nested, "agent.pid", true);
+        pf.write().unwrap();
+        let dir_mode = std::fs::metadata(&nested).unwrap().permissions().mode() & 0o777;
+        let file_mode = std::fs::metadata(pf.path()).unwrap().permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o700, "hardened PID dir must be 0700, got {dir_mode:#o}");
+        assert_eq!(file_mode, 0o600, "hardened PID file must be 0600, got {file_mode:#o}");
     }
 }

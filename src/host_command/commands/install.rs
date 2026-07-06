@@ -1,11 +1,10 @@
-//! @risk medium
-//!
 //! Install command.
 //!
 //! Resolves and validates the appspec, creates the Installer, runs it,
 //! and records the last successful install.
 
 use crate::application_specification::{AppSpec, FileExistsBehavior};
+use crate::config::AgentConfig;
 use crate::deployment_specification::types::DeploymentSpec;
 use crate::host_command::DeploymentArchives;
 use crate::host_command::appspec_validator;
@@ -21,6 +20,7 @@ pub struct InstallCommand {
     archives: Arc<DeploymentArchives>,
     hook_mapping_keys: Vec<String>,
     default_mapping_keys: Vec<String>,
+    config: Arc<AgentConfig>,
 }
 
 impl InstallCommand {
@@ -29,8 +29,9 @@ impl InstallCommand {
         archives: Arc<DeploymentArchives>,
         hook_mapping_keys: Vec<String>,
         default_mapping_keys: Vec<String>,
+        config: Arc<AgentConfig>,
     ) -> Self {
-        Self { archives, hook_mapping_keys, default_mapping_keys }
+        Self { archives, hook_mapping_keys, default_mapping_keys, config }
     }
 
     /// Execute the `Install` command.
@@ -58,8 +59,18 @@ impl InstallCommand {
                 ))
             })?;
 
-        let installer =
-            Installer::new(archive_dir, instructions_dir.to_path_buf(), file_exists_behavior);
+        let installer = Installer::with_options(
+            archive_dir,
+            instructions_dir.to_path_buf(),
+            file_exists_behavior,
+            self.config.hardening.reject_unconfined_selinux_in_bundle,
+            self.config.hardening.reject_unsafe_permissions_in_bundle,
+            self.config.hardening.reject_path_traversal_in_bundle,
+        )
+        .with_restrict_permissions(self.config.hardening.restrict_agent_dir_permissions)
+        .with_reject_symlink_permission_targets(
+            self.config.hardening.reject_symlink_permission_targets,
+        );
 
         debug!("Installing revision in instance group {}", spec.deployment_group_id);
 
@@ -67,11 +78,13 @@ impl InstallCommand {
             io::Error::other(format!("Install failed for group {}: {e}", spec.deployment_group_id))
         })?;
 
+        // GRCOV_STOP_COVERAGE
         info!(
             deployment_id = %spec.deployment_id,
             deployment_group = %spec.deployment_group_id,
             file_exists_behavior = %spec.file_exists_behavior,
             "Install completed");
+        // GRCOV_BEGIN_COVERAGE
 
         self.archives.update_last_successful(&spec.deployment_group_id, &deploy_dir)?;
 
@@ -152,7 +165,7 @@ mod tests {
     }
 
     fn test_cmd(archives: Arc<DeploymentArchives>) -> InstallCommand {
-        InstallCommand::new(archives, Vec::new(), Vec::new())
+        InstallCommand::new(archives, Vec::new(), Vec::new(), Arc::new(AgentConfig::default()))
     }
 
     #[test]

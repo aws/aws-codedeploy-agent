@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Deployment tracker trait and types
 //!
 //! Defines the interface for tracking active deployments. Implementations

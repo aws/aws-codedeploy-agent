@@ -1,10 +1,8 @@
-# Build artifacts
+# Cargo build output.
 target/
+Cargo.lock
 
-# Cargo lock is committed for binary crates
-# Cargo.lock
-
-# Cargo config
+# don't check in local env config
 .cargo/*
 # but track cargo-mutants config (standard location per cargo-mutants docs)
 !.cargo/mutants.toml
@@ -30,5 +28,4 @@ Thumbs.db
 # Runtime PID files
 test.pid
 
-# JVM attach artifacts
-.attach_*
+.omc/

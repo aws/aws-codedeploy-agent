@@ -1,11 +1,10 @@
-//! @risk medium
-//!
 //! Install command builder — generates copy, permission, and cleanup commands from `AppSpec`.
 use crate::application_specification::Permission;
+#[cfg(unix)]
 use crate::installer::commands::{
-    ChangeAclCommand, ChangeContextCommand, ChangeModeCommand, ChangeOwnerCommand, CopyCommand,
-    MakeDirectoryCommand, RemoveCommand,
+    ChangeAclCommand, ChangeContextCommand, ChangeModeCommand, ChangeOwnerCommand,
 };
+use crate::installer::commands::{CopyCommand, MakeDirectoryCommand, RemoveCommand};
 use crate::installer::{InstallerError, Result};
 use nu_path;
 use serde_json::Value;
@@ -19,6 +18,9 @@ pub struct CommandBuilder {
     copy_targets: HashMap<PathBuf, PathBuf>,
     mkdir_targets: HashSet<PathBuf>,
     permission_targets: HashSet<PathBuf>,
+    reject_unconfined_selinux: bool,
+    reject_unsafe_permissions: bool,
+    reject_symlink_permission_targets: bool,
 }
 
 #[derive(Debug)]
@@ -26,9 +28,13 @@ pub enum Command {
     Copy(CopyCommand),
     Mkdir(MakeDirectoryCommand),
     Remove(RemoveCommand),
+    #[cfg(unix)]
     Chmod(ChangeModeCommand),
+    #[cfg(unix)]
     Chown(ChangeOwnerCommand),
+    #[cfg(unix)]
     Acl(ChangeAclCommand),
+    #[cfg(unix)]
     Context(ChangeContextCommand),
 }
 
@@ -40,9 +46,13 @@ impl Command {
             Command::Copy(cmd) => cmd.execute(cleanup),
             Command::Mkdir(cmd) => cmd.execute(cleanup),
             Command::Remove(cmd) => cmd.execute(cleanup),
+            #[cfg(unix)]
             Command::Chmod(cmd) => cmd.execute(cleanup),
+            #[cfg(unix)]
             Command::Chown(cmd) => cmd.execute(cleanup),
+            #[cfg(unix)]
             Command::Acl(cmd) => cmd.execute(cleanup),
+            #[cfg(unix)]
             Command::Context(cmd) => cmd.execute(cleanup),
         }
     }
@@ -54,9 +64,13 @@ impl Command {
             Command::Copy(cmd) => cmd.to_h(),
             Command::Mkdir(cmd) => cmd.to_h(),
             Command::Remove(cmd) => cmd.to_h(),
+            #[cfg(unix)]
             Command::Chmod(cmd) => cmd.to_h(),
+            #[cfg(unix)]
             Command::Chown(cmd) => cmd.to_h(),
+            #[cfg(unix)]
             Command::Acl(cmd) => cmd.to_h(),
+            #[cfg(unix)]
             Command::Context(cmd) => cmd.to_h(),
         }
     }
@@ -71,16 +85,37 @@ impl Default for CommandBuilder {
 impl CommandBuilder {
     #[must_use]
     pub fn new() -> Self {
+        Self::with_options(false, false, false)
+    }
+
+    #[must_use]
+    pub fn with_options(
+        reject_unconfined_selinux: bool,
+        reject_unsafe_permissions: bool,
+        reject_symlink_permission_targets: bool,
+    ) -> Self {
         Self {
             commands: Vec::new(),
             copy_targets: HashMap::new(),
             mkdir_targets: HashSet::new(),
             permission_targets: HashSet::new(),
+            reject_unconfined_selinux,
+            reject_unsafe_permissions,
+            reject_symlink_permission_targets,
         }
     }
 
     /// # Errors
     /// Returns an error if there's a duplicate copy target or file/mkdir conflict.
+    //
+    // This sink does not validate containment. CodeDeploy has no
+    // allowed-directory sandbox — customers deploy to arbitrary absolute
+    // destinations, so by default this is pass-through. Containment is enforced
+    // upstream in `core.rs::process_file_mapping`, only under the opt-in
+    // `reject_path_traversal_in_bundle` flag (source-escapes-archive and
+    // destination-escapes-own-root); with the flag off neither fires. The
+    // destination-symlink write race is closed independently by the O_NOFOLLOW
+    // copy in `copy_command.rs`.
     pub fn copy(&mut self, source: &Path, destination: &Path) -> Result<()> {
         debug!("Copying {} to {}", source.display(), destination.display());
 
@@ -141,29 +176,45 @@ impl CommandBuilder {
         }
         self.permission_targets.insert(object.clone());
 
-        if let Some(mode) = permission.mode() {
-            self.commands.push(Command::Chmod(ChangeModeCommand::new(
-                object.clone(),
-                format!("{:o}", mode.bits()),
-            )));
-        }
+        #[cfg(not(unix))]
+        let _ = permission;
 
-        if let Some(acls) = permission.acls() {
-            self.commands
-                .push(Command::Acl(ChangeAclCommand::new(object.clone(), acls.clone())));
-        }
+        #[cfg(unix)]
+        {
+            if let Some(mode) = permission.mode() {
+                self.commands.push(Command::Chmod(ChangeModeCommand::new(
+                    object.clone(),
+                    format!("{:o}", mode.bits()),
+                    self.reject_unsafe_permissions,
+                    self.reject_symlink_permission_targets,
+                )));
+            }
 
-        if let Some(context) = permission.context() {
-            self.commands
-                .push(Command::Context(ChangeContextCommand::new(object.clone(), context.clone())));
-        }
+            if let Some(acls) = permission.acls() {
+                self.commands.push(Command::Acl(ChangeAclCommand::new(
+                    object.clone(),
+                    acls.clone(),
+                    self.reject_symlink_permission_targets,
+                )));
+            }
 
-        if permission.owner().is_some() || permission.group().is_some() {
-            self.commands.push(Command::Chown(ChangeOwnerCommand::new(
-                object.clone(),
-                permission.owner().map(std::string::ToString::to_string),
-                permission.group().map(std::string::ToString::to_string),
-            )));
+            if let Some(context) = permission.context() {
+                self.commands.push(Command::Context(ChangeContextCommand::new(
+                    object.clone(),
+                    context.clone(),
+                    self.reject_unconfined_selinux,
+                    self.reject_symlink_permission_targets,
+                )));
+            }
+
+            if permission.owner().is_some() || permission.group().is_some() {
+                self.commands.push(Command::Chown(ChangeOwnerCommand::new(
+                    object.clone(),
+                    permission.owner().map(std::string::ToString::to_string),
+                    permission.group().map(std::string::ToString::to_string),
+                    self.reject_symlink_permission_targets,
+                )));
+            }
         }
 
         Ok(())
@@ -193,6 +244,12 @@ impl CommandBuilder {
         if permission.types().contains(&crate::application_specification::ObjectType::File) {
             for object in self.copy_targets.keys() {
                 if permission.matches_pattern(object) && !permission.matches_except(object) {
+                    // The directory-object path validates only the ACL per
+                    // matched file, never the pattern/except (that validation
+                    // fires only on the copying-file path, where `object:`
+                    // directly names a copied file). Here `object:` is a
+                    // directory whose `pattern:`/`except:` legitimately select
+                    // the files under it.
                     permission.validate_file_acl(object)?;
                     matches.push(object.clone());
                 }
@@ -225,6 +282,9 @@ impl CommandBuilder {
     ///
     /// Uses `nu_path::expand_path` which resolves `..` and `.` without
     /// requiring file existence.
+    ///
+    /// `~` is expanded as well. Used only for internal dedup-key normalization,
+    /// never as a trust boundary.
     fn expand_path(path: &Path) -> PathBuf {
         nu_path::expand_path(path, true)
     }
@@ -399,11 +459,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn command_execute_chmod() {
         let file = std::env::temp_dir().join("test_cmd_chmod.txt");
         fs::write(&file, "test").unwrap();
 
-        let cmd = Command::Chmod(ChangeModeCommand::new(file.clone(), "0644".to_string()));
+        let cmd = Command::Chmod(ChangeModeCommand::new(file.clone(), "0644".to_string(), false, false));
         let mut cleanup = Vec::new();
         cmd.execute_with_cleanup(&mut cleanup).unwrap();
 
@@ -411,11 +472,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn command_execute_chown() {
         let file = std::env::temp_dir().join("test_cmd_chown.txt");
         fs::write(&file, "test").unwrap();
 
-        let cmd = Command::Chown(ChangeOwnerCommand::new(file.clone(), None, None));
+        let cmd = Command::Chown(ChangeOwnerCommand::new(file.clone(), None, None, false));
         let mut cleanup = Vec::new();
         cmd.execute_with_cleanup(&mut cleanup).unwrap();
 
@@ -439,6 +501,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn command_execute_acl() {
         use crate::application_specification::Acl;
 
@@ -446,7 +509,7 @@ mod tests {
         fs::write(&file, "test").unwrap();
 
         let acl = Acl::parse(&[]).unwrap();
-        let cmd = Command::Acl(ChangeAclCommand::new(file.clone(), acl));
+        let cmd = Command::Acl(ChangeAclCommand::new(file.clone(), acl, false));
         let mut cleanup = Vec::new();
         let _ = cmd.execute_with_cleanup(&mut cleanup);
 
@@ -454,6 +517,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn command_execute_context() {
         use crate::application_specification::SeLinuxContext;
 
@@ -461,7 +525,7 @@ mod tests {
         fs::write(&file, "test").unwrap();
 
         let ctx = SeLinuxContext::new(None, "httpd_sys_content_t".to_string(), None);
-        let cmd = Command::Context(ChangeContextCommand::new(file.clone(), ctx));
+        let cmd = Command::Context(ChangeContextCommand::new(file.clone(), ctx, false, false));
         let mut cleanup = Vec::new();
         let _ = cmd.execute_with_cleanup(&mut cleanup);
 
@@ -537,19 +601,57 @@ mod tests {
 
     #[test]
     fn find_matches_with_except() {
+        // `except` is only valid on directory-type permissions
+        // (`validate_file_permission` rejects it on file-type). Test the
+        // legitimate shape here — directory targets with `except` filtering out
+        // subdirectories.
         use crate::application_specification::{ObjectType, Permission};
 
         let mut builder = CommandBuilder::new();
         let temp_dir = std::env::temp_dir();
-        let src = temp_dir.join("test_except_src.txt");
-        let dst1 = temp_dir.join("test_except_dst1.txt");
-        let dst2 = temp_dir.join("test_except_exclude.txt");
-        fs::write(&src, "test").unwrap();
-        fs::write(&dst1, "test").unwrap();
-        fs::write(&dst2, "test").unwrap();
+        let dir1 = temp_dir.join("test_except_dir1");
+        let dir2 = temp_dir.join("test_except_exclude");
+        fs::create_dir_all(&dir1).unwrap();
+        fs::create_dir_all(&dir2).unwrap();
 
-        builder.copy(&src, &dst1).unwrap();
-        builder.copy(&src, &dst2).unwrap();
+        builder.mkdir(&dir1).unwrap();
+        builder.mkdir(&dir2).unwrap();
+
+        let perm = Permission::new_for_test(
+            temp_dir.to_string_lossy().to_string(),
+            vec![ObjectType::Directory],
+            vec!["*exclude*".to_string()],
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let matches = builder.find_matches(&perm).unwrap();
+        assert_eq!(matches.len(), 1);
+        assert!(matches[0].to_string_lossy().contains("dir1"));
+
+        fs::remove_dir_all(&dir1).ok();
+        fs::remove_dir_all(&dir2).ok();
+    }
+
+    #[test]
+    fn find_matches_file_type_with_except_does_not_reject() {
+        // A permission whose `object:` is a DIRECTORY with `type: [file]` + a
+        // non-`**` `pattern:` + `except:` selects files *under* that directory.
+        // `find_matches` validates only the ACL per match, never the
+        // pattern/except, so it must return the matched files here, not error.
+        use crate::application_specification::{ObjectType, Permission};
+
+        let mut builder = CommandBuilder::new();
+        let temp_dir = std::env::temp_dir();
+        let src = temp_dir.join("test_apply_reject_src.txt");
+        let dst = temp_dir.join("test_apply_reject_dst.txt");
+        fs::write(&src, "test").unwrap();
+        fs::write(&dst, "test").unwrap();
+
+        builder.copy(&src, &dst).unwrap();
 
         let perm = Permission::new_for_test(
             temp_dir.to_string_lossy().to_string(),
@@ -562,16 +664,20 @@ mod tests {
             None,
         );
 
-        let matches = builder.find_matches(&perm).unwrap();
-        assert_eq!(matches.len(), 1);
-        assert!(matches[0].to_string_lossy().contains("dst1"));
+        let result = builder.find_matches(&perm);
+        assert!(
+            result.is_ok(),
+            "find_matches validates only the ACL, not pattern/except: {result:?}",
+        );
+        // The one copied file matches (its name doesn't hit `*exclude*`).
+        assert_eq!(result.unwrap().len(), 1);
 
         fs::remove_file(&src).ok();
-        fs::remove_file(&dst1).ok();
-        fs::remove_file(&dst2).ok();
+        fs::remove_file(&dst).ok();
     }
 
     #[test]
+    #[cfg(unix)]
     fn set_permissions_with_mode() {
         use crate::application_specification::{Mode, ObjectType, Permission};
 
@@ -604,6 +710,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn set_permissions_with_acl() {
         use crate::application_specification::{Acl, ObjectType, Permission};
 
@@ -636,6 +743,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn set_permissions_with_context() {
         use crate::application_specification::{ObjectType, Permission, SeLinuxContext};
 
@@ -668,6 +776,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn set_permissions_with_owner() {
         use crate::application_specification::{ObjectType, Permission};
 
@@ -699,6 +808,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn set_permissions_duplicate_error() {
         use crate::application_specification::{Mode, ObjectType, Permission};
 
@@ -740,13 +850,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn command_to_h_acl() {
         use crate::application_specification::Acl;
         let file = std::env::temp_dir().join("test_acl.txt");
         fs::write(&file, "test").unwrap();
 
         let acl = Acl::parse(&["user:alice:rwx".to_string()]).unwrap();
-        let cmd = Command::Acl(ChangeAclCommand::new(file.clone(), acl));
+        let cmd = Command::Acl(ChangeAclCommand::new(file.clone(), acl, false));
         let hash = cmd.to_h();
 
         assert_eq!(hash["type"], "setfacl");
@@ -754,13 +865,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn command_to_h_context() {
         use crate::application_specification::SeLinuxContext;
         let file = std::env::temp_dir().join("test_ctx.txt");
         fs::write(&file, "test").unwrap();
 
         let ctx = SeLinuxContext::new(None, "httpd_sys_content_t".to_string(), None);
-        let cmd = Command::Context(ChangeContextCommand::new(file.clone(), ctx));
+        let cmd = Command::Context(ChangeContextCommand::new(file.clone(), ctx, false, false));
         let hash = cmd.to_h();
 
         assert_eq!(hash["type"], "semanage");

@@ -14,20 +14,26 @@ use std::path::PathBuf;
 pub struct ChangeAclCommand<L: LinuxOps = SystemLinuxOps> {
     object: PathBuf,
     acl: Acl,
+    reject_symlink_target: bool,
     linux_ops: L,
 }
 
 impl ChangeAclCommand<SystemLinuxOps> {
     #[must_use]
-    pub fn new(object: PathBuf, acl: Acl) -> Self {
-        Self { object, acl, linux_ops: SystemLinuxOps }
+    pub fn new(object: PathBuf, acl: Acl, reject_symlink_target: bool) -> Self {
+        Self { object, acl, reject_symlink_target, linux_ops: SystemLinuxOps }
     }
 }
 
 impl<L: LinuxOps> ChangeAclCommand<L> {
     #[cfg(test)]
-    pub fn new_with_ops(object: PathBuf, acl: Acl, linux_ops: L) -> Self {
-        Self { object, acl, linux_ops }
+    pub fn new_with_ops(
+        object: PathBuf,
+        acl: Acl,
+        reject_symlink_target: bool,
+        linux_ops: L,
+    ) -> Self {
+        Self { object, acl, reject_symlink_target, linux_ops }
     }
 
     /// # Errors
@@ -44,18 +50,39 @@ impl<L: LinuxOps> ChangeAclCommand<L> {
         // 4. Including default entries for directories
         // The string manipulation of octal permissions matches the expected format exactly.
 
+        // SECURITY: under `reject_symlink_permission_targets`, reject a symlinked
+        // destination before reading its mode or invoking setfacl (which then
+        // also runs `--physical`, no-follow, in SystemLinuxOps).
+        if self.reject_symlink_target {
+            crate::installer::safe_fs::reject_symlink_dest(&self.object)?;
+        }
+
         let mut acl_entries = Vec::new();
 
-        // Get file permissions
-        let metadata = fs::metadata(&self.object)?;
+        // Get file permissions. Under the flag, no-follow (`symlink_metadata`)
+        // closes the lstat->metadata TOCTOU window so a raced-in symlink can
+        // never have its target's mode read here. By default (flag off) the mode
+        // is read through the link with `metadata`, the backwards-compatible
+        // behavior. Same result for a regular file.
+        let metadata = if self.reject_symlink_target {
+            fs::symlink_metadata(&self.object)?
+        } else {
+            fs::metadata(&self.object)?
+        };
         let mode = metadata.permissions().mode();
         let perm = format!("{:03o}", mode & 0o777);
         let u = &perm[0..1];
         let g = &perm[1..2];
         let o = &perm[2..3];
 
-        // Add base entries from file permissions
-        acl_entries.push(format!(":{u}"));
+        // Add base entries from file permissions.
+        //
+        // The base owner entry must use the canonical `u::{u}` form: strict
+        // libacl (Debian/Ubuntu) rejects the abbreviated `:{u}` (empty type
+        // field) outright, while lenient libacl (AL2/AL2023) parses both to
+        // an identical effective ACL. Emitting the canonical form makes the
+        // entry accepted everywhere.
+        acl_entries.push(format!("u::{u}"));
         acl_entries.push(format!("g::{g}"));
         acl_entries.push(format!("o::{o}"));
 
@@ -88,7 +115,10 @@ impl<L: LinuxOps> ChangeAclCommand<L> {
                 .any(|e| e.is_default() && matches!(e, AclEntry::Other { .. }));
 
             if !has_default_user {
-                acl_entries.push(format!("d:{u}"));
+                // The default owner entry must be `d::{u}`: libacl rejects the
+                // `d:{u}` form (`setfacl` exit 2) on every distro, strict and
+                // lenient alike, which would break the default-ACL path.
+                acl_entries.push(format!("d::{u}"));
             }
             if !has_default_group {
                 acl_entries.push(format!("d:g::{g}"));
@@ -125,13 +155,13 @@ impl<L: LinuxOps> ChangeAclCommand<L> {
 
         let acl_str = acl_entries.join(",");
 
-        self.linux_ops.set_acl(&acl_str, &self.object).map_err(|e| {
-            InstallerError::AclCommandFailed {
+        self.linux_ops
+            .set_acl(&acl_str, &self.object, self.reject_symlink_target)
+            .map_err(|e| InstallerError::AclCommandFailed {
                 object: self.object.clone(),
                 command: format!("setfacl --set {acl_str} {}", self.object.display()),
                 exit_code: e.raw_os_error().unwrap_or(-1),
-            }
-        })?;
+            })?;
 
         Ok(())
     }
@@ -213,7 +243,7 @@ mod tests {
         fs::write(&file, "test").unwrap();
 
         let acl = Acl::parse(&[]).unwrap();
-        let cmd = ChangeAclCommand::new(file.clone(), acl);
+        let cmd = ChangeAclCommand::new(file.clone(), acl, false);
         let mut cleanup = Vec::new();
         let _ = cmd.execute(&mut cleanup);
 
@@ -226,7 +256,7 @@ mod tests {
         fs::write(&file, "test").unwrap();
 
         let acl = Acl::parse(&["user:root:rwx".to_string()]).unwrap();
-        let cmd = ChangeAclCommand::new(file.clone(), acl);
+        let cmd = ChangeAclCommand::new(file.clone(), acl, false);
         let mut cleanup = Vec::new();
         let _ = cmd.execute(&mut cleanup);
 
@@ -236,7 +266,7 @@ mod tests {
     #[test]
     fn execute_nonexistent() {
         let acl = Acl::parse(&[]).unwrap();
-        let cmd = ChangeAclCommand::new("/nonexistent".into(), acl);
+        let cmd = ChangeAclCommand::new("/nonexistent".into(), acl, false);
         let mut cleanup = Vec::new();
         assert!(cmd.execute(&mut cleanup).is_err());
     }
@@ -247,7 +277,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
 
         let acl = Acl::parse(&["default:user:root:rwx".to_string()]).unwrap();
-        let cmd = ChangeAclCommand::new(dir.clone(), acl);
+        let cmd = ChangeAclCommand::new(dir.clone(), acl, false);
         let mut cleanup = Vec::new();
         let _ = cmd.execute(&mut cleanup);
 
@@ -260,7 +290,7 @@ mod tests {
         fs::write(&file, "test").unwrap();
 
         let acl = Acl::parse(&["user:root:rwx".to_string(), "mask::r--".to_string()]).unwrap();
-        let cmd = ChangeAclCommand::new(file.clone(), acl);
+        let cmd = ChangeAclCommand::new(file.clone(), acl, false);
         let mut cleanup = Vec::new();
         let _ = cmd.execute(&mut cleanup);
 
@@ -279,7 +309,7 @@ mod tests {
             "default:user:root:rwx".to_string(),
         ])
         .unwrap();
-        let cmd = ChangeAclCommand::new(dir.clone(), acl);
+        let cmd = ChangeAclCommand::new(dir.clone(), acl, false);
         let mut cleanup = Vec::new();
         let _ = cmd.execute(&mut cleanup);
 
@@ -293,7 +323,7 @@ mod tests {
 
         let acl = Acl::parse(&[]).unwrap();
         let mock_ops = MockLinuxOps::with_failure();
-        let cmd = ChangeAclCommand::new_with_ops(file.clone(), acl, mock_ops);
+        let cmd = ChangeAclCommand::new_with_ops(file.clone(), acl, false, mock_ops);
         let mut cleanup = Vec::new();
         let result = cmd.execute(&mut cleanup);
 
@@ -312,7 +342,7 @@ mod tests {
         fs::write(&file, "test").unwrap();
 
         let acl = Acl::parse(&["user:alice:rwx".to_string()]).unwrap();
-        let cmd = ChangeAclCommand::new(file.clone(), acl);
+        let cmd = ChangeAclCommand::new(file.clone(), acl, false);
         let hash = cmd.to_h();
 
         assert_eq!(hash["type"], "setfacl");
@@ -335,13 +365,61 @@ mod tests {
             "other::r--".to_string(),
         ])
         .unwrap();
-        let cmd = ChangeAclCommand::new(file, acl);
+        let cmd = ChangeAclCommand::new(file, acl, false);
         let hash = cmd.to_h();
 
         assert_eq!(hash["acl"][0], "user:alice:rwx");
         assert_eq!(hash["acl"][1], "group:devs:r-x");
         assert_eq!(hash["acl"][2], "mask::rwx");
         assert_eq!(hash["acl"][3], "other::r--");
+    }
+
+    #[test]
+    fn base_owner_entry_is_setfacl_valid() {
+        // Regression test: the synthesized base owner entry must be `u::<mode>`,
+        // not the abbreviated `:<mode>` (rejected by strict libacl on
+        // Debian/Ubuntu). A named entry forces the base block to be emitted.
+        let dir = tempfile::TempDir::new().unwrap();
+        let file = dir.path().join("index.html");
+        fs::write(&file, "x").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o750)).unwrap();
+
+        let acl = Acl::parse(&["user:nobody:rwx".to_string()]).unwrap();
+        let mock = MockLinuxOps::default();
+        let cmd = ChangeAclCommand::new_with_ops(file, acl, false, mock);
+        let mut cleanup = Vec::new();
+        cmd.execute(&mut cleanup).unwrap();
+
+        let acl_str = cmd.linux_ops.last_acl.borrow().clone().unwrap();
+        let first = acl_str.split(',').next().unwrap();
+        assert_eq!(first, "u::7", "base owner must be u::<mode>, got {acl_str}");
+        assert!(!acl_str.contains(",:"), "no bare-colon entries allowed: {acl_str}");
+        assert!(!acl_str.starts_with(':'), "no bare-colon entries allowed: {acl_str}");
+    }
+
+    #[test]
+    fn default_owner_entry_is_setfacl_valid() {
+        // Regression test: the synthesized default owner entry must be
+        // `d::<mode>`, not `d:<mode>` (rejected by libacl on every distro,
+        // including lenient AL2). A named default entry forces the default block.
+        let dir = tempfile::TempDir::new().unwrap();
+        fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o750)).unwrap();
+
+        let acl = Acl::parse(&["d:u:nobody:rwx".to_string()]).unwrap();
+        let mock = MockLinuxOps::default();
+        let cmd = ChangeAclCommand::new_with_ops(dir.path().to_path_buf(), acl, false, mock);
+        let mut cleanup = Vec::new();
+        cmd.execute(&mut cleanup).unwrap();
+
+        let acl_str = cmd.linux_ops.last_acl.borrow().clone().unwrap();
+        assert!(
+            acl_str.split(',').any(|e| e == "d::7"),
+            "default owner must be d::<mode>, got {acl_str}"
+        );
+        assert!(
+            !acl_str.split(',').any(|e| e == "d:7"),
+            "invalid bare `d:<mode>` form must not appear: {acl_str}"
+        );
     }
 
     #[test]
@@ -357,8 +435,8 @@ mod tests {
             "default:other::r--".to_string(),
         ])
         .unwrap();
-        let mock_ops = MockLinuxOps { should_fail: false };
-        let cmd = ChangeAclCommand::new_with_ops(dir_path, acl, mock_ops);
+        let mock_ops = MockLinuxOps::default();
+        let cmd = ChangeAclCommand::new_with_ops(dir_path, acl, false, mock_ops);
         let mut cleanup = Vec::new();
         assert!(cmd.execute(&mut cleanup).is_ok());
     }

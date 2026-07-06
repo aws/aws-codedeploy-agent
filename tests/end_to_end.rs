@@ -4,14 +4,14 @@
 //! execute hooks, and track deployment state. Tests marked `#[ignore]` require
 //! unimplemented pipeline orchestration.
 
-use aws_codedeploy_agent::application_specification::{AppSpec, FileExistsBehavior};
-use aws_codedeploy_agent::deployment_specification::types::{
+use codedeploy_agent::application_specification::{AppSpec, FileExistsBehavior};
+use codedeploy_agent::deployment_specification::types::{
     DeploymentSpec, RevisionLocation, RevisionSource,
 };
-use aws_codedeploy_agent::installer::Installer;
-use aws_codedeploy_agent::lifecycle_event::{LifecycleEventExecutor, LifecycleEventType};
-use aws_codedeploy_agent::runtime::{DeploymentTracker, FileBasedDeploymentTracker};
-use aws_codedeploy_agent::system::SystemFileOperations;
+use codedeploy_agent::installer::Installer;
+use codedeploy_agent::lifecycle_event::{LifecycleEventExecutor, LifecycleEventType};
+use codedeploy_agent::runtime::{DeploymentTracker, FileBasedDeploymentTracker};
+use codedeploy_agent::system::SystemFileOperations;
 use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
@@ -156,8 +156,9 @@ fn deployment_stops_on_hook_failure() {
 #[cfg(unix)]
 #[test]
 fn pipeline_orchestrates_full_deployment() {
-    use aws_codedeploy_agent::host_command::DeploymentArchives;
-    use aws_codedeploy_agent::host_command::commands::DownloadCommand;
+    use codedeploy_agent::config::AgentConfig;
+    use codedeploy_agent::host_command::DeploymentArchives;
+    use codedeploy_agent::host_command::commands::DownloadCommand;
     use std::sync::Arc;
 
     let work_dir = TempDir::new().unwrap();
@@ -190,7 +191,8 @@ fn pipeline_orchestrates_full_deployment() {
     };
 
     // 1. Download bundle (local directory copy)
-    let download_cmd = DownloadCommand::new(archives.clone(), None);
+    let download_cmd =
+        DownloadCommand::new(archives.clone(), None, Arc::new(AgentConfig::default()));
     download_cmd.execute(&spec).unwrap();
 
     // Verify archive was created with appspec
@@ -204,12 +206,11 @@ fn pipeline_orchestrates_full_deployment() {
         dest_dir.path().display()
     );
     let install_spec =
-        aws_codedeploy_agent::application_specification::AppSpec::parse(&install_appspec_yaml)
-            .unwrap();
+        codedeploy_agent::application_specification::AppSpec::parse(&install_appspec_yaml).unwrap();
     let installer_obj = Installer::new(
         archive_dir.clone(),
         archives.instructions_dir().to_path_buf(),
-        aws_codedeploy_agent::application_specification::FileExistsBehavior::Overwrite,
+        codedeploy_agent::application_specification::FileExistsBehavior::Overwrite,
     );
     installer_obj.install(&spec.deployment_group_id, &install_spec).unwrap();
 
@@ -234,7 +235,7 @@ fn pipeline_orchestrates_full_deployment() {
 /// Config parsing: load from YAML and verify fields.
 #[test]
 fn respects_agent_configuration() {
-    use aws_codedeploy_agent::config::AgentConfig;
+    use codedeploy_agent::config::AgentConfig;
 
     let config_path = common::fixtures_dir().join("config/default.yml");
     let config = AgentConfig::from_file(&config_path).unwrap();
@@ -248,7 +249,7 @@ fn respects_agent_configuration() {
 /// Deployment cleanup: old archives pruned beyond max_revisions.
 #[test]
 fn cleans_up_old_deployments_beyond_max_revisions() {
-    use aws_codedeploy_agent::host_command::DeploymentArchives;
+    use codedeploy_agent::host_command::DeploymentArchives;
     use std::sync::Arc;
 
     let work_dir = TempDir::new().unwrap();
@@ -295,8 +296,9 @@ fn cleans_up_old_deployments_beyond_max_revisions() {
 #[cfg(unix)]
 #[test]
 fn downloads_tar_bundle_and_deploys() {
-    use aws_codedeploy_agent::host_command::DeploymentArchives;
-    use aws_codedeploy_agent::host_command::commands::DownloadCommand;
+    use codedeploy_agent::config::AgentConfig;
+    use codedeploy_agent::host_command::DeploymentArchives;
+    use codedeploy_agent::host_command::commands::DownloadCommand;
     use std::sync::Arc;
 
     let work_dir = TempDir::new().unwrap();
@@ -345,7 +347,8 @@ fn downloads_tar_bundle_and_deploys() {
     // unlike LocalDirectory which creates it during copy.
     let deploy_dir = archives.deployment_root_dir(&spec.deployment_group_id, &spec.deployment_id);
     fs::create_dir_all(&deploy_dir).unwrap();
-    let download_cmd = DownloadCommand::new(archives.clone(), None);
+    let download_cmd =
+        DownloadCommand::new(archives.clone(), None, Arc::new(AgentConfig::default()));
     download_cmd.execute(&spec).unwrap();
 
     let archive_dir = archives.archive_dir(&spec.deployment_group_id, &spec.deployment_id);
@@ -359,11 +362,11 @@ fn downloads_tar_bundle_and_deploys() {
         dest_dir.path().display()
     );
     let install_spec =
-        aws_codedeploy_agent::application_specification::AppSpec::parse(&install_yaml).unwrap();
+        codedeploy_agent::application_specification::AppSpec::parse(&install_yaml).unwrap();
     let installer_obj = Installer::new(
         archive_dir.clone(),
         archives.instructions_dir().to_path_buf(),
-        aws_codedeploy_agent::application_specification::FileExistsBehavior::Overwrite,
+        codedeploy_agent::application_specification::FileExistsBehavior::Overwrite,
     );
     installer_obj.install(&spec.deployment_group_id, &install_spec).unwrap();
     assert!(dest_dir.path().join("index.html").exists());

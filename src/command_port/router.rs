@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Routes command names to their handler functions.
 
 use super::AgentState;

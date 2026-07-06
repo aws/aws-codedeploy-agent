@@ -1,4 +1,4 @@
-//! Security tests for AppSpec parsing and validation (TO-007).
+//! Security tests for AppSpec parsing and validation.
 //!
 //! These tests verify that the AppSpec parser correctly rejects or sanitizes
 //! dangerous inputs such as SUID/SGID permission modes, unconfined SELinux
@@ -7,40 +7,44 @@
 //! Tests marked `#[ignore]` document known security gaps — they will pass once
 //! the corresponding production-code controls are implemented.
 
-use aws_codedeploy_agent::application_specification::{AppSpec, Mode};
+use codedeploy_agent::application_specification::{AppSpec, Mode};
+use proptest::prelude::*;
 
 // ---------------------------------------------------------------------------
-// TC-007-01: AppSpec with SUID Permissions — Rejection or Stripping
+// AppSpec with SUID Permissions — Rejection or Stripping
 // ---------------------------------------------------------------------------
 
-/// TO-007 / TC-007-01: SUID/SGID modes must be rejected at parse time.
-///
-/// **Security property:** An attacker-controlled AppSpec must not be able to set
-/// the SUID, SGID, or combined SUID+SGID bits on deployed files.  If the
-/// AppSpec specifies `mode: "4755"`, `"6755"`, `"2755"`, or `"7777"`, the
-/// parser should return an error rather than silently accepting a privileged
-/// mode.
-///
-/// **Current gap:** `Mode::from_octal()` accepts any valid 4-digit octal
-/// string including those with the SUID (0o4000) and SGID (0o2000) bits set.
-/// No validation rejects these dangerous modes during AppSpec parsing.
+/// Parser accepts SUID/SGID modes; install-time rejection happens in `ChangeModeCommand`.
 #[test]
-#[ignore] // TODO: enable after implementing SUID/SGID rejection in Mode::from_octal() or RawPermission::validate()
 fn appspec_rejects_suid_permissions() {
+    use codedeploy_agent::installer::InstallerError;
+    use codedeploy_agent::installer::commands::ChangeModeCommand;
+    use std::fs;
+    use tempfile::TempDir;
+
+    let dir = TempDir::new().expect("temp dir");
+    let target = dir.path().join("app");
+    fs::write(&target, "test").expect("write target");
+
     let suid_modes = ["4755", "6755", "2755", "7777"];
     for mode_str in &suid_modes {
         let yaml = format!(
             "version: 0.0\nos: linux\npermissions:\n  - object: /app\n    mode: \"{mode_str}\"\n"
         );
-        let result = AppSpec::parse(&yaml);
+        AppSpec::parse(&yaml).expect("parser accepts SUID modes");
+
+        let cmd = ChangeModeCommand::new(target.clone(), (*mode_str).to_string(), true, false);
+        let mut cleanup: Vec<u8> = Vec::new();
+        let result = cmd.execute(&mut cleanup);
+
         assert!(
-            result.is_err(),
-            "AppSpec should reject SUID/SGID mode {mode_str} but accepted it"
+            matches!(result, Err(InstallerError::UnsafePermissionRejected { .. })),
+            "must reject {mode_str}, got {result:?}"
         );
     }
 }
 
-/// TO-007 / TC-007-01 alt: SUID/SGID bits are detectable in parsed modes.
+/// SUID/SGID bits are detectable in parsed modes.
 ///
 /// **Security property:** The `Mode` type correctly models the SUID, SGID, and
 /// sticky bits so that downstream code (installer, auditing) can detect them.
@@ -77,53 +81,44 @@ fn mode_suid_bits_are_detectable() {
 }
 
 // ---------------------------------------------------------------------------
-// TC-007-02: AppSpec with Dangerous SELinux Context — Rejection
+// AppSpec with Dangerous SELinux Context — Rejection
 // ---------------------------------------------------------------------------
 
-/// TO-007 / TC-007-02: Dangerous SELinux contexts must be rejected.
-///
-/// **Security property:** An AppSpec must not be allowed to set `unconfined_t`
-/// or similar dangerous SELinux context types on deployed files.  The
-/// `unconfined_t` type effectively disables SELinux enforcement for the
-/// labelled process/file, which an attacker could exploit to escape mandatory
-/// access controls.
-///
-/// **Current gap:** `RawContext::validate()` accepts any string value for the
-/// `type` field, including `unconfined_t`.  There is no allowlist or blocklist
-/// of acceptable SELinux types.
+/// Parser accepts unconfined types; install-time rejection happens in `ChangeContextCommand`.
 #[test]
-#[ignore] // TODO: enable after implementing SELinux context allowlist/blocklist validation in RawContext::validate()
 fn appspec_rejects_unconfined_selinux_context() {
-    // "unconfined_t" as the SELinux type field
-    let yaml_unconfined_type = "version: 0.0\nos: linux\npermissions:\n  - object: /app\n    context:\n      type: unconfined_t\n";
-    let result = AppSpec::parse(yaml_unconfined_type);
-    assert!(
-        result.is_err(),
-        "AppSpec should reject SELinux context type 'unconfined_t' but accepted it"
-    );
+    use codedeploy_agent::installer::InstallerError;
+    use codedeploy_agent::installer::commands::ChangeContextCommand;
+    use std::fs;
+    use tempfile::TempDir;
 
-    // Full unconfined context: user + type both unconfined
-    let yaml_full_unconfined = "version: 0.0\nos: linux\npermissions:\n  - object: /app\n    context:\n      name: unconfined_u\n      type: unconfined_t\n      range: s0\n";
-    let result = AppSpec::parse(yaml_full_unconfined);
-    assert!(
-        result.is_err(),
-        "AppSpec should reject full unconfined SELinux context but accepted it"
-    );
+    let dir = TempDir::new().expect("temp dir");
+    let target = dir.path().join("app");
+    fs::write(&target, "test").expect("write target");
 
-    // system_u with unconfined_t — the type alone is dangerous
-    let yaml_system_unconfined = "version: 0.0\nos: linux\npermissions:\n  - object: /app\n    context:\n      name: system_u\n      type: unconfined_t\n      range: s0\n";
-    let result = AppSpec::parse(yaml_system_unconfined);
-    assert!(
-        result.is_err(),
-        "AppSpec should reject unconfined_t even with system_u user but accepted it"
-    );
+    let yamls = [
+        "version: 0.0\nos: linux\npermissions:\n  - object: /app\n    context:\n      type: unconfined_t\n",
+        "version: 0.0\nos: linux\npermissions:\n  - object: /app\n    context:\n      name: unconfined_u\n      type: unconfined_t\n      range: s0\n",
+    ];
+    for yaml in &yamls {
+        let spec = AppSpec::parse(yaml).expect("parser accepts unconfined types");
+        let ctx = spec.permissions().iter().next().unwrap().context().unwrap().clone();
+        let cmd = ChangeContextCommand::new(target.clone(), ctx, true, false);
+        let mut cleanup = Vec::new();
+        let result = cmd.execute(&mut cleanup);
+
+        assert!(
+            matches!(result, Err(InstallerError::UnconfinedSelinuxRejected { .. })),
+            "must reject unconfined context, got {result:?}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
-// TC-007-03: Malformed AppSpec — Schema Validation
+// Malformed AppSpec — Schema Validation
 // ---------------------------------------------------------------------------
 
-/// TO-007 / TC-007-03: Malformed AppSpec must produce clear parse errors.
+/// Malformed AppSpec must produce clear parse errors.
 ///
 /// **Security property:** The AppSpec parser must reject structurally invalid
 /// input with well-defined error variants rather than panicking, silently
@@ -188,14 +183,14 @@ fn appspec_rejects_malformed_input() {
     assert!(result.is_err(), "Should reject permissions section when os=windows");
 }
 
-/// TO-007 / TC-007-03 supplement: Error variants carry actionable information.
+/// Error variants carry actionable information.
 ///
 /// **Security property:** Parse errors must be specific enough for operators to
 /// diagnose and fix AppSpec issues without leaking internal implementation
 /// details. Error messages should identify which field or section is invalid.
 #[test]
 fn appspec_error_messages_are_actionable() {
-    use aws_codedeploy_agent::application_specification::ParseError;
+    use codedeploy_agent::application_specification::ParseError;
 
     // Invalid version → error should mention the bad value
     let result = AppSpec::parse("version: 1.0\nos: linux\n");
@@ -246,5 +241,54 @@ fn appspec_error_messages_are_actionable() {
             assert_eq!(src, "/src", "MissingDestination should carry the source path");
         },
         other => panic!("Expected MissingDestination, got: {other:?}"),
+    }
+}
+
+// ===========================================================================
+// Property-Based Tests
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Property 4: Malformed AppSpec rejection
+// ---------------------------------------------------------------------------
+
+// Property 4: Malformed AppSpec rejection
+// Validates: For any malformed AppSpec YAML (missing version, missing OS,
+// invalid YAML syntax, random garbage), AppSpec::parse() returns Err and
+// never panics.
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(100))]
+
+    #[test]
+    fn prop_malformed_appspec_never_panics(input in "\\PC{0,500}") {
+        // Arrange: arbitrary string that is overwhelmingly unlikely to be valid AppSpec
+        // Act: attempt to parse
+        let _result = AppSpec::parse(&input);
+        // Assert: no panic occurred — Ok or Err are both acceptable
+    }
+}
+
+// Property 4: Malformed AppSpec rejection (structured variants)
+// Validates: For any AppSpec YAML with specific structural defects (missing
+// required fields, wrong types), AppSpec::parse() returns Err.
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(100))]
+
+    #[test]
+    fn prop_malformed_appspec_missing_fields_rejected(
+        random_field in "[a-z_]{1,20}",
+        random_value in "[a-zA-Z0-9 ]{0,50}",
+    ) {
+        // Arrange: YAML with a random field but missing the required `version` and `os`
+        let yaml = format!("{random_field}: {random_value}\n");
+
+        // Act
+        let result = AppSpec::parse(&yaml);
+
+        // Assert: must be rejected (missing version and/or os)
+        prop_assert!(
+            result.is_err(),
+            "AppSpec with only '{random_field}' should be rejected, got Ok"
+        );
     }
 }

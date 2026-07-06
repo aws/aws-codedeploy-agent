@@ -1,13 +1,10 @@
 //! Endpoint URL construction for the `CodeDeploy` Command Service.
-//!
-//! Ruby source: `lib/aws/plugins/deploy_control_endpoint.rb`
 
 /// Resolve the service endpoint URL.
 ///
 /// Priority: custom override > constructed from region + flags.
-///
-/// Ruby: `service = 'codedeploy-commands'`, then appends `-secure` and/or
-/// `-fips` based on config, then `https://{service}.{region}.{domain}`.
+/// Appends `-secure` and/or `-fips` suffixes based on config, then
+/// `https://{service}.{region}.{domain}`.
 #[must_use]
 pub fn resolve(
     region: &str,

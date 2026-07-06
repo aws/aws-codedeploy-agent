@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! `AppSpec` Parser
 //!
 //! Parses and validates AWS `CodeDeploy` `AppSpec` YAML files.

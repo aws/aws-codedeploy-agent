@@ -1,7 +1,6 @@
 //! Request and response types for the `CodeDeploy` Command Service.
 //!
-//! Field names use `PascalCase` to match the Ruby SDK's JSON wire format.
-//! Ruby source: `vendor/gems/codedeploy-commands-1.0.0/sdks/codedeploy_commands_sdk.rb`
+//! Field names use `PascalCase` to match the service's JSON wire format.
 
 use serde::{Deserialize, Serialize};
 
@@ -11,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 /// Diagnostic envelope attached to commands.
 ///
-/// Ruby: `Envelope` — `format` max 64 chars, `payload` max 8192 chars.
+/// `format` max 64 chars, `payload` max 8192 chars.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Envelope {
@@ -117,9 +116,8 @@ pub(crate) struct PutHostCommandCompleteInput {
 // PostHostCommandUpdate
 // ---------------------------------------------------------------------------
 
-/// Ruby: `PostHostCommandUpdateInput` — `estimated_completion_time` is a
-/// `GenericDateTimestamp` serialized as an ISO-8601 string on the wire.
-/// See `codedeploy_commands_sdk.rb:346`.
+/// `estimated_completion_time` is a `GenericDateTimestamp` serialized as
+/// an ISO-8601 string on the wire.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct PostHostCommandUpdateInput {

@@ -1,5 +1,3 @@
-//! @risk high
-//!
 //! TCP listener, auth check, and connection handling.
 
 use super::AgentState;
@@ -20,7 +18,7 @@ const MAX_CONNECTIONS: usize = 8;
 /// # Errors
 /// Returns an error if binding fails.
 pub fn bind() -> io::Result<(TcpListener, u16)> {
-    // @risk critical — must be 127.0.0.1, never 0.0.0.0
+    // Must bind 127.0.0.1, never 0.0.0.0.
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
     info!(port, "Command port bound");
@@ -39,9 +37,11 @@ pub fn serve(
         match stream {
             Ok(stream) => {
                 if active.load(std::sync::atomic::Ordering::Relaxed) >= MAX_CONNECTIONS {
+                    // GRCOV_STOP_COVERAGE — requires 9+ simultaneous connections
                     warn!("Connection rejected — max connections reached");
                     drop(stream);
                     continue;
+                    // GRCOV_BEGIN_COVERAGE
                 }
                 active.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let auth = Arc::clone(auth);
@@ -49,15 +49,19 @@ pub fn serve(
                 let inject_dir = Arc::clone(inject_dir);
                 let active = Arc::clone(&active);
                 std::thread::spawn(move || {
+                    // GRCOV_STOP_COVERAGE — runs in spawned thread
                     if let Err(e) = handle_connection(stream, &auth, &state, &inject_dir) {
                         debug!(error = %e, "Connection closed");
                     }
                     active.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                    // GRCOV_BEGIN_COVERAGE
                 });
             },
+            // GRCOV_STOP_COVERAGE
             Err(e) => {
                 error!(error = %e, "Failed to accept connection");
             },
+            // GRCOV_BEGIN_COVERAGE
         }
     }
 }

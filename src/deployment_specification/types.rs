@@ -1,5 +1,3 @@
-//! @risk none
-//!
 //! Deployment specification types — `DeploymentSpec`, `RevisionLocation`, `Envelope`.
 use serde::{Deserialize, Serialize};
 

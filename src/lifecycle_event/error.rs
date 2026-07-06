@@ -1,5 +1,3 @@
-//! @risk none
-//!
 //! Script execution errors and diagnostics.
 //!
 //! `ScriptError` carries the error code, script name, log tail, and message

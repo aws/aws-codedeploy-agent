@@ -1,5 +1,3 @@
-//! @risk high
-//!
 //! File installer — copies files from deployment archive to their destinations.
 //!
 //! Generates a sequence of commands (copy, mkdir, chmod, chown, setfacl, semanage)
@@ -10,6 +8,7 @@ pub mod builder;
 pub mod commands;
 pub mod core;
 pub mod error;
+pub mod safe_fs;
 
 pub use builder::{Command, CommandBuilder};
 pub use core::Installer;

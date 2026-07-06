@@ -1,5 +1,3 @@
-//! @risk high
-//!
 //! Deployment spec JSON parsing with token redaction.
 use super::builder;
 use super::envelope;
@@ -38,7 +36,7 @@ fn parse_deployment_spec_data(data: &str) -> Result<DeploymentSpec> {
     let mut parsed: Value = serde_json::from_str(data)
         .map_err(|e| DeploymentSpecError::ParseError(format!("JSON parse error: {e}")))?;
 
-    // @risk critical — token must be redacted before logging
+    // The token must be redacted before logging.
     if let Some(token) = parsed.get_mut("GitHubAccessToken") {
         *token = Value::String("REDACTED".to_string());
     }

@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! GitHub revision parsing.
 use crate::deployment_specification::error::{DeploymentSpecError, Result};
 use crate::deployment_specification::types::{RevisionLocation, RevisionSource};

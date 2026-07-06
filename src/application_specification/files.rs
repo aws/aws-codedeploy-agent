@@ -1,5 +1,3 @@
-//! @risk low
-//!
 //! `AppSpec` file mapping types.
 use crate::application_specification::ParseError;
 

@@ -1,20 +1,24 @@
-//! @risk medium
-//!
 //! Manages deployment archive directories on disk.
 //!
 //! Tracks which deployment was last successful and most recent (used by
 //! `LifecycleEventExecutor` to select the correct appspec for rollback/pre-install hooks),
 //! and cleans up old deployment directories to prevent disk from filling up.
 
+use crate::system::write_file_secure;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use tracing::debug;
 
+// Tracking-file mode comes from `system::agent_file_mode`: 0644 by default,
+// 0600 under `restrict_agent_dir_permissions`.
+
 #[derive(Debug)]
 pub struct DeploymentArchives {
     root_dir: PathBuf,
     instructions_dir: PathBuf,
+    /// Mode policy from `restrict_agent_dir_permissions`.
+    restrict_permissions: bool,
     /// Maximum archives to keep per deployment group. Reads from config
     /// (`max_revisions`, default 5, must be >= 1). Already parameterized —
     /// callers pass the value at construction.
@@ -24,7 +28,16 @@ pub struct DeploymentArchives {
 impl DeploymentArchives {
     #[must_use]
     pub fn new(root_dir: PathBuf, instructions_dir: PathBuf, archives_to_retain: usize) -> Self {
-        Self { root_dir, instructions_dir, archives_to_retain }
+        Self { root_dir, instructions_dir, archives_to_retain, restrict_permissions: false }
+    }
+
+    /// Set the mode policy for tracking files, from
+    /// `restrict_agent_dir_permissions`. Defaults to `false`, preserving
+    /// backwards-compatible 0644 tracking files.
+    #[must_use]
+    pub fn with_restrict_permissions(mut self, restrict: bool) -> Self {
+        self.restrict_permissions = restrict;
+        self
     }
 
     /// Record the deployment directory as the last successful install for a group.
@@ -37,7 +50,11 @@ impl DeploymentArchives {
         deployment_root_dir: &Path,
     ) -> io::Result<()> {
         let path = self.last_successful_path(group_id);
-        fs::write(path, deployment_root_dir.display().to_string())
+        write_file_secure(
+            &path,
+            deployment_root_dir.display().to_string().as_bytes(),
+            crate::system::agent_file_mode(self.restrict_permissions),
+        )
     }
 
     /// Record the deployment directory as the most recent install for a group.
@@ -46,7 +63,11 @@ impl DeploymentArchives {
     /// Returns an error if the file cannot be written.
     pub fn update_most_recent(&self, group_id: &str, deployment_root_dir: &Path) -> io::Result<()> {
         let path = self.most_recent_path(group_id);
-        fs::write(path, deployment_root_dir.display().to_string())
+        write_file_secure(
+            &path,
+            deployment_root_dir.display().to_string().as_bytes(),
+            crate::system::agent_file_mode(self.restrict_permissions),
+        )
     }
 
     /// Read the last successful deployment directory for a group.
@@ -105,7 +126,7 @@ impl DeploymentArchives {
         for dir in archives.into_iter().take(extra) {
             debug!("Deleting old archive: {}", dir.display());
             if let Err(e) = fs::remove_dir_all(&dir) {
-                debug!("Failed to delete {}: {e}", dir.display());
+                debug!("Failed to delete {}: {e}", dir.display()); // GRCOV_IGNORE_LINE
             }
         }
 

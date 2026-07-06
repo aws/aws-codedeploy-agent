@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Bundle downloading from various sources.
 //!
 //! Each downloader is constructed with all config it needs, then `download()` executes.

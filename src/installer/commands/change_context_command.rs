@@ -8,24 +8,46 @@ use serde_json::{Value, json};
 use std::io::Write;
 use std::path::PathBuf;
 
+/// `SELinux` types that effectively disable MAC enforcement.
+const UNCONFINED_BLOCKLIST: &[&str] = &["unconfined_t", "kernel_t", "init_t"];
+
 #[derive(Debug)]
 pub struct ChangeContextCommand<S: SeLinuxOps = SystemSeLinuxOps> {
     object: PathBuf,
     context: SeLinuxContext,
+    reject_unconfined: bool,
+    reject_symlink_target: bool,
     selinux_ops: S,
 }
 
 impl ChangeContextCommand<SystemSeLinuxOps> {
     #[must_use]
-    pub fn new(object: PathBuf, context: SeLinuxContext) -> Self {
-        Self { object, context, selinux_ops: SystemSeLinuxOps }
+    pub fn new(
+        object: PathBuf,
+        context: SeLinuxContext,
+        reject_unconfined: bool,
+        reject_symlink_target: bool,
+    ) -> Self {
+        Self {
+            object,
+            context,
+            reject_unconfined,
+            reject_symlink_target,
+            selinux_ops: SystemSeLinuxOps,
+        }
     }
 }
 
 impl<S: SeLinuxOps> ChangeContextCommand<S> {
     #[cfg(test)]
-    pub fn new_with_ops(object: PathBuf, context: SeLinuxContext, selinux_ops: S) -> Self {
-        Self { object, context, selinux_ops }
+    pub fn new_with_ops(
+        object: PathBuf,
+        context: SeLinuxContext,
+        reject_unconfined: bool,
+        reject_symlink_target: bool,
+        selinux_ops: S,
+    ) -> Self {
+        Self { object, context, reject_unconfined, reject_symlink_target, selinux_ops }
     }
 
     /// # Errors
@@ -33,6 +55,12 @@ impl<S: SeLinuxOps> ChangeContextCommand<S> {
     pub fn execute(&self, cleanup_file: &mut dyn Write) -> Result<()> {
         if self.context.role().is_some() {
             return Err(InstallerError::SelinuxRoleNotSupported);
+        }
+
+        if self.reject_unconfined && UNCONFINED_BLOCKLIST.contains(&self.context.type_()) {
+            return Err(InstallerError::UnconfinedSelinuxRejected {
+                type_: self.context.type_().to_string(),
+            });
         }
 
         let mut args_vec = vec!["-t", self.context.type_()];
@@ -51,7 +79,18 @@ impl<S: SeLinuxOps> ChangeContextCommand<S> {
             args_vec.push(&range_str);
         }
 
-        let object = std::fs::canonicalize(&self.object)?;
+        // SECURITY: under `reject_symlink_permission_targets`,
+        // semanage/restorecon are external commands with no no-follow option, so
+        // canonicalize_no_symlink_swap rejects a symlinked pre-image and verifies
+        // the canonical path's device+inode is unchanged (closing the
+        // canonicalize TOCTOU window). By default (flag off) semanage/restorecon
+        // run on the path as-is, following any symlink — the
+        // backwards-compatible behavior.
+        let object = if self.reject_symlink_target {
+            crate::installer::safe_fs::canonicalize_no_symlink_swap(&self.object)?
+        } else {
+            self.object.clone()
+        };
 
         self.selinux_ops.set_context(&args_vec, &object).map_err(InstallerError::Io)?;
 
@@ -91,7 +130,7 @@ mod tests {
         fs::write(&file, "test").unwrap();
 
         let ctx = SeLinuxContext::new(None, "httpd_sys_content_t".to_string(), None);
-        let cmd = ChangeContextCommand::new(file.clone(), ctx);
+        let cmd = ChangeContextCommand::new(file.clone(), ctx, false, false);
         let mut cleanup = Vec::new();
         let _ = cmd.execute(&mut cleanup);
 
@@ -108,7 +147,7 @@ mod tests {
             "httpd_sys_content_t".to_string(),
             None,
         );
-        let cmd = ChangeContextCommand::new(file.clone(), ctx);
+        let cmd = ChangeContextCommand::new(file.clone(), ctx, false, false);
         let mut cleanup = Vec::new();
         let _ = cmd.execute(&mut cleanup);
 
@@ -122,7 +161,7 @@ mod tests {
 
         let range = MlsRange::parse("s0").unwrap();
         let ctx = SeLinuxContext::new(None, "httpd_sys_content_t".to_string(), Some(range));
-        let cmd = ChangeContextCommand::new(file.clone(), ctx);
+        let cmd = ChangeContextCommand::new(file.clone(), ctx, false, false);
         let mut cleanup = Vec::new();
         let _ = cmd.execute(&mut cleanup);
 
@@ -131,8 +170,10 @@ mod tests {
 
     #[test]
     fn execute_nonexistent() {
+        // Hardened path: canonicalize_no_symlink_swap fails deterministically on
+        // a missing path regardless of the SystemSeLinuxOps coverage stub.
         let ctx = SeLinuxContext::new(None, "httpd_sys_content_t".to_string(), None);
-        let cmd = ChangeContextCommand::new("/nonexistent".into(), ctx);
+        let cmd = ChangeContextCommand::new("/nonexistent".into(), ctx, false, true);
         let mut cleanup = Vec::new();
         assert!(cmd.execute(&mut cleanup).is_err());
     }
@@ -148,7 +189,7 @@ mod tests {
             "httpd_sys_content_t".to_string(),
             None,
         );
-        let cmd = ChangeContextCommand::new(file.clone(), ctx);
+        let cmd = ChangeContextCommand::new(file.clone(), ctx, false, false);
         let mut cleanup = Vec::new();
         let result = cmd.execute(&mut cleanup);
 
@@ -168,7 +209,7 @@ mod tests {
 
         let ctx = SeLinuxContext::new(None, "httpd_sys_content_t".to_string(), None);
         let mock_ops = MockSeLinuxOps::with_failure();
-        let cmd = ChangeContextCommand::new_with_ops(file.clone(), ctx, mock_ops);
+        let cmd = ChangeContextCommand::new_with_ops(file.clone(), ctx, false, false, mock_ops);
         let mut cleanup = Vec::new();
         let result = cmd.execute(&mut cleanup);
 
@@ -192,7 +233,7 @@ mod tests {
             "httpd_sys_content_t".to_string(),
             Some(range),
         );
-        let cmd = ChangeContextCommand::new(file.clone(), ctx);
+        let cmd = ChangeContextCommand::new(file.clone(), ctx, false, false);
         let hash = cmd.to_h();
 
         assert_eq!(hash["type"], "semanage");
@@ -200,6 +241,77 @@ mod tests {
         assert_eq!(hash["context"]["type"], "httpd_sys_content_t");
         assert_eq!(hash["context"]["range"], "s0:c0.c1023");
         assert_eq!(hash["file"], file.to_str().unwrap());
+
+        fs::remove_file(&file).ok();
+    }
+
+    #[test]
+    fn rejects_unconfined_when_flag_enabled() {
+        let file = std::env::temp_dir().join("test_ctx_unconfined_reject.txt");
+        fs::write(&file, "test").unwrap();
+
+        for type_ in ["unconfined_t", "kernel_t", "init_t"] {
+            let ctx = SeLinuxContext::new(None, type_.to_string(), None);
+            let cmd = ChangeContextCommand::new_with_ops(
+                file.clone(),
+                ctx,
+                true,
+                false,
+                MockSeLinuxOps { should_fail: false },
+            );
+            let mut cleanup = Vec::new();
+            let result = cmd.execute(&mut cleanup);
+
+            assert!(result.is_err(), "type {type_} should be rejected");
+            match result.unwrap_err() {
+                InstallerError::UnconfinedSelinuxRejected { type_: rejected } => {
+                    assert_eq!(rejected, type_);
+                },
+                other => panic!("expected UnconfinedSelinuxRejected for {type_}, got {other:?}"),
+            }
+        }
+
+        fs::remove_file(&file).ok();
+    }
+
+    #[test]
+    fn allows_unconfined_when_flag_disabled() {
+        let file = std::env::temp_dir().join("test_ctx_unconfined_allow.txt");
+        fs::write(&file, "test").unwrap();
+
+        let ctx = SeLinuxContext::new(None, "unconfined_t".to_string(), None);
+        let cmd = ChangeContextCommand::new_with_ops(
+            file.clone(),
+            ctx,
+            false,
+            false,
+            MockSeLinuxOps { should_fail: false },
+        );
+        let mut cleanup = Vec::new();
+        let result = cmd.execute(&mut cleanup);
+
+        assert!(result.is_ok(), "unconfined_t must be accepted when flag is disabled");
+
+        fs::remove_file(&file).ok();
+    }
+
+    #[test]
+    fn safe_type_passes_when_flag_enabled() {
+        let file = std::env::temp_dir().join("test_ctx_safe_with_flag.txt");
+        fs::write(&file, "test").unwrap();
+
+        let ctx = SeLinuxContext::new(None, "httpd_sys_content_t".to_string(), None);
+        let cmd = ChangeContextCommand::new_with_ops(
+            file.clone(),
+            ctx,
+            true,
+            false,
+            MockSeLinuxOps { should_fail: false },
+        );
+        let mut cleanup = Vec::new();
+        let result = cmd.execute(&mut cleanup);
+
+        assert!(result.is_ok(), "safe types must be accepted even when flag is enabled");
 
         fs::remove_file(&file).ok();
     }

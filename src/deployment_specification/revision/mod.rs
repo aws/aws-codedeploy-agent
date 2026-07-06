@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Revision source parsing — dispatches to S3, GitHub, or Local parsers
 //! based on the `RevisionType` field in the deployment specification.
 
