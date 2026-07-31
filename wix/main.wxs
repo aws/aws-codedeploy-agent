@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="windows-1252"?>
+<!--
+    WiX manifest for the CodeDeploy Agent MSI.
+
+    Installs the agent binary to C:\ProgramData\Amazon\CodeDeploy\bin\,
+    registers it as the "codedeployagent" Windows service (auto-start),
+    and creates the log/conf/deployment-root directories.
+
+    Matches the official CodeDeploy agent documentation:
+    https://docs.aws.amazon.com/codedeploy/latest/userguide/codedeploy-agent-operations-install-windows.html
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <!-- Version: keep in sync with the agent's Major.Minor (Cargo version). -->
+    <Product Id="*"
+             Name="CodeDeploy Host Agent"
+             Version="$(var.Version)"
+             Manufacturer="Amazon Web Services"
+             Language="1033"
+             UpgradeCode="EEE4ABA1-0A0F-4349-907B-1D0C1350F40D">
+
+        <Package InstallerVersion="450"
+                 Compressed="yes"
+                 InstallScope="perMachine"
+                 Description="AWS CodeDeploy Agent"
+                 Comments="Installs the CodeDeploy agent as a Windows service." />
+
+        <MajorUpgrade DowngradeErrorMessage="A newer version of the CodeDeploy agent is already installed." />
+        <MediaTemplate EmbedCab="yes" />
+
+        <!-- Install to C:\ProgramData\Amazon\CodeDeploy\ -->
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="CommonAppDataFolder">
+                <Directory Id="AmazonDir" Name="Amazon">
+                    <Directory Id="INSTALLDIR" Name="CodeDeploy">
+                        <Directory Id="BinDir" Name="bin">
+                            <Component Id="AgentBinary" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
+                                <File Id="AgentExe"
+                                      Source="target\release\codedeploy-agent.exe"
+                                      KeyPath="yes" />
+                                <!-- Backwards-compat: the local-deployment tool
+                                     used to ship as a standalone codedeploy-local.exe
+                                     in this same bin directory. It is now a
+                                     subcommand of the agent binary; this duplicate
+                                     keeps the documented `codedeploy-local [options]`
+                                     invocation working via argv[0] dispatch (see
+                                     legacy_local_argv in src/main.rs). CopyFile
+                                     duplicates the installed exe (no second embed)
+                                     and is removed automatically on uninstall.
+                                     A .lnk shortcut is unsuitable: shortcuts set
+                                     argv[0] to the target path, not the link name. -->
+                                <CopyFile Id="DuplicateAgentAsLocal"
+                                          FileId="AgentExe"
+                                          DestinationDirectory="BinDir"
+                                          DestinationName="codedeploy-local.exe" />
+                                <ServiceInstall Id="InstallCodeDeployService"
+                                                Name="codedeployagent"
+                                                DisplayName="CodeDeploy Host Agent Service"
+                                                Description="AWS CodeDeploy Agent — polls for and executes deployment commands."
+                                                Start="auto"
+                                                Type="ownProcess"
+                                                ErrorControl="normal"
+                                                Arguments="run-as-service" />
+                                <ServiceControl Id="ControlCodeDeployService"
+                                                Name="codedeployagent"
+                                                Start="install"
+                                                Stop="both"
+                                                Remove="uninstall"
+                                                Wait="yes" />
+                            </Component>
+                        </Directory>
+                        <Directory Id="LogDir" Name="log">
+                            <Component Id="LogDirComponent" Guid="B2C3D4E5-F6A7-8901-BCDE-F23456789012">
+                                <CreateFolder />
+                            </Component>
+                        </Directory>
+                        <Directory Id="ConfDir" Name="conf">
+                            <Component Id="ConfDirComponent" Guid="C3D4E5F6-A7B8-9012-CDEF-345678901234">
+                                <CreateFolder />
+                            </Component>
+                        </Directory>
+                        <Directory Id="DeploymentRootDir" Name="deployment-root">
+                            <Component Id="DeploymentRootComponent" Guid="D4E5F6A7-B8C9-0123-DEFA-456789012345">
+                                <CreateFolder />
+                            </Component>
+                        </Directory>
+                        <!-- Backwards compat: on Windows the agent reads
+                             %PROGRAMDATA%\Amazon\CodeDeploy\conf.yml with Windows
+                             defaults (absolute Windows paths), so ship the
+                             Windows conf.yml here rather than the Linux config.
+                             NeverOverwrite preserves an existing config on upgrade. -->
+                        <Component Id="LiveConfig" Guid="B7E87FF9-75E5-4D89-A71F-70C2925750BC"
+                                   NeverOverwrite="yes">
+                            <File Id="ConfYml"
+                                  Source="conf\conf.yml"
+                                  Name="conf.yml"
+                                  KeyPath="yes" />
+                        </Component>
+                    </Directory>
+                </Directory>
+            </Directory>
+        </Directory>
+
+        <Feature Id="MainFeature" Title="CodeDeploy Agent" Level="1">
+            <ComponentRef Id="AgentBinary" />
+            <ComponentRef Id="LogDirComponent" />
+            <ComponentRef Id="ConfDirComponent" />
+            <ComponentRef Id="LiveConfig" />
+            <ComponentRef Id="DeploymentRootComponent" />
+        </Feature>
+    </Product>
+</Wix>

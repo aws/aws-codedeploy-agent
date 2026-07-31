@@ -1,0 +1,7 @@
+---
+# AWS CodeDeploy Agent Configuration (Windows)
+:root_dir: 'C:\ProgramData\Amazon\CodeDeploy'
+:log_dir: 'C:\ProgramData\Amazon\CodeDeploy\log'
+:verbose: false
+:wait_between_runs: 30
+:wait_after_error: 30

@@ -1,0 +1,25 @@
+version: 0.0
+os: linux
+files:
+  - source: config/
+    destination: /etc/secure-app
+permissions:
+  - object: /etc/secure-app
+    pattern: "**"
+    owner: root
+    group: deploy
+    mode: "0750"
+    type:
+      - directory
+  - object: /etc/secure-app/secrets.conf
+    owner: root
+    group: deploy
+    mode: "0640"
+    type:
+      - file
+  - object: /etc/secure-app/public.conf
+    owner: root
+    group: deploy
+    mode: "0644"
+    type:
+      - file

@@ -1,0 +1,12 @@
+{
+  "DeploymentId": "d-INVALID02",
+  "DeploymentGroupId": "dg-INVALID02",
+  "DeploymentGroupName": "bad-deploy",
+  "ApplicationName": "bad-app",
+  "Revision": {
+    "RevisionType": "FTP",
+    "FTPRevision": {
+      "Host": "ftp.example.com"
+    }
+  }
+}

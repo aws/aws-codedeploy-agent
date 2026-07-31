@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euo pipefail
+
+# Ensure cargo is on PATH (rustup installs to ~/.cargo/bin)
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# Auto-fix formatting and clippy lints before commit
+cargo fmt --all
+cargo clippy --fix --allow-dirty --allow-staged 2>/dev/null || true
+
+# Re-stage any files that were auto-fixed
+git diff --name-only | xargs -r git add

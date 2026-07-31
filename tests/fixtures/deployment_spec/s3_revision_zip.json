@@ -1,0 +1,14 @@
+{
+  "DeploymentId": "d-ZIP12345A",
+  "DeploymentGroupId": "dg-ZIP12345B",
+  "DeploymentGroupName": "zip-deploy",
+  "ApplicationName": "zip-app",
+  "Revision": {
+    "RevisionType": "S3",
+    "S3Revision": {
+      "Bucket": "deploy-artifacts",
+      "Key": "builds/zip-app/latest.zip",
+      "BundleType": "zip"
+    }
+  }
+}

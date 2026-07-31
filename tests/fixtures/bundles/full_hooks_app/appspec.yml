@@ -1,0 +1,23 @@
+version: 0.0
+os: linux
+files:
+  - source: app/
+    destination: /opt/myapp
+  - source: config/
+    destination: /etc/myapp
+hooks:
+  ApplicationStop:
+    - location: scripts/stop_app.sh
+      timeout: 120
+  BeforeInstall:
+    - location: scripts/before_install.sh
+      timeout: 60
+  AfterInstall:
+    - location: scripts/after_install.sh
+      timeout: 180
+  ApplicationStart:
+    - location: scripts/start_app.sh
+      timeout: 300
+  ValidateService:
+    - location: scripts/validate.sh
+      timeout: 60

@@ -1,11 +1,138 @@
 ---
-:log_aws_wire: false
-:log_dir: '/var/log/aws/codedeploy-agent/'
-:pid_dir: '/opt/codedeploy-agent/state/.pid/'
+# AWS CodeDeploy Agent Configuration (Linux)
+
+# Logging
 :program_name: codedeploy-agent
-:root_dir: '/opt/codedeploy-agent/deployment-root'
+:log_dir: /var/log/aws/codedeploy-agent
 :verbose: false
-:wait_between_runs: 1
-:proxy_uri:
+
+# Capture Amazon S3 HTTP wire logs to <program_name>.aws_wire.log in log_dir
+# (default: false). SECURITY: the wire log can contain sensitive data (including
+# plaintext contents of transferred objects) and grows very quickly, so it is
+# written with restrictive 0640 permissions. Enable only while debugging, then
+# turn it back off.
+# :log_aws_wire: false
+
+# Directories
+:root_dir: /opt/codedeploy-agent/deployment-root
+:pid_dir: /opt/codedeploy-agent/state/.pid
+
+# On-premises credentials file (on-premises instances only).
+# :on_premises_config_file: /etc/codedeploy-agent/conf/codedeploy.onpremises.yml
+
+# Polling
+:wait_between_runs: 30
+:wait_after_error: 30
+
+# HTTP
+:http_read_timeout: 80
+# :proxy_uri:
+
+# Deployment
 :max_revisions: 5
+:enable_deployments_log: true
+
+# Security
+:use_fips_mode: false
+:enable_auth_policy: false
 :disable_imds_v1: false
+
+# Suppress core dumps (default: true). Set false to debug crashes.
+:disable_core_dumps: true
+
+# Reject bundles containing symlinks or hardlinks (default: false).
+# When true, deployments fail if the archive contains any symlink (all platforms)
+# or hardlink (Unix only; Windows hardlinks are not currently detected).
+# false = symlinks allowed (backwards-compatible behavior).
+# true = strict mode (opt-in hardening for narrower-trust hosts).
+# :reject_symlinks_in_bundle: false
+
+# Reject AppSpec SELinux types unconfined_t, kernel_t, init_t (default: false,
+# meaning those types are accepted).
+# :reject_unconfined_selinux_in_bundle: false
+
+# Reject SUID/SGID bits in extracted files and AppSpec modes (default: false,
+# meaning those bits are preserved).
+# :reject_unsafe_permissions_in_bundle: false
+
+# Reject `..`/absolute-path traversal (default: false, meaning such paths are
+# accepted). Covers archive entries, the AppSpec `files.source` field, and the
+# AppSpec `hooks.location` field — each rejected if it resolves outside the
+# archive.
+# :reject_path_traversal_in_bundle: false
+
+# Reset ownership of files extracted from tar/tgz bundles to root instead of
+# applying the tar header's uid/gid (default: false — root tar's --same-owner
+# default assigns the bundle-builder's uid, and deployments may rely on the
+# resulting non-root write access inside the deployment archive).
+# true = opt-in hardening: a local user whose uid collides with the
+# bundle-builder's cannot modify extracted hook scripts before the agent
+# executes them as root. Zip bundles are root-owned either way.
+# :ignore_ownership_in_bundle: false
+
+# Restrict everything under the agent install root (/opt/codedeploy-agent:
+# deployment-root, ongoing-deployment, deployment-instructions, per-deployment
+# dirs, deployment-archive, pid dir) plus the per-deployment logs and agent
+# state files to root-only modes (dirs 0700/0711/0750, log files 0640, state
+# files/bundles/pidfile 0600) instead of world-readable 0755/0644
+# (default: false).
+# false = world-readable (backwards-compatible) — host tooling outside the
+#         agent can read agent state dirs/files and non-root log
+#         collectors/users can read the per-deployment logs; fleet tooling
+#         often depends on this.
+# true  = strict modes (opt-in hardening for hosts where nothing else reads
+#         agent state. Note: per-deployment logs carry customer script output,
+#         which can include sensitive data).
+# The agent log directory is governed separately — see
+# restrict_log_dir_permissions.
+# :restrict_agent_dir_permissions: false
+
+# Restrict the agent log directory (/var/log/aws/codedeploy-agent: agent log
+# + updater log) to dir 0750 / files 0640 instead of world-readable
+# 0755/0644 (default: false).
+# WARNING: when true, NON-ROOT log collectors (CloudWatch agent, fluentd,
+# Datadog, ...) lose access to the agent and updater logs. Enable only where
+# log shipping runs as root or is not needed.
+# :restrict_log_dir_permissions: false
+
+# Restrict hook scripts to a minimal environment (shell basics + the CodeDeploy
+# deployment variables) instead of inheriting the agent's full environment
+# (default: false).
+# :restrict_hook_env_to_allowlist: false
+
+# Remove LD_PRELOAD, LD_LIBRARY_PATH, and LD_AUDIT from the hook environment (default: false).
+# :strip_loader_env_in_hooks: false
+
+# Run .ps1 lifecycle hooks with -NoProfile -NonInteractive (Windows only).
+# Default: false — the backwards-compatible behavior, in which hooks load the
+# user's PowerShell profile and allow interactive prompts because only
+# -ExecutionPolicy Bypass -File is passed.
+# true = opt-in hardening: prevents profile scripts from injecting code and
+# avoids interactive prompts that would hang a service-context agent.
+# :disable_powershell_profile_in_hooks: false
+
+# Archive extraction size limit (opt-in hardening; unset = no cap, the default).
+# Also rejects truncated/malformed archives during header inspection.
+# Accepts raw bytes or human-readable: "4GB", "4GiB", "500MB", "1TB", etc.
+# :archive_max_extraction_size: 4294967296   # raw bytes (4 GiB)
+# :archive_max_extraction_size: "4GiB"       # binary (powers of 1024)
+# :archive_max_extraction_size: "4GB"        # SI (powers of 1000)
+
+# Endpoints (leave empty for defaults)
+# :deploy_control_endpoint:
+# :s3_endpoint_override:
+# deploy_control_endpoint accepts https:// and http:// (the latter with a
+# cleartext warning, e.g. for self-hosted mocks or a loopback/sidecar that
+# terminates TLS). Other schemes (file://, javascript:, ftp://, gopher://,
+# data:, etc.) are rejected.
+
+# Shutdown
+:kill_agent_max_wait_time_seconds: 7200
+
+# Debug
+# Local management interface for querying agent status and injecting commands.
+# When true, the agent binds a loopback-only (127.0.0.1) TCP port on a dynamic
+# port and writes a discovery file with the port and an auth token; clients read
+# that file to connect. It accepts JSON commands (ping, status, inject) and is
+# reachable only from the same host. Default: false.
+:enable_command_port: false

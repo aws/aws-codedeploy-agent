@@ -1,0 +1,6 @@
+{
+  "DeploymentId": "d-INVALID01",
+  "DeploymentGroupId": "dg-INVALID01",
+  "DeploymentGroupName": "bad-deploy",
+  "ApplicationName": "bad-app"
+}

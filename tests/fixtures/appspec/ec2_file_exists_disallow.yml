@@ -1,0 +1,6 @@
+version: 0.0
+os: linux
+file_exists_behavior: DISALLOW
+files:
+  - source: /
+    destination: /opt/fresh-install

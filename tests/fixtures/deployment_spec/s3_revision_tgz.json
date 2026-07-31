@@ -1,0 +1,16 @@
+{
+  "DeploymentId": "d-TGZ12345A",
+  "DeploymentGroupId": "dg-TGZ12345B",
+  "DeploymentGroupName": "tgz-deploy",
+  "ApplicationName": "tgz-app",
+  "Revision": {
+    "RevisionType": "S3",
+    "S3Revision": {
+      "Bucket": "deploy-artifacts",
+      "Key": "builds/tgz-app/release.tar.gz",
+      "BundleType": "tgz",
+      "Version": "v3.0.0",
+      "ETag": "e99a18c428cb38d5f260853678922e03"
+    }
+  }
+}

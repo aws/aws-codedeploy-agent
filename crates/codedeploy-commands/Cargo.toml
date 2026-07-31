@@ -1,0 +1,18 @@
+[package]
+name = "codedeploy-commands"
+version = "2.0.0"
+edition = "2024"
+rust-version = "1.91"
+publish = false
+
+[dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+aws-sigv4 = "1"
+aws-credential-types = { version = "1", features = ["hardcoded-credentials"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+http = "1"
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,16 +1,31 @@
-*.swp
-Gemfile.lock
-deployment/
+# Cargo build output.
+target/
+Cargo.lock
+
+# don't check in local env config
+.cargo/*
+# but track cargo-mutants config (standard location per cargo-mutants docs)
+!.cargo/mutants.toml
+# track cargo aliases so local dev commands stay consistent
+!.cargo/config.toml
+
+# Code coverage reports
 coverage/
-.version
-.metadata/
-RemoteSystemsTempFiles/
-codedeploy-local.log*
-codedeploy-local.*.log
-deployment/
+*.profraw
+*.profdata
+
+# IDE and editor files
+.vscode/
 .idea/
-.DS_STORE
-*.iml
-pkg/
-vendor-thirdparty/
-.bundle/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Runtime PID files
+test.pid
+
+.omc/

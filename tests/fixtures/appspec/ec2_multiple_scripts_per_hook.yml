@@ -1,0 +1,15 @@
+version: 0.0
+os: linux
+hooks:
+  BeforeInstall:
+    - location: scripts/step1_backup.sh
+      timeout: 60
+    - location: scripts/step2_cleanup.sh
+      timeout: 30
+    - location: scripts/step3_prepare.sh
+      timeout: 120
+  AfterInstall:
+    - location: scripts/verify_files.sh
+      timeout: 60
+    - location: scripts/set_permissions.sh
+      timeout: 30
