@@ -165,13 +165,11 @@ impl LifecycleEventExecutor {
             return Ok(Vec::new());
         }
 
-        // GRCOV_STOP_COVERAGE
         info!(
             event = %event_name,
             script_count = scripts.len(),
             "Executing lifecycle event"
         );
-        // GRCOV_BEGIN_COVERAGE
 
         let log_path = self.current_deployment_root_dir.join("logs/scripts.log");
         let log = Arc::new(Mutex::new(
@@ -242,7 +240,6 @@ impl LifecycleEventExecutor {
             ));
         }
 
-        // GRCOV_STOP_COVERAGE
         if let Err(e) = ensure_executable(&script_path) {
             return Err(err(
                 ErrorCode::ScriptExecutability,
@@ -251,12 +248,10 @@ impl LifecycleEventExecutor {
                 ),
             ));
         }
-        // GRCOV_BEGIN_COVERAGE
 
         let timeout = Duration::from_secs(u64::from(script_info.timeout()));
         let script = self.build_script(script_info, script_path, log);
 
-        // GRCOV_STOP_COVERAGE
         let exit_code = match script.execute(timeout) {
             Ok(code) => code,
             Err(e) if e == "timeout" => {
@@ -292,7 +287,6 @@ impl LifecycleEventExecutor {
                 format!("Script at specified location: {who} failed with exit code {exit_code}"),
             ));
         }
-        // GRCOV_BEGIN_COVERAGE
 
         Ok(())
     }

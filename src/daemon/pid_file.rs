@@ -52,11 +52,9 @@ impl PidFile {
     pub fn write(&self) -> io::Result<()> {
         use crate::system::{agent_file_mode, create_deployment_dir, write_file_secure};
 
-        // GRCOV_STOP_COVERAGE
         if let Some(parent) = self.path.parent() {
             create_deployment_dir(parent, 0o700, self.restrict)?;
         }
-        // GRCOV_BEGIN_COVERAGE
         self.remove_stale()?;
         let pid = std::process::id();
         write_file_secure(&self.path, pid.to_string().as_bytes(), agent_file_mode(self.restrict))?;
@@ -235,6 +233,11 @@ mod tests {
     #[test]
     fn read_permission_error() {
         use std::os::unix::fs::PermissionsExt;
+        if nix::unistd::Uid::effective().is_root() {
+            // Root bypasses DAC permission checks, so the denial this test
+            // relies on never happens (e.g. in CI build containers).
+            return;
+        }
         let dir = TempDir::new().unwrap();
         let pf = pid_file(&dir);
         std::fs::write(pf.path(), "12345").unwrap();
@@ -247,6 +250,11 @@ mod tests {
     #[test]
     fn remove_permission_error() {
         use std::os::unix::fs::PermissionsExt;
+        if nix::unistd::Uid::effective().is_root() {
+            // Root bypasses DAC permission checks, so the denial this test
+            // relies on never happens (e.g. in CI build containers).
+            return;
+        }
         let dir = TempDir::new().unwrap();
         let pf = pid_file(&dir);
         pf.write().unwrap();

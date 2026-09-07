@@ -200,6 +200,7 @@ pub fn try_run() -> std::io::Result<DispatchOutcome> {
         {
             Ok(DispatchOutcome::NotLaunchedByScm)
         },
+        Err(windows_service::Error::Winapi(e)) => Err(e),
         Err(e) => Err(std::io::Error::other(e.to_string())),
     }
 }
@@ -209,7 +210,14 @@ pub fn try_run() -> std::io::Result<DispatchOutcome> {
 /// If invoked outside an SCM context, returns an error explaining that
 /// the caller should use `_worker` (or no subcommand) for console mode.
 pub fn run() -> std::io::Result<()> {
-    match try_run()? {
+    outcome_to_result(try_run()?)
+}
+
+/// Map a dispatch outcome to `run()`'s result. Split out so tests can
+/// exercise the error contract without calling the service dispatcher,
+/// which Windows allows only once per process.
+fn outcome_to_result(outcome: DispatchOutcome) -> std::io::Result<()> {
+    match outcome {
         DispatchOutcome::RanAsService => Ok(()),
         DispatchOutcome::NotLaunchedByScm => Err(std::io::Error::other(
             "`run-as-service` must be invoked by the Windows Service Control \
@@ -366,8 +374,11 @@ mod tests {
     fn run_returns_clear_error_when_not_launched_by_scm() {
         // The explicit `run-as-service` command must fail loudly with
         // an actionable message when invoked from a console rather
-        // than silently exiting or hanging.
-        let err = run().expect_err("run() must fail outside SCM context");
+        // than silently exiting or hanging. Tested via the outcome
+        // mapping: the service dispatcher itself may only be invoked
+        // once per process, and the `try_run` test owns that call.
+        let err = outcome_to_result(DispatchOutcome::NotLaunchedByScm)
+            .expect_err("NotLaunchedByScm must map to an error");
         let msg = err.to_string();
         assert!(
             msg.contains("Service Control Manager"),

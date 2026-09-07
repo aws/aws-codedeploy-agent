@@ -391,7 +391,6 @@ pub fn write_file_secure(path: &Path, content: &[u8], mode: u32) -> io::Result<(
         let write_result = file.write_all(content).and_then(|()| file.sync_all());
         drop(file);
 
-        // GRCOV_STOP_COVERAGE
         if let Err(e) = write_result {
             let _ = std::fs::remove_file(&tmp_path);
             return Err(e);
@@ -401,7 +400,6 @@ pub fn write_file_secure(path: &Path, content: &[u8], mode: u32) -> io::Result<(
             let _ = std::fs::remove_file(&tmp_path);
             return Err(e);
         }
-        // GRCOV_BEGIN_COVERAGE
         Ok(())
     }
     #[cfg(windows)]
@@ -767,6 +765,10 @@ mod tests {
     /// Full control access mask matching the SDDL `GA` (GENERIC_ALL).
     const GENERIC_ALL: u32 = 0x1000_0000;
 
+    /// `FILE_ALL_ACCESS`: what Windows reports after mapping `GENERIC_ALL`
+    /// to file-object-specific rights when the ACE is stored.
+    const FILE_ALL_ACCESS: u32 = 0x001F_01FF;
+
     /// ACE flag indicating the entry was inherited from a parent object.
     const INHERITED_ACE: u8 = 0x10;
 
@@ -780,7 +782,7 @@ mod tests {
         let allow: Vec<_> =
             entries.iter().filter(|e| e.entry_type == AceType::AccessAllow).collect();
 
-        assert_eq!(allow.len(), 2, "expected exactly 2 AccessAllow entries, got {allow:?}");
+        assert_eq!(allow.len(), 2, "expected exactly 2 AccessAllow entries, got {}", allow.len());
 
         for e in &allow {
             assert_eq!(
@@ -789,10 +791,12 @@ mod tests {
                 "entry {} has INHERITED_ACE flag — DACL is not protected",
                 e.string_sid
             );
-            assert_eq!(
-                e.mask, GENERIC_ALL,
-                "entry {} has mask {:#x}, expected GENERIC_ALL ({GENERIC_ALL:#x})",
-                e.string_sid, e.mask
+            assert!(
+                e.mask == GENERIC_ALL || e.mask == FILE_ALL_ACCESS,
+                "entry {} has mask {:#x}, expected GENERIC_ALL ({GENERIC_ALL:#x}) or its \
+                 file-specific mapping FILE_ALL_ACCESS ({FILE_ALL_ACCESS:#x})",
+                e.string_sid,
+                e.mask
             );
         }
 

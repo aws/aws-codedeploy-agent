@@ -98,7 +98,6 @@ impl PlatformFileOperations for WindowsFileOperations {
             // SYSTEM+Administrators DACL atomically via CreateFileW.
             match crate::system::secure_files::write_file_secure(path, content.as_bytes(), 0o600) {
                 Ok(()) => return Ok(()),
-                // GRCOV_STOP_COVERAGE — Windows retry logic, untestable on Linux
                 Err(e)
                     if e.kind() == io::ErrorKind::PermissionDenied
                         && attempt < RETRY_DELAYS_MS.len() - 1 =>
@@ -109,7 +108,6 @@ impl PlatformFileOperations for WindowsFileOperations {
             }
         }
         Ok(())
-        // GRCOV_BEGIN_COVERAGE
     }
 }
 
@@ -145,7 +143,7 @@ pub fn copy_dir_recursive(src: &Path, dest: &Path) -> io::Result<()> {
                 std::os::unix::fs::symlink(&target, &entry_dest)?;
             }
             #[cfg(not(unix))]
-            std::fs::copy(entry.path(), &entry_dest)?; // GRCOV_IGNORE_LINE
+            std::fs::copy(entry.path(), &entry_dest)?;
         } else if file_type.is_dir() {
             copy_dir_recursive(&entry.path(), &entry_dest)?;
         } else {

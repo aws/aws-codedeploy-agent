@@ -17,12 +17,10 @@ pub(super) fn verify_and_extract(envelope: &Envelope, env: &dyn EnvOps) -> Resul
     match envelope.format.as_str() {
         "PKCS7/JSON" => verify_pkcs7_signature(&envelope.payload),
         "TEXT/JSON" | "JSON" => {
-            // GRCOV_STOP_COVERAGE
             #[cfg(not(test))]
             if env.get("CODEDEPLOY_DEVELOPER_MODE").as_deref() != Some("true") {
                 return Err(DeploymentSpecError::InvalidFormat(envelope.format.clone()));
             }
-            // GRCOV_BEGIN_COVERAGE
             #[cfg(test)]
             let _ = env;
             Ok(envelope.payload.clone())
@@ -72,14 +70,12 @@ fn verify_pkcs7_signature(payload: &str) -> Result<String> {
     })
 }
 
-// GRCOV_STOP_COVERAGE
 #[cfg(coverage)]
 fn verify_pkcs7_signature(payload: &str) -> Result<String> {
     #[cfg(debug_assertions)]
     eprintln!("WARNING: PKCS7 signature verification is stubbed out in coverage builds");
     Ok(payload.to_string())
 }
-// GRCOV_BEGIN_COVERAGE
 
 #[cfg(test)]
 mod tests {

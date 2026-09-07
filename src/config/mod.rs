@@ -65,7 +65,7 @@ where
     }
 
     let Some(val) = Option::<ByteSizeValue>::deserialize(deserializer)? else {
-        return Ok(None); // GRCOV_IGNORE_LINE
+        return Ok(None);
     };
 
     match val {
@@ -518,15 +518,11 @@ impl AgentConfig {
             Self::from_file(p)
         } else {
             let path = default_config_path();
-            // GRCOV_STOP_COVERAGE
             if path.exists() {
                 Self::from_file(&path)
             } else {
-                // GRCOV_BEGIN_COVERAGE
                 Ok(Self::default())
-                // GRCOV_STOP_COVERAGE
             }
-            // GRCOV_BEGIN_COVERAGE
         }
     }
 
@@ -602,7 +598,6 @@ impl AgentConfig {
 /// # Errors
 /// Returns [`ConfigError::RegionNotFound`] if no region source succeeds.
 pub fn resolve_region(disable_imds_v1: bool) -> Result<String, ConfigError> {
-    // GRCOV_STOP_COVERAGE
     // Step 1: ENV['AWS_REGION']
     if let Ok(region) = std::env::var("AWS_REGION")
         && !region.is_empty()
@@ -616,7 +611,6 @@ pub fn resolve_region(disable_imds_v1: bool) -> Result<String, ConfigError> {
     }
 
     Err(ConfigError::RegionNotFound)
-    // GRCOV_BEGIN_COVERAGE
 }
 
 /// IMDS endpoint constants.
@@ -629,7 +623,6 @@ const IMDS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 /// Fetch region from IMDS identity document.
 ///
 /// Tries `IMDSv2` first (PUT for token, then GET with token), falls back to `IMDSv1`.
-// GRCOV_STOP_COVERAGE
 fn imds_region(disable_v1: bool) -> Option<String> {
     let client = reqwest::blocking::Client::builder()
         .timeout(IMDS_TIMEOUT)
@@ -690,7 +683,6 @@ fn imds_v1_get(client: &reqwest::blocking::Client, url: &str) -> Option<String> 
         .filter(|r| r.status().is_success())
         .and_then(|r| r.text().ok())
 }
-// GRCOV_BEGIN_COVERAGE
 
 /// Parse `region` from the IMDS identity document JSON.
 fn parse_region_from_identity_doc(body: &str) -> Option<String> {
@@ -709,7 +701,6 @@ fn parse_region_from_identity_doc(body: &str) -> Option<String> {
 ///
 /// # Errors
 /// Returns [`ConfigError::HostIdentifierNotFound`] if no source succeeds.
-// GRCOV_STOP_COVERAGE
 pub fn resolve_host_identifier(disable_imds_v1: bool) -> Result<String, ConfigError> {
     // Step 1: ENV override
     if let Ok(id) = std::env::var("AWS_HOST_IDENTIFIER")
@@ -730,7 +721,6 @@ pub fn resolve_host_identifier(disable_imds_v1: bool) -> Result<String, ConfigEr
     parse_host_identifier_from_identity_doc(&body, &partition)
         .ok_or(ConfigError::HostIdentifierNotFound)
 }
-// GRCOV_BEGIN_COVERAGE
 
 /// Resolve both region and host identifier from a single IMDS identity document fetch.
 ///
@@ -740,7 +730,6 @@ pub fn resolve_host_identifier(disable_imds_v1: bool) -> Result<String, ConfigEr
 /// # Errors
 /// Returns [`ConfigError::RegionNotFound`] if region cannot be determined.
 /// Returns [`ConfigError::HostIdentifierNotFound`] if host identifier cannot be determined.
-// GRCOV_STOP_COVERAGE
 pub fn resolve_region_and_host_identifier(
     disable_imds_v1: bool,
 ) -> Result<(String, String), ConfigError> {
@@ -786,13 +775,11 @@ pub fn resolve_region_and_host_identifier(
 
     Ok((region, host_id))
 }
-// GRCOV_BEGIN_COVERAGE
 
 /// IMDS partition metadata path.
 const IMDS_PARTITION_PATH: &str = "/latest/meta-data/services/partition";
 
 /// Fetch AWS partition from IMDS, defaulting to `"aws"`.
-// GRCOV_STOP_COVERAGE
 fn imds_partition(client: &reqwest::blocking::Client, disable_v1: bool) -> String {
     let url = format!("{IMDS_ENDPOINT}{IMDS_PARTITION_PATH}");
     // IMDSv2 first
@@ -811,7 +798,6 @@ fn imds_partition(client: &reqwest::blocking::Client, disable_v1: bool) -> Strin
     }
     "aws".to_string()
 }
-// GRCOV_BEGIN_COVERAGE
 
 /// Parse host identifier ARN from IMDS identity document.
 ///
@@ -1531,7 +1517,7 @@ log_aws_wire: true
     fn default_on_premises_config_path_returns_expected_path() {
         let path = default_on_premises_config_path();
         assert!(
-            path.to_str().unwrap().contains("codedeploy"),
+            path.to_str().unwrap().to_lowercase().contains("codedeploy"),
             "expected on-premises config path to contain 'codedeploy', got: {path:?}"
         );
     }

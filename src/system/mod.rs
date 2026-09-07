@@ -7,9 +7,9 @@ pub mod file_ops;
 pub mod linux_ops;
 pub mod process_ops;
 pub mod secure_files;
-pub mod version_file;
 #[cfg(unix)]
 pub mod selinux_ops;
+pub mod version_file;
 
 pub use env_ops::{EnvOps, SystemEnvOps};
 pub use file_ops::{PlatformFileOperations, SystemFileOperations, ensure_executable};

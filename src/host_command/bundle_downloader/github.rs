@@ -43,7 +43,7 @@ impl BundleFormat {
             Some("tar") => Ok(Self::Tar),
             None => {
                 if cfg!(windows) {
-                    Ok(Self::Zip) // GRCOV_IGNORE_LINE
+                    Ok(Self::Zip)
                 } else {
                     Ok(Self::Tar)
                 }
@@ -137,7 +137,6 @@ impl GitHubDownloader {
         )
     }
 
-    // GRCOV_STOP_COVERAGE
     fn try_download(&self, client: &reqwest::blocking::Client, url: &str) -> io::Result<()> {
         // GitHub rejects requests with no User-Agent (403).
         let mut req = client.get(url).header("User-Agent", GITHUB_USER_AGENT);
@@ -170,7 +169,6 @@ impl GitHubDownloader {
         file.flush()?;
         Ok(())
     }
-    // GRCOV_BEGIN_COVERAGE
 }
 
 /// Build an HTTPS client, loading custom CA certs from `AWS_SSL_CA_DIRECTORY` if
@@ -209,7 +207,6 @@ fn build_https_client(
         .map_err(|e| io::Error::other(format!("Failed to build HTTPS client: {e}")))
 }
 
-// GRCOV_STOP_COVERAGE
 impl BundleDownloader for GitHubDownloader {
     fn download(&self) -> io::Result<()> {
         let url = self.url();
@@ -249,7 +246,6 @@ impl BundleDownloader for GitHubDownloader {
         })
     }
 }
-// GRCOV_BEGIN_COVERAGE
 
 #[cfg(test)]
 mod tests {
@@ -292,9 +288,16 @@ mod tests {
         assert_eq!(BundleFormat::from_bundle_type(Some("zip")).unwrap(), BundleFormat::Zip);
     }
 
+    #[cfg(unix)]
     #[test]
     fn bundle_format_default_on_unix() {
         assert_eq!(BundleFormat::from_bundle_type(None).unwrap(), BundleFormat::Tar);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn bundle_format_default_on_windows() {
+        assert_eq!(BundleFormat::from_bundle_type(None).unwrap(), BundleFormat::Zip);
     }
 
     #[test]

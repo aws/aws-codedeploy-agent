@@ -311,7 +311,6 @@ fn tracker_path(config: &AgentConfig) -> PathBuf {
 }
 
 /// Create a deployment tracker from config.
-// GRCOV_STOP_COVERAGE
 #[cfg(unix)]
 fn make_tracker(config: &AgentConfig) -> FileBasedDeploymentTracker<SystemFileOperations> {
     FileBasedDeploymentTracker::<SystemFileOperations>::new_with_ops(
@@ -319,7 +318,6 @@ fn make_tracker(config: &AgentConfig) -> FileBasedDeploymentTracker<SystemFileOp
         SystemFileOperations::with_policy(config.hardening.restrict_agent_dir_permissions),
     )
 }
-// GRCOV_BEGIN_COVERAGE
 
 fn make_master_config(config: &AgentConfig) -> MasterConfig {
     let pid_dir = config.pid_dir.to_string_lossy().to_string();
@@ -334,13 +332,10 @@ fn make_master_config(config: &AgentConfig) -> MasterConfig {
 }
 
 /// Create a Master from config.
-// GRCOV_STOP_COVERAGE
 fn make_master(config: &AgentConfig) -> Master {
     Master::new(make_master_config(config))
 }
-// GRCOV_BEGIN_COVERAGE
 
-// GRCOV_STOP_COVERAGE
 fn run(command: &Command, config_file: Option<&Path>) {
     // Load config before anything else — load once, pass to all consumers.
     let config = match AgentConfig::load(config_file) {
@@ -643,9 +638,6 @@ fn run(command: &Command, config_file: Option<&Path>) {
         },
     }
 }
-// GRCOV_BEGIN_COVERAGE
-
-// GRCOV_STOP_COVERAGE
 
 /// Exit code for validation errors (bad input before execution starts).
 const EXIT_VALIDATION: i32 = 2;
@@ -1350,9 +1342,7 @@ fn validate_event_ordering(events: &[String]) -> Result<(), String> {
 
     Ok(())
 }
-// GRCOV_BEGIN_COVERAGE
 
-// GRCOV_STOP_COVERAGE
 fn main() {
     let cli = Cli::parse_from(legacy_local_argv(std::env::args_os()));
     // Resolve config path: CLI flag takes precedence, then env var (set by master
@@ -1417,7 +1407,6 @@ where
     args.insert(1, std::ffi::OsString::from("deploy-local"));
     args
 }
-// GRCOV_BEGIN_COVERAGE
 
 #[cfg(test)]
 mod tests {
@@ -1492,6 +1481,7 @@ mod tests {
         assert_eq!(path, PathBuf::from("/opt/codedeploy-agent/deployment-root/ongoing-deployment"));
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn tracker_path_respects_custom_config() {
         let config = AgentConfig {

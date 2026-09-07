@@ -38,14 +38,12 @@ pub fn unpack(
     restrict_permissions: bool,
     ignore_ownership: bool,
 ) -> io::Result<()> {
-    // GRCOV_STOP_COVERAGE
     debug!(
         bundle_type,
         bundle = %bundle_path.display(),
         dest = %dest.display(),
         "Unpacking bundle archive"
     );
-    // GRCOV_BEGIN_COVERAGE
 
     let dest_mode = archive_dir_mode(restrict_permissions);
     crate::system::create_deployment_dir(dest, 0o711, restrict_permissions)?;
@@ -95,6 +93,15 @@ fn unpack_tar_with_system(
     gzipped: bool,
     ignore_ownership: bool,
 ) -> io::Result<()> {
+    // System tar behavior on a 0-byte file differs: GNU tar rejects it,
+    // while libarchive-based bsdtar (the system tar on Windows) accepts it
+    // as a valid empty archive and exits 0. Reject it up front so an
+    // empty/corrupt bundle fails uniformly on every platform, matching
+    // the check in `unpack_tar_native`.
+    if std::fs::metadata(bundle)?.len() == 0 {
+        return Err(io::Error::other("archive is empty (0 bytes); not a valid tar archive"));
+    }
+
     let extract_flag = if gzipped { "-xzf" } else { "-xf" };
     // SECURITY: root tar defaults to --same-owner, chowning every extracted
     // file to the bundle-builder's (usually non-root) header uid — leaving
@@ -418,7 +425,6 @@ fn strip_leading_directory(dest: &Path, restrict_permissions: bool) -> io::Resul
 /// Returns an error naming the offending entry if a symlink or hardlink is found.
 pub fn reject_bundle_symlinks(dest: &Path) -> io::Result<()> {
     if let Err(e) = scan_bundle_for_links(dest) {
-        // GRCOV_STOP_COVERAGE — defensive logging when cleanup of a rejected
         // bundle fails; not reproducible in CI without racing filesystem perms.
         if let Err(rm_err) = fs::remove_dir_all(dest) {
             tracing::error!(
@@ -426,7 +432,6 @@ pub fn reject_bundle_symlinks(dest: &Path) -> io::Result<()> {
                 dest.display()
             );
         }
-        // GRCOV_BEGIN_COVERAGE
         return Err(e);
     }
     Ok(())
@@ -487,7 +492,6 @@ fn scan_bundle_for_links(dest: &Path) -> io::Result<()> {
 /// Returns an error naming the offending entry if a SUID/SGID file is found.
 pub fn reject_bundle_unsafe_permissions(dest: &Path) -> io::Result<()> {
     if let Err(e) = scan_bundle_for_unsafe_permissions(dest) {
-        // GRCOV_STOP_COVERAGE — defensive logging when cleanup of a rejected
         // bundle fails; not reproducible in CI without racing filesystem perms.
         if let Err(rm_err) = fs::remove_dir_all(dest) {
             tracing::error!(
@@ -495,7 +499,6 @@ pub fn reject_bundle_unsafe_permissions(dest: &Path) -> io::Result<()> {
                 dest.display()
             );
         }
-        // GRCOV_BEGIN_COVERAGE
         return Err(e);
     }
     Ok(())
@@ -601,10 +604,8 @@ fn first_unsafe_component(path: &Path) -> Option<String> {
         match component {
             Component::ParentDir => return Some("..".to_string()),
             Component::RootDir => return Some("/".to_string()),
-            // GRCOV_STOP_COVERAGE — Windows-only; Path::components() never
             // yields Component::Prefix on Linux regardless of input string.
             Component::Prefix(p) => return Some(p.as_os_str().to_string_lossy().into_owned()),
-            // GRCOV_BEGIN_COVERAGE
             Component::CurDir | Component::Normal(_) => {},
         }
     }
@@ -620,7 +621,6 @@ fn first_unsafe_component(path: &Path) -> Option<String> {
 /// Returns an error naming the offending entry and its resolved location.
 pub fn reject_bundle_path_traversal(dest: &Path) -> io::Result<()> {
     if let Err(e) = scan_bundle_for_traversal(dest) {
-        // GRCOV_STOP_COVERAGE — defensive logging when cleanup of a rejected
         // bundle fails; not reproducible in CI without racing filesystem perms.
         if let Err(rm_err) = fs::remove_dir_all(dest) {
             tracing::error!(
@@ -628,7 +628,6 @@ pub fn reject_bundle_path_traversal(dest: &Path) -> io::Result<()> {
                 dest.display()
             );
         }
-        // GRCOV_BEGIN_COVERAGE
         return Err(e);
     }
     Ok(())
@@ -1313,6 +1312,12 @@ mod tests {
             fn drop(&mut self) {
                 let _ = fs::set_permissions(self.0, fs::Permissions::from_mode(0o755));
             }
+        }
+
+        if nix::unistd::Uid::effective().is_root() {
+            // Root bypasses DAC permission checks, so the denial this test
+            // relies on never happens (e.g. in CI build containers).
+            return;
         }
 
         let dir = TempDir::new().unwrap();

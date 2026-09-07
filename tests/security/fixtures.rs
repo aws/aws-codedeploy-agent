@@ -3,7 +3,6 @@
 // programmatically — no malicious fixture files are checked into the repository.
 //
 
-
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;

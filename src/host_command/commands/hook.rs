@@ -117,14 +117,12 @@ impl HookCommand {
             return Ok(Vec::new());
         };
 
-        // GRCOV_STOP_COVERAGE
         info!(
             command_name,
             events = ?events,
             deployment_id = %spec.deployment_id,
             "Executing hook command"
         );
-        // GRCOV_BEGIN_COVERAGE
 
         // Open the per-deployment log up front (best-effort) so the
         // `deployment-logs/` directory and `…-deployments.log` file exist for
@@ -194,7 +192,7 @@ impl HookCommand {
 
         info!(
             "Command {command_name} has {} lifecycle event(s) mapped; non-noop.",
-            events.len() // GRCOV_IGNORE_LINE
+            events.len()
         );
         false
     }

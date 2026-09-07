@@ -51,13 +51,11 @@ impl<'a> S3Downloader<'a> {
     }
 }
 
-// GRCOV_STOP_COVERAGE
 impl BundleDownloader for S3Downloader<'_> {
     fn download(&self) -> io::Result<()> {
         self.download_returning_etag().map(|_| ())
     }
 }
-// GRCOV_BEGIN_COVERAGE
 
 /// Verify expected etag matches actual, stripping surrounding quotes.
 fn verify_etag(expected: Option<&str>, actual: Option<&str>) -> io::Result<()> {

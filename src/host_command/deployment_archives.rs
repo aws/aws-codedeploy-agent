@@ -126,7 +126,7 @@ impl DeploymentArchives {
         for dir in archives.into_iter().take(extra) {
             debug!("Deleting old archive: {}", dir.display());
             if let Err(e) = fs::remove_dir_all(&dir) {
-                debug!("Failed to delete {}: {e}", dir.display()); // GRCOV_IGNORE_LINE
+                debug!("Failed to delete {}: {e}", dir.display());
             }
         }
 

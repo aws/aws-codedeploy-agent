@@ -10,6 +10,19 @@
 use std::time::Duration;
 use tokio::time::Instant;
 
+/// Error returned by [`DeadlineJoiner::join`] when the deadline elapses
+/// before the future completes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeadlineExceeded;
+
+impl std::fmt::Display for DeadlineExceeded {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("deadline exceeded before the future completed")
+    }
+}
+
+impl std::error::Error for DeadlineExceeded {}
+
 /// A shared deadline that tracks remaining time across sequential joins.
 #[derive(Debug)]
 pub struct DeadlineJoiner {
@@ -31,16 +44,19 @@ impl DeadlineJoiner {
 
     /// Wait for a future up to the remaining deadline.
     ///
-    /// Returns `Ok(value)` if the future completes in time, `Err(())` if the
-    /// deadline is exceeded.
+    /// Returns `Ok(value)` if the future completes in time,
+    /// `Err(DeadlineExceeded)` if the deadline is exceeded.
     ///
     /// # Errors
-    /// Returns `Err(())` if the deadline is exceeded before the future completes.
-    pub async fn join<F, T>(&self, future: F) -> Result<T, ()>
+    /// Returns [`DeadlineExceeded`] if the deadline is exceeded before the
+    /// future completes.
+    pub async fn join<F, T>(&self, future: F) -> Result<T, DeadlineExceeded>
     where
         F: std::future::Future<Output = T>,
     {
-        tokio::time::timeout_at(self.deadline, future).await.map_err(|_| ())
+        tokio::time::timeout_at(self.deadline, future)
+            .await
+            .map_err(|_| DeadlineExceeded)
     }
 }
 
@@ -59,7 +75,7 @@ mod tests {
     async fn join_exceeds_deadline() {
         let joiner = DeadlineJoiner::new(Duration::from_millis(10));
         let result = joiner.join(tokio::time::sleep(Duration::from_secs(5))).await;
-        assert_eq!(result, Err(()));
+        assert_eq!(result, Err(DeadlineExceeded));
     }
 
     #[tokio::test]

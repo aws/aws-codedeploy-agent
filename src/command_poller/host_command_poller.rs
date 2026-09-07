@@ -166,7 +166,6 @@ impl CommandThreadPool {
 
     /// Spawn a command processing thread. The in-flight counter and identifier
     /// set are updated before spawn and cleared when the thread exits.
-    // GRCOV_STOP_COVERAGE
     fn spawn<T: DeploymentTracker + Send + Sync + 'static>(
         &self,
         processor: Arc<CommandProcessor<T>>,
@@ -210,7 +209,6 @@ impl CommandThreadPool {
             std::thread::sleep(Duration::from_millis(100));
         }
     }
-    // GRCOV_BEGIN_COVERAGE
 }
 
 #[derive(Debug)]
@@ -278,7 +276,6 @@ impl<T: DeploymentTracker + Send + Sync + 'static> HostCommandPoller<T> {
     /// `poll_interval`. On error, sleeps the backoff duration minus elapsed
     /// time.
     pub fn start(&self) {
-        // GRCOV_STOP_COVERAGE — requires live service, tokio runtime, and cancel token coordination
         info!(
             host_identifier = %self.host_identifier,
             poll_interval_ms = self.poll_interval.as_millis().try_into().unwrap_or(u64::MAX),
@@ -429,8 +426,6 @@ impl<T: DeploymentTracker + Send + Sync + 'static> HostCommandPoller<T> {
 
         Ok(Some(command))
     }
-
-    // GRCOV_BEGIN_COVERAGE
 
     /// Validate host identifier matches and command name is present.
     fn validate_command(&self, command: &HostCommand) -> Result<(), String> {

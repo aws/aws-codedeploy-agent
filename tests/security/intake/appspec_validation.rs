@@ -15,6 +15,7 @@ use proptest::prelude::*;
 // ---------------------------------------------------------------------------
 
 /// Parser accepts SUID/SGID modes; install-time rejection happens in `ChangeModeCommand`.
+#[cfg(unix)]
 #[test]
 fn appspec_rejects_suid_permissions() {
     use codedeploy_agent::installer::InstallerError;
@@ -85,6 +86,7 @@ fn mode_suid_bits_are_detectable() {
 // ---------------------------------------------------------------------------
 
 /// Parser accepts unconfined types; install-time rejection happens in `ChangeContextCommand`.
+#[cfg(unix)]
 #[test]
 fn appspec_rejects_unconfined_selinux_context() {
     use codedeploy_agent::installer::InstallerError;

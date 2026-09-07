@@ -102,7 +102,6 @@ impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
     ///
     /// # Errors
     /// Returns an error if any step fails fatally.
-    // GRCOV_STOP_COVERAGE — process() orchestrates service calls; tested via integration tests
     pub fn process(&self, command: &HostCommand) -> io::Result<()> {
         info!(
             command_name = %command.command_name,
@@ -172,8 +171,6 @@ impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
         Ok((output.generic_envelope, output.envelope_format))
     }
 
-    // GRCOV_BEGIN_COVERAGE
-
     fn parse_spec(payload: &str, format: &str) -> io::Result<DeploymentSpec> {
         let envelope = deployment_specification::Envelope {
             format: format.to_string(),
@@ -182,8 +179,6 @@ impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
         DeploymentSpec::parse(&envelope)
             .map_err(|e| io::Error::other(format!("Failed to parse deployment spec: {e}")))
     }
-
-    // GRCOV_STOP_COVERAGE — service-dependent methods
 
     /// Send ack to service with noop diagnostics. Returns the service's response status.
     fn send_acknowledgement(&self, command: &HostCommand, is_noop: bool) -> io::Result<AckStatus> {
@@ -272,8 +267,6 @@ impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
         }
     }
 }
-
-// GRCOV_BEGIN_COVERAGE
 
 #[cfg(test)]
 mod tests {

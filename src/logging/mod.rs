@@ -56,11 +56,9 @@ pub fn updater_log_path() -> PathBuf {
 /// # Errors
 ///
 /// Returns an error if the log directory cannot be created.
-// GRCOV_STOP_COVERAGE
 pub fn init_logging(config: &LogConfig) -> std::io::Result<LogGuard> {
     agent_logger::init(config)
 }
-// GRCOV_BEGIN_COVERAGE
 
 #[cfg(test)]
 mod tests {

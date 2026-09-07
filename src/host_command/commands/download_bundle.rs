@@ -79,20 +79,17 @@ impl DownloadCommand {
             }
         }
 
-        // GRCOV_STOP_COVERAGE
         info!(
             revision_source = ?spec.revision_source,
             deployment_id = %spec.deployment_id,
             "Bundle downloaded"
         );
-        // GRCOV_BEGIN_COVERAGE
 
         if !matches!(spec.revision_source, RevisionSource::LocalDirectory) {
             if archive_dir.exists() {
                 fs::remove_dir_all(&archive_dir)?;
             }
             // Size check runs pre-extraction (inspects headers only, no disk writes).
-            // GRCOV_STOP_COVERAGE
             if let Some(max_size) = self.config.archive_max_extraction_size
                 && let Err(e) = bundle_unpacker::check_extraction_size(
                     &bundle_path,
@@ -109,13 +106,11 @@ impl DownloadCommand {
                 }
                 return Err(e);
             }
-            // GRCOV_BEGIN_COVERAGE
 
             if self.config.hardening.reject_path_traversal_in_bundle
                 && let Err(e) =
                     bundle_unpacker::check_path_traversal(&bundle_path, &Self::bundle_type(spec))
             {
-                // GRCOV_STOP_COVERAGE — defensive logging when cleanup of a
                 // rejected bundle fails; not reproducible in CI.
                 if let Err(rm_err) = fs::remove_file(&bundle_path) {
                     tracing::warn!(
@@ -124,7 +119,6 @@ impl DownloadCommand {
                         "Failed to remove rejected bundle"
                     );
                 }
-                // GRCOV_BEGIN_COVERAGE
                 return Err(e);
             }
 
@@ -216,7 +210,6 @@ impl DownloadCommand {
                 let client = self.s3_client.as_ref().ok_or_else(|| {
                     io::Error::other("S3 client not configured for S3 revision source")
                 })?;
-                // GRCOV_STOP_COVERAGE — network I/O
                 S3Downloader::new(
                     client,
                     bucket.clone(),
@@ -226,7 +219,6 @@ impl DownloadCommand {
                     bundle_path.to_path_buf(),
                 )
                 .download_returning_etag()
-                // GRCOV_BEGIN_COVERAGE
             },
             RevisionLocation::GitHub { .. } => {
                 let downloader = Self::build_github_downloader(
@@ -234,9 +226,7 @@ impl DownloadCommand {
                     bundle_path,
                     self.config.proxy_uri.clone(),
                 )?;
-                // GRCOV_STOP_COVERAGE — network I/O
                 downloader.download().map(|()| None)
-                // GRCOV_BEGIN_COVERAGE
             },
             RevisionLocation::Local { location, bundle_type: _ } => {
                 if spec.revision_source == RevisionSource::LocalDirectory {

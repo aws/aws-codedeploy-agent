@@ -67,7 +67,6 @@ impl UpdateAgentCommand {
     /// # Errors
     /// Returns an error if the S3 client is unconfigured, the script download
     /// fails, or the script exits non-zero.
-    // GRCOV_STOP_COVERAGE — execute() orchestrates S3 downloads and a subprocess
     pub fn execute(&self) -> io::Result<Vec<String>> {
         info!("UpdateDeploymentAgent command received");
 
@@ -89,7 +88,6 @@ impl UpdateAgentCommand {
         info!("Agent install script completed — post-install scripts will restart the agent");
         Ok(vec!["Update installed successfully".to_string()])
     }
-    // GRCOV_BEGIN_COVERAGE
 }
 
 /// Construct the S3 bucket name for agent packages.
@@ -99,7 +97,6 @@ fn s3_bucket_name(region: &str) -> String {
 
 /// Run the install script, capture its output to the updater log, and map its
 /// exit status to a `Result`.
-// GRCOV_STOP_COVERAGE — subprocess + fixed-path log; logic tested via
 // execute_script / interpret_status below.
 fn run_install_script(script_path: &Path, region: &str, restrict_log: bool) -> io::Result<()> {
     let output = execute_script(script_path, region)?;
@@ -113,7 +110,6 @@ fn run_install_script(script_path: &Path, region: &str, restrict_log: bool) -> i
 
     interpret_status(&output)
 }
-// GRCOV_BEGIN_COVERAGE
 
 /// Run the install script through the shell with the `auto` package type.
 ///
@@ -189,7 +185,7 @@ fn append_updater_log(
     restrict_log: bool,
 ) -> io::Result<()> {
     if let Some(parent) = log_path.parent() {
-        fs::create_dir_all(parent)?; // GRCOV_IGNORE_LINE
+        fs::create_dir_all(parent)?;
     }
 
     let mut opts = OpenOptions::new();

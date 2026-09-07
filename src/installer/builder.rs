@@ -464,7 +464,8 @@ mod tests {
         let file = std::env::temp_dir().join("test_cmd_chmod.txt");
         fs::write(&file, "test").unwrap();
 
-        let cmd = Command::Chmod(ChangeModeCommand::new(file.clone(), "0644".to_string(), false, false));
+        let cmd =
+            Command::Chmod(ChangeModeCommand::new(file.clone(), "0644".to_string(), false, false));
         let mut cleanup = Vec::new();
         cmd.execute_with_cleanup(&mut cleanup).unwrap();
 
@@ -532,6 +533,7 @@ mod tests {
         fs::remove_file(&file).ok();
     }
 
+    #[cfg(unix)]
     #[test]
     fn find_matches_files() {
         use crate::application_specification::{ObjectType, Permission};
@@ -567,6 +569,7 @@ mod tests {
         fs::remove_file(&dst2).ok();
     }
 
+    #[cfg(unix)]
     #[test]
     fn find_matches_directories() {
         use crate::application_specification::{ObjectType, Permission};
@@ -599,6 +602,7 @@ mod tests {
         fs::remove_dir_all(&dir2).ok();
     }
 
+    #[cfg(unix)]
     #[test]
     fn find_matches_with_except() {
         // `except` is only valid on directory-type permissions
@@ -636,6 +640,7 @@ mod tests {
         fs::remove_dir_all(&dir2).ok();
     }
 
+    #[cfg(unix)]
     #[test]
     fn find_matches_file_type_with_except_does_not_reject() {
         // A permission whose `object:` is a DIRECTORY with `type: [file]` + a

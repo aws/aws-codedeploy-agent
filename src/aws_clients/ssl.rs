@@ -33,7 +33,7 @@ pub fn verify_tls_connection(endpoint: &str, proxy_uri: Option<&str>) -> Result<
             Err(format!("TLS connection to {endpoint} failed: {e}"))
         },
         // Non-TLS errors (e.g. HTTP status errors) mean TLS succeeded — that's fine.
-        Ok(_) | Err(_) => Ok(()), // GRCOV_IGNORE_LINE
+        Ok(_) | Err(_) => Ok(()),
     }
 }
 
