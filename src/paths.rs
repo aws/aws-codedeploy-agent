@@ -9,6 +9,12 @@
 
 use std::path::PathBuf;
 
+/// Leading separators to strip from an `AppSpec` path (`files: source`,
+/// `hooks: location`) before resolving it against the deployment archive.
+///
+/// `\` is a separator on Windows only; on Unix it is a legal filename character.
+pub const APPSPEC_PATH_SEPARATORS: &[char] = if cfg!(windows) { &['/', '\\'] } else { &['/'] };
+
 /// Returns the Windows base directory: `%PROGRAMDATA%\Amazon\CodeDeploy`.
 ///
 /// Read from `%PROGRAMDATA%`, falling back to `C:\ProgramData`.
@@ -155,6 +161,33 @@ pub fn updater_log_path() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn appspec_separators_exclude_backslash_on_unix() {
+        assert_eq!(APPSPEC_PATH_SEPARATORS, &['/']);
+        assert_eq!(r"\app".trim_start_matches(APPSPEC_PATH_SEPARATORS), r"\app");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn appspec_separators_include_backslash_on_windows() {
+        assert_eq!(APPSPEC_PATH_SEPARATORS, &['/', '\\']);
+        assert_eq!(r"\app".trim_start_matches(APPSPEC_PATH_SEPARATORS), "app");
+        assert_eq!(r"\".trim_start_matches(APPSPEC_PATH_SEPARATORS), "");
+    }
+
+    #[test]
+    fn appspec_separators_strip_repeated_slashes() {
+        assert_eq!("//app".trim_start_matches(APPSPEC_PATH_SEPARATORS), "app");
+        assert_eq!("/".trim_start_matches(APPSPEC_PATH_SEPARATORS), "");
+    }
+
+    #[test]
+    fn appspec_separators_leave_relative_paths_alone() {
+        assert_eq!("app/sub".trim_start_matches(APPSPEC_PATH_SEPARATORS), "app/sub");
+        assert_eq!("./app".trim_start_matches(APPSPEC_PATH_SEPARATORS), "./app");
+    }
 
     #[cfg(unix)]
     #[test]
