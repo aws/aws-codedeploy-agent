@@ -56,26 +56,28 @@ make lint
 Run all CI checks locally:
 
 ```bash
-make ci
+make
 ```
 
 This will:
 1. Check code formatting
-2. Run clippy linter
-3. Run all tests
+2. Run the clippy linter
+3. Run all tests and check the 90% line-coverage floor
+4. Run doctests
+5. Build the release binary
 
 ### Code Formatting
 
 We use `rustfmt` with custom configuration (see `rustfmt.toml`). Format your code before committing:
 
 ```bash
-make fmt
+make fmt-fix
 ```
 
 To check if code is properly formatted without modifying files:
 
 ```bash
-make fmt-check
+make fmt
 ```
 
 ### Linting
