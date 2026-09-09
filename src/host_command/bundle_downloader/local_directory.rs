@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Local directory downloader — recursive copy.
 //!
 //! Copies instead of symlinking to preserve revision history.

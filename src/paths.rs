@@ -1,5 +1,3 @@
-//! @risk low
-//!
 //! Platform-appropriate default paths for the `CodeDeploy` agent.
 //!
 //! Each function returns the canonical default path for the current platform,

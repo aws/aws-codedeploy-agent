@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Bundle archive unpacking.
 //!
 //! Extracts tar/tgz/zip archives and strips a leading directory if the archive

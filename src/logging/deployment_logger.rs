@@ -1,5 +1,3 @@
-//! @risk low
-//!
 //! Per-deployment log file writer.
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};

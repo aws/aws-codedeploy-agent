@@ -160,7 +160,6 @@ fn build_custom_http_client(
         return None;
     }
 
-    // that grcov cannot attribute to source lines.
     // Build the TLS context once (custom CA certs, if any). `proxy_config` lives
     // on the low-level `ConnectorBuilder`, not the high-level `Builder`, so we
     // assemble the connector per-invocation inside `build_with_connector_fn`

@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! `chmod` command — sets file permissions.
 use crate::installer::{InstallerError, Result};
 use serde_json::{Value, json};

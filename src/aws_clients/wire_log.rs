@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Amazon S3 HTTP wire logging (`:log_aws_wire:`).
 //!
 //! When the `log_aws_wire` config setting is enabled, [`WireLogInterceptor`] is

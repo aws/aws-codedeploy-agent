@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Platform-specific file operations with retry logic
 //!
 //! This module provides a trait-based abstraction for file operations that need

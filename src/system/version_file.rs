@@ -1,5 +1,3 @@
-//! @risk low
-//!
 //! Agent version-tracking file (`.version`).
 //!
 //! The `.version` file is part of the agent's documented install layout: it

@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! `chown` command — sets file ownership.
 use crate::installer::Result;
 use serde_json::{Value, json};
