@@ -232,7 +232,8 @@ impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
                     elapsed_ms = elapsed.as_millis().try_into().unwrap_or(u64::MAX),
                     "Command succeeded"
                 );
-                self.report_completion(command, "Succeeded", &diagnostics::success(""));
+                let note = self.completion_note(&command.command_name, spec);
+                self.report_completion(command, "Succeeded", &diagnostics::success(&note));
             },
             Err(e) => {
                 error!(
@@ -255,6 +256,34 @@ impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
         }
 
         result.map(|_| ())
+    }
+
+    /// Detail the service can parse off a successful completion. Empty for commands that have none,
+    /// which keeps their diagnostics byte for byte what they were.
+    ///
+    /// Read back from the `.bundle-source` marker `DownloadBundle` has just written, rather than
+    /// returned up through the dispatcher: the marker is already the single record of where the
+    /// bundle came from, so reading it cannot disagree with what the host actually did. A missing
+    /// marker yields no note -- writing it is best-effort, and a metric is not worth failing a
+    /// deployment over.
+    fn completion_note(&self, command_name: &str, spec: &DeploymentSpec) -> String {
+        if command_name != "DownloadBundle" {
+            return String::new();
+        }
+
+        let marker = self
+            .dispatcher
+            .archives()
+            .deployment_root_dir(&spec.deployment_group_id, &spec.deployment_id)
+            .join(crate::host_command::BUNDLE_SOURCE_FILE);
+
+        match std::fs::read_to_string(&marker) {
+            Ok(source) => crate::host_command::bundle_source_note(source.trim()),
+            Err(e) => {
+                debug!(path = %marker.display(), "No bundle source marker to report: {e}");
+                String::new()
+            },
+        }
     }
 
     fn report_completion(&self, command: &HostCommand, status: &str, payload: &str) {
@@ -341,6 +370,7 @@ mod tests {
                 bundle_type: "tar".into(),
             },
             all_possible_lifecycle_events: None,
+            reuse_archive_from_deployment_id: None,
         }
     }
 

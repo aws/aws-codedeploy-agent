@@ -319,6 +319,12 @@ pub struct AgentConfig {
     /// Enable the local command port for debugging. Default: `false`.
     pub enable_command_port: bool,
 
+    /// Allow reusing a previous deployment's on-host archive when the deployment
+    /// spec carries `ReuseArchiveFromDeploymentId` (bounce/restart deployments).
+    /// Default: `true`. Any reuse failure falls back to a normal download, so
+    /// turning this off costs only the optimisation.
+    pub enable_archive_reuse: bool,
+
     /// Capture Amazon S3 HTTP wire logs to `<program_name>.aws_wire.log` in
     /// `log_dir`. Default: `false`.
     ///
@@ -384,6 +390,7 @@ impl Default for AgentConfig {
             s3_endpoint_override: None,
             disable_imds_v1: false,
             enable_command_port: false,
+            enable_archive_reuse: true,
             log_aws_wire: false,
             disable_core_dumps: true,
             hardening: HardeningConfig::default(),
@@ -900,6 +907,23 @@ mod tests {
     #[test]
     fn default_enable_command_port_is_false() {
         assert!(!AgentConfig::default().enable_command_port);
+    }
+
+    #[test]
+    fn default_enable_archive_reuse_is_true() {
+        assert!(AgentConfig::default().enable_archive_reuse);
+    }
+
+    #[test]
+    fn enable_archive_reuse_parses_from_yaml() {
+        let yaml = "enable_archive_reuse: false\n";
+        let config = AgentConfig::from_yaml(yaml, Path::new("test.yml")).unwrap();
+        assert!(!config.enable_archive_reuse);
+
+        // Ruby `:key:` form must also parse.
+        let yaml = ":enable_archive_reuse: false\n";
+        let config = AgentConfig::from_yaml(yaml, Path::new("test.yml")).unwrap();
+        assert!(!config.enable_archive_reuse);
     }
 
     #[test]

@@ -123,6 +123,54 @@ pub type SystemFileOperations = WindowsFileOperations;
 #[cfg(not(target_os = "windows"))]
 pub type SystemFileOperations = LinuxFileOperations;
 
+/// Whether `component` is safe to use as a single path component.
+///
+/// `Path::join` treats `..` as an ordinary parent component and an absolute path
+/// as a full replacement, so any externally supplied string used as a directory
+/// name has to be checked before it is joined. This is an allowlist of shape
+/// rather than a blocklist of characters: a component must be non-empty, must not
+/// be a relative-path marker, and must contain no separator or NUL byte.
+///
+/// Deliberately permissive about the rest, because callers pass identifiers of
+/// several shapes (UUID deployment-group ids, `d-`-prefixed deployment ids). Use
+/// a stricter check where the exact format is known.
+#[must_use]
+pub fn is_safe_path_component(component: &str) -> bool {
+    !component.is_empty()
+        && component != "."
+        && component != ".."
+        && !component.contains('\0')
+        && !component.chars().any(std::path::is_separator)
+        // `is_separator` is platform-specific; reject the Windows separator
+        // everywhere so a spec cannot behave differently per platform.
+        && !component.contains('\\')
+}
+
+/// Whether a customer-supplied, revision-relative path stays inside the directory it is joined to.
+///
+/// Unlike [`is_safe_path_component`] this permits separators: an `AppSpec` may legitimately be nested,
+/// as in `configs/appspec.yml`. It rejects anything that could climb out of the join or re-root it --
+/// a `..` component, a leading `/`, or a Windows drive prefix.
+///
+/// Checked lexically rather than by canonicalising, because the path is validated before the file it
+/// names is known to exist, and the not-found case is an expected outcome rather than an error.
+#[must_use]
+pub fn is_safe_relative_path(path: &str) -> bool {
+    !path.is_empty()
+        && !path.contains('\0')
+        // `is_separator` is platform-specific; reject the Windows separator everywhere so a spec
+        // cannot resolve differently per platform, matching is_safe_path_component.
+        && !path.contains('\\')
+        && !Path::new(path).components().any(|c| {
+            matches!(
+                c,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+}
+
 /// Recursively copy a directory tree.
 ///
 /// # Errors
@@ -174,6 +222,40 @@ impl PlatformFileOperations for MockFileOperations {
         } else {
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod safe_relative_path_tests {
+    use super::is_safe_relative_path;
+
+    #[test]
+    fn accepts_a_plain_or_nested_appspec_path() {
+        assert!(is_safe_relative_path("appspec.yml"));
+        assert!(is_safe_relative_path("configs/appspec.yml"));
+        assert!(is_safe_relative_path("./appspec.yml"), "a CurDir component stays inside");
+    }
+
+    #[test]
+    fn rejects_climbing_out_or_re_rooting() {
+        for bad in [
+            "../appspec.yml",
+            "../../etc/passwd",
+            "configs/../../appspec.yml",
+            "/etc/shadow",
+            "",
+            "app\0spec.yml",
+        ] {
+            assert!(!is_safe_relative_path(bad), "must reject {bad:?}");
+        }
+    }
+
+    /// Rejected on every platform, so a spec cannot resolve one way on Linux and another on Windows.
+    #[test]
+    fn rejects_windows_separators_and_prefixes_everywhere() {
+        assert!(!is_safe_relative_path(r"..\appspec.yml"));
+        assert!(!is_safe_relative_path(r"configs\appspec.yml"));
+        assert!(!is_safe_relative_path(r"C:\Windows\system.ini"));
     }
 }
 
@@ -268,6 +350,39 @@ mod tests {
         let path = PathBuf::from("/fake/path");
 
         assert!(mock.write_with_retry(&path, "content").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn safe_path_components_are_accepted() {
+        for good in [
+            "dg-1",
+            "d-A1B2C3D4E",
+            "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "arn_like-name.with.dots",
+            "..hidden",
+            "a..b",
+        ] {
+            assert!(is_safe_path_component(good), "should accept {good:?}");
+        }
+    }
+
+    #[test]
+    fn unsafe_path_components_are_rejected() {
+        for bad in [
+            "",
+            ".",
+            "..",
+            "../evil",
+            "../../../../tmp/evil",
+            "a/b",
+            "/absolute",
+            "trailing/",
+            "back\\slash",
+            "nul\0byte",
+        ] {
+            assert!(!is_safe_path_component(bad), "should reject {bad:?}");
+        }
     }
 
     #[cfg(unix)]

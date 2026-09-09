@@ -55,6 +55,7 @@ pub struct DeploymentSpec {
     pub revision_source: RevisionSource,
     pub revision: RevisionLocation,
     pub all_possible_lifecycle_events: Option<Vec<String>>,
+    pub reuse_archive_from_deployment_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]

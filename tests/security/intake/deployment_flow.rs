@@ -64,6 +64,7 @@ hooks:
             etag: None,
         },
         all_possible_lifecycle_events: None,
+        reuse_archive_from_deployment_id: None,
     };
 
     // Execute the AfterInstall lifecycle event
@@ -172,6 +173,7 @@ hooks:
             bundle_type: "tar".into(),
         },
         all_possible_lifecycle_events: None,
+        reuse_archive_from_deployment_id: None,
     };
 
     let executor = LifecycleEventExecutor::new(
