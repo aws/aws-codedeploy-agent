@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Host command polling loop.
 //!
 //! Polls the `CodeDeploy` service for host commands and submits them

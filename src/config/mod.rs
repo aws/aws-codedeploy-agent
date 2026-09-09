@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Agent configuration — YAML-based config file parsing and defaults.
 //!
 //! Loads YAML from `/etc/codedeploy-agent/conf/codedeployagent.yml` and merges

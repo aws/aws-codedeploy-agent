@@ -1,5 +1,3 @@
-//! @risk high
-//!
 //! Symlink-safe destination guards for permission commands.
 //!
 //! The install instruction list runs every `CopyCommand` first and only then

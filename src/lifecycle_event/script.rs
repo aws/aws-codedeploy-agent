@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Script execution with real-time stream logging.
 //!
 //! [`Script::execute`] is the sync entry point — it creates a tokio runtime internally

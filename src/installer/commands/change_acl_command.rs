@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! `setfacl` command — sets POSIX ACLs on installed files.
 use crate::application_specification::{Acl, AclEntry};
 use crate::installer::{InstallerError, Result};

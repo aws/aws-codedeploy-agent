@@ -1,5 +1,3 @@
-//! @risk high
-//!
 //! Installer core — executes install commands and manages cleanup files.
 #[cfg(unix)]
 use super::commands::RemoveContextCommand;
@@ -98,7 +96,7 @@ impl Installer {
         self
     }
 
-    /// @risk high — writes files to customer filesystem, wrong behavior corrupts deployments
+    /// Writes files to the customer filesystem; wrong behavior corrupts deployments.
     ///
     /// # Errors
     /// Returns an error if installation fails.

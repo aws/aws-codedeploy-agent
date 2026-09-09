@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! `semanage fcontext` command — sets `SELinux` file context.
 use crate::application_specification::SeLinuxContext;
 use crate::installer::{InstallerError, Result};

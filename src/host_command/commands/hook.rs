@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Hook command — runs lifecycle event scripts.
 //!
 //! Maps command names to lists of lifecycle event names, then creates and

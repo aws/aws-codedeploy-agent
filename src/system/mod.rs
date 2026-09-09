@@ -1,5 +1,3 @@
-//! @risk low
-//!
 //! System abstraction layer — file ops, process ops, `SELinux`, env vars.
 pub mod env_ops;
 pub mod file_ops;

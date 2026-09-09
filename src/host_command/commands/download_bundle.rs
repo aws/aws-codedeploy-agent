@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! `DownloadBundle` command.
 //!
 //! Cleans up old archives, downloads the bundle from the appropriate source

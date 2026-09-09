@@ -1,5 +1,3 @@
-//! @risk medium
-//!
 //! Linux-specific system operations — `setfacl`.
 use std::io;
 use std::path::Path;

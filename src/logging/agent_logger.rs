@@ -1,5 +1,3 @@
-//! @risk low
-//!
 //! Agent log configuration — file rotation and format setup.
 
 use std::fs::{self, File, OpenOptions};
