@@ -9,6 +9,7 @@ use super::{
     error::{InstallerError, Result},
 };
 use crate::application_specification::{AppSpec, FileExistsBehavior};
+use crate::paths::APPSPEC_PATH_SEPARATORS;
 use crate::system::write_file_secure;
 use serde_json::json;
 use std::fs;
@@ -194,11 +195,9 @@ impl Installer {
         file_mapping: &crate::application_specification::FileMapping,
         spec: &AppSpec,
     ) -> Result<()> {
-        // Strip leading '/' so that an absolute-looking `source` stays relative to
-        // the archive dir: a leading slash must not discard the base path (as
-        // Rust's PathBuf::join would).
-        let source_relative =
-            file_mapping.source().strip_prefix('/').unwrap_or(file_mapping.source());
+        // A leading separator means "the entire revision", not a filesystem root.
+        // Strip every one of them so `join` cannot discard the archive dir.
+        let source_relative = file_mapping.source().trim_start_matches(APPSPEC_PATH_SEPARATORS);
         let source = self.deployment_archive_dir.join(source_relative);
         debug!("Processing file mapping from source: {}", source.display());
 
@@ -811,6 +810,209 @@ files:
         installer.install("test-group", &spec).unwrap();
 
         assert!(dest_dir.path().join("index.html").exists());
+    }
+
+    /// A bare separator copies every file in the archive, `appspec.yml` included.
+    #[test]
+    fn install_bare_slash_source_copies_whole_revision() {
+        let archive_dir = TempDir::new().unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        fs::write(archive_dir.path().join("appspec.yml"), "version: 0.0\n").unwrap();
+        fs::write(archive_dir.path().join("my-file.txt"), "one").unwrap();
+        fs::create_dir(archive_dir.path().join("my-folder")).unwrap();
+        fs::write(archive_dir.path().join("my-folder/my-file-2.txt"), "two").unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        );
+
+        let appspec_yaml = format!(
+            r"
+version: 0.0
+os: linux
+files:
+  - source: /
+    destination: {}
+",
+            dest_dir.path().display()
+        );
+        let spec = AppSpec::parse(&appspec_yaml).unwrap();
+        installer.install("test-group", &spec).unwrap();
+
+        assert!(dest_dir.path().join("appspec.yml").exists());
+        assert!(dest_dir.path().join("my-file.txt").exists());
+        assert!(dest_dir.path().join("my-folder/my-file-2.txt").exists());
+    }
+
+    /// Repeated leading separators must be fully stripped.
+    #[test]
+    fn install_repeated_leading_slash_source_resolves_inside_archive() {
+        let archive_dir = TempDir::new().unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        fs::write(archive_dir.path().join("index.html"), "<html></html>").unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        );
+
+        let appspec_yaml = format!(
+            r"
+version: 0.0
+os: linux
+files:
+  - source: //index.html
+    destination: {}
+",
+            dest_dir.path().display()
+        );
+        let spec = AppSpec::parse(&appspec_yaml).unwrap();
+        installer.install("test-group", &spec).unwrap();
+
+        assert!(dest_dir.path().join("index.html").exists());
+    }
+
+    /// On Unix `\` is a filename character, not a separator. The lint assumes it
+    /// is a separator on every platform, which is what this test disproves.
+    #[cfg(unix)]
+    #[allow(clippy::join_absolute_paths)]
+    #[test]
+    fn install_backslash_source_is_a_filename_on_unix() {
+        let archive_dir = TempDir::new().unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        fs::write(archive_dir.path().join(r"\index.html"), "<html></html>").unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        );
+
+        let appspec_yaml = format!(
+            r"
+version: 0.0
+os: linux
+files:
+  - source: \index.html
+    destination: {}
+",
+            dest_dir.path().display()
+        );
+        let spec = AppSpec::parse(&appspec_yaml).unwrap();
+        installer.install("test-group", &spec).unwrap();
+
+        assert!(dest_dir.path().join(r"\index.html").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn install_leading_backslash_source_resolves_inside_archive() {
+        let archive_dir = TempDir::new().unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        fs::write(archive_dir.path().join("index.html"), "<html></html>").unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        );
+
+        let appspec_yaml = format!(
+            r"
+version: 0.0
+os: windows
+files:
+  - source: \index.html
+    destination: {}
+",
+            dest_dir.path().display()
+        );
+        let spec = AppSpec::parse(&appspec_yaml).unwrap();
+        installer.install("test-group", &spec).unwrap();
+
+        assert!(dest_dir.path().join("index.html").exists());
+    }
+
+    /// A bare `\` copies every file in the archive, `appspec.yml` included.
+    #[cfg(windows)]
+    #[test]
+    fn install_bare_backslash_source_copies_whole_revision() {
+        let archive_dir = TempDir::new().unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        fs::write(archive_dir.path().join("appspec.yml"), "version: 0.0\n").unwrap();
+        fs::write(archive_dir.path().join("my-file.txt"), "one").unwrap();
+        fs::create_dir(archive_dir.path().join("my-folder")).unwrap();
+        fs::write(archive_dir.path().join(r"my-folder\my-file-2.txt"), "two").unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        );
+
+        let appspec_yaml = format!(
+            r"
+version: 0.0
+os: windows
+files:
+  - source: \
+    destination: {}
+",
+            dest_dir.path().display()
+        );
+        let spec = AppSpec::parse(&appspec_yaml).unwrap();
+        installer.install("test-group", &spec).unwrap();
+
+        assert!(dest_dir.path().join("appspec.yml").exists());
+        assert!(dest_dir.path().join("my-file.txt").exists());
+        assert!(dest_dir.path().join(r"my-folder\my-file-2.txt").exists());
+    }
+
+    /// A leading separator followed by further components still resolves inside
+    /// the archive, not at the drive root.
+    #[cfg(windows)]
+    #[test]
+    fn install_leading_backslash_subdirectory_resolves_inside_archive() {
+        let archive_dir = TempDir::new().unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        fs::create_dir(archive_dir.path().join("my-folder")).unwrap();
+        fs::write(archive_dir.path().join(r"my-folder\my-file.txt"), "one").unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        );
+
+        let appspec_yaml = format!(
+            r"
+version: 0.0
+os: windows
+files:
+  - source: \my-folder
+    destination: {}
+",
+            dest_dir.path().display()
+        );
+        let spec = AppSpec::parse(&appspec_yaml).unwrap();
+        installer.install("test-group", &spec).unwrap();
+
+        assert!(dest_dir.path().join("my-file.txt").exists());
     }
 
     #[test]

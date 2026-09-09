@@ -16,6 +16,7 @@ use super::script::{HookEnvPolicy, Script};
 use super::script_run_log::ScriptRunLog;
 use crate::application_specification::AppSpec;
 use crate::deployment_specification::types::{DeploymentSpec, RevisionLocation, RevisionSource};
+use crate::paths::APPSPEC_PATH_SEPARATORS;
 use crate::system::file_ops::ensure_executable;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -195,9 +196,9 @@ impl LifecycleEventExecutor {
         log: &Arc<Mutex<ScriptRunLog>>,
     ) -> Result<(), ScriptError> {
         let location = script_info.location().to_string();
-        // Strip leading '/' so a leading slash in the location does not discard
-        // the base path (unlike Rust's PathBuf::join).
-        let location_relative = location.strip_prefix('/').unwrap_or(&location);
+        // Strip leading separators so `join` cannot discard the archive dir.
+        // Mirrors the `files.source` strip in installer/core.rs.
+        let location_relative = location.trim_start_matches(APPSPEC_PATH_SEPARATORS);
         let script_path = archive_dir.join(location_relative);
         // `entries()` is the bounded stdout/stderr tail the stream tasks buffered;
         // it becomes the diagnostic's log so the service sees the script's output.
@@ -822,6 +823,78 @@ hooks:
         .unwrap();
         let entries = he.execute().unwrap();
         assert!(entries.iter().any(|e| e.contains("Script - /scripts/ok.sh")));
+    }
+
+    /// Repeated leading separators must be fully stripped.
+    #[cfg(unix)]
+    #[test]
+    fn execute_repeated_leading_slash_location_resolves_inside_archive() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = TempDir::new().unwrap();
+        let appspec = r"
+version: 0.0
+os: linux
+hooks:
+  AfterInstall:
+    - location: //scripts/ok.sh
+      timeout: 10
+";
+        setup_appspec(dir.path(), appspec);
+
+        let scripts_dir = dir.path().join("deployment-archive/scripts");
+        std::fs::create_dir_all(&scripts_dir).unwrap();
+        std::fs::write(scripts_dir.join("ok.sh"), "#!/bin/sh\necho done\n").unwrap();
+        std::fs::set_permissions(scripts_dir.join("ok.sh"), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+
+        let spec = s3_spec();
+        let he = LifecycleEventExecutor::new(
+            LifecycleEventType::AfterInstall,
+            &spec,
+            dir.path(),
+            None,
+            None,
+        )
+        .unwrap();
+        let entries = he.execute().unwrap();
+        assert!(entries.iter().any(|e| e.contains("Script - //scripts/ok.sh")));
+    }
+
+    /// Uses a missing script and asserts the resolved path in the error message,
+    /// so nothing has to be executed to check resolution.
+    #[cfg(windows)]
+    #[test]
+    fn execute_leading_backslash_location_resolves_inside_archive() {
+        let dir = TempDir::new().unwrap();
+        let appspec = r"
+version: 0.0
+os: windows
+hooks:
+  AfterInstall:
+    - location: \scripts\missing.cmd
+      timeout: 10
+";
+        setup_appspec(dir.path(), appspec);
+
+        let spec = s3_spec();
+        let he = LifecycleEventExecutor::new(
+            LifecycleEventType::AfterInstall,
+            &spec,
+            dir.path(),
+            None,
+            None,
+        )
+        .unwrap();
+        let err = he.execute().unwrap_err();
+
+        assert_eq!(err.error_code, ErrorCode::ScriptMissing);
+        let expected = dir.path().join(r"deployment-archive\scripts\missing.cmd");
+        assert!(
+            err.message.contains(&expected.display().to_string()),
+            "location must resolve inside the archive, got: {}",
+            err.message
+        );
     }
 
     #[cfg(unix)]
