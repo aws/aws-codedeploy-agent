@@ -8,6 +8,7 @@ use crate::aws_clients::S3Client;
 use crate::config::AgentConfig;
 use crate::deployment_specification::types::{DeploymentSpec, RevisionLocation, RevisionSource};
 use crate::host_command::DeploymentArchives;
+use crate::host_command::archive_reuse;
 use crate::host_command::bundle_downloader::{
     BundleDownloader, BundleFormat, GitHubDownloader, LocalDirectoryDownloader,
     LocalFileDownloader, S3Downloader,
@@ -53,7 +54,32 @@ impl DownloadCommand {
 
         debug!("Executing DownloadBundle command");
 
-        let actual_etag = self.download(spec, &bundle_path, &archive_dir)?;
+        // A bounce (restart) deployment names the deployment whose archive is already
+        // on this host. Reuse it rather than fetching identical bytes again. Any
+        // problem here falls through to the normal download: reuse is an
+        // optimisation, never the only route to the revision.
+        //
+        // NOTE: cleanup_old_archives has already run above, so the source may have
+        // been pruned. That is expected and handled as a fallback, not an error --
+        // retention deliberately protects the last successful deployment, which is
+        // the source a bounce normally references.
+        let reused = self.try_reuse_archive(spec, &deploy_dir);
+
+        let actual_etag = if reused {
+            None
+        } else {
+            self.download(spec, &bundle_path, &archive_dir)?
+        };
+
+        archive_reuse::record_bundle_source(
+            &deploy_dir,
+            if reused {
+                archive_reuse::SOURCE_ARCHIVE_REUSE
+            } else {
+                archive_reuse::SOURCE_DOWNLOADED
+            },
+            self.config.hardening.restrict_agent_dir_permissions,
+        );
 
         self.settle_bundle_mode(&bundle_path)?;
 
@@ -83,63 +109,7 @@ impl DownloadCommand {
             "Bundle downloaded"
         );
 
-        if !matches!(spec.revision_source, RevisionSource::LocalDirectory) {
-            if archive_dir.exists() {
-                fs::remove_dir_all(&archive_dir)?;
-            }
-            // Size check runs pre-extraction (inspects headers only, no disk writes).
-            if let Some(max_size) = self.config.archive_max_extraction_size
-                && let Err(e) = bundle_unpacker::check_extraction_size(
-                    &bundle_path,
-                    &Self::bundle_type(spec),
-                    max_size,
-                )
-            {
-                if let Err(rm_err) = fs::remove_file(&bundle_path) {
-                    tracing::warn!(
-                        path = %bundle_path.display(),
-                        error = %rm_err,
-                        "Failed to remove rejected bundle"
-                    );
-                }
-                return Err(e);
-            }
-
-            if self.config.hardening.reject_path_traversal_in_bundle
-                && let Err(e) =
-                    bundle_unpacker::check_path_traversal(&bundle_path, &Self::bundle_type(spec))
-            {
-                // rejected bundle fails; not reproducible in CI.
-                if let Err(rm_err) = fs::remove_file(&bundle_path) {
-                    tracing::warn!(
-                        path = %bundle_path.display(),
-                        error = %rm_err,
-                        "Failed to remove rejected bundle"
-                    );
-                }
-                return Err(e);
-            }
-
-            bundle_unpacker::unpack(
-                &bundle_path,
-                &archive_dir,
-                &Self::bundle_type(spec),
-                self.config.hardening.restrict_agent_dir_permissions,
-                self.config.hardening.ignore_ownership_in_bundle,
-            )?;
-        }
-
-        if self.config.hardening.reject_symlinks_in_bundle {
-            bundle_unpacker::reject_bundle_symlinks(&archive_dir)?;
-        }
-
-        if self.config.hardening.reject_path_traversal_in_bundle {
-            bundle_unpacker::reject_bundle_path_traversal(&archive_dir)?;
-        }
-
-        if self.config.hardening.reject_unsafe_permissions_in_bundle {
-            bundle_unpacker::reject_bundle_unsafe_permissions(&archive_dir)?;
-        }
+        self.prepare_archive(spec, reused, &bundle_path, &archive_dir)?;
 
         let instructions_dir = self.archives.instructions_dir();
         crate::system::create_deployment_dir(
@@ -149,11 +119,12 @@ impl DownloadCommand {
         )?;
         debug!("Instructions directory created at {}", instructions_dir.display());
 
-        // The appspec is also validated during Install; we check earlier at
-        // download time to fail fast with a clear message rather than letting
-        // Install discover it. NOTE: cleanup_old_archives has already run at
-        // this point (destructive-then-validate ordering), so a missing appspec
-        // here means the old archive may already be gone.
+        // Ruby: command_executor.rb:308-322 (app_spec_real_path) validates appspec
+        // exists, but only during Install. We check earlier at download time to
+        // fail fast with a clear message rather than letting Install discover it.
+        // NOTE: cleanup_old_archives has already run at this point, matching Ruby's
+        // destructive-then-validate ordering. A missing appspec here means the old
+        // archive may already be gone.
         let appspec_path = archive_dir.join(&spec.app_spec_path);
         if !appspec_path.exists() {
             return Err(io::Error::other(format!(
@@ -169,10 +140,132 @@ impl DownloadCommand {
         Ok(())
     }
 
+    /// Unpack the freshly downloaded bundle and apply the opt-in bundle-content
+    /// hardening checks.
+    ///
+    /// Only the **unpack** is skipped for a reused archive (already unpacked when the
+    /// source deployment downloaded it) and for `LocalDirectory` revisions (copied
+    /// straight into the archive directory). The hardening checks still run on every
+    /// archive, reused included, as defence in depth.
+    ///
+    /// # Errors
+    /// Returns an error if extraction fails or any enabled hardening check rejects
+    /// the archive contents.
+    fn prepare_archive(
+        &self,
+        spec: &DeploymentSpec,
+        reused: bool,
+        bundle_path: &Path,
+        archive_dir: &Path,
+    ) -> io::Result<()> {
+        if !reused && !matches!(spec.revision_source, RevisionSource::LocalDirectory) {
+            if archive_dir.exists() {
+                fs::remove_dir_all(archive_dir)?;
+            }
+            // Size check runs pre-extraction (inspects headers only, no disk writes).
+            if let Some(max_size) = self.config.archive_max_extraction_size
+                && let Err(e) = bundle_unpacker::check_extraction_size(
+                    bundle_path,
+                    &Self::bundle_type(spec),
+                    max_size,
+                )
+            {
+                if let Err(rm_err) = fs::remove_file(bundle_path) {
+                    tracing::warn!(
+                        path = %bundle_path.display(),
+                        error = %rm_err,
+                        "Failed to remove rejected bundle"
+                    );
+                }
+                return Err(e);
+            }
+
+            if self.config.hardening.reject_path_traversal_in_bundle
+                && let Err(e) =
+                    bundle_unpacker::check_path_traversal(bundle_path, &Self::bundle_type(spec))
+            {
+                // rejected bundle fails; not reproducible in CI.
+                if let Err(rm_err) = fs::remove_file(bundle_path) {
+                    tracing::warn!(
+                        path = %bundle_path.display(),
+                        error = %rm_err,
+                        "Failed to remove rejected bundle"
+                    );
+                }
+                return Err(e);
+            }
+
+            bundle_unpacker::unpack(
+                bundle_path,
+                archive_dir,
+                &Self::bundle_type(spec),
+                self.config.hardening.restrict_agent_dir_permissions,
+                self.config.hardening.ignore_ownership_in_bundle,
+            )?;
+        }
+
+        if self.config.hardening.reject_symlinks_in_bundle {
+            bundle_unpacker::reject_bundle_symlinks(archive_dir)?;
+        }
+
+        if self.config.hardening.reject_path_traversal_in_bundle {
+            bundle_unpacker::reject_bundle_path_traversal(archive_dir)?;
+        }
+
+        if self.config.hardening.reject_unsafe_permissions_in_bundle {
+            bundle_unpacker::reject_bundle_unsafe_permissions(archive_dir)?;
+        }
+        Ok(())
+    }
+
+    /// Attempt archive reuse for a bounce deployment. Returns `true` only when the
+    /// destination now holds a complete, ready-to-install archive.
+    ///
+    /// Returns `false` — never an error — when reuse is off, not requested, or not
+    /// possible, so the caller downloads instead.
+    fn try_reuse_archive(&self, spec: &DeploymentSpec, deploy_dir: &Path) -> bool {
+        let Some(source_id) = spec.reuse_archive_from_deployment_id.as_deref() else {
+            return false;
+        };
+        if !self.config.enable_archive_reuse {
+            debug!(
+                source = %source_id,
+                "Deployment spec requests archive reuse but enable_archive_reuse is off; downloading"
+            );
+            return false;
+        }
+
+        match archive_reuse::reuse_archive(
+            &self.archives,
+            &spec.deployment_group_id,
+            source_id,
+            &spec.deployment_id,
+            &spec.app_spec_path,
+        ) {
+            Ok(()) => {
+                info!(
+                    source_deployment_id = %source_id,
+                    deployment_id = %spec.deployment_id,
+                    "Reusing on-host archive instead of downloading"
+                );
+                true
+            },
+            Err(e) => {
+                // Expected whenever the source archive is gone or incomplete.
+                warn!(
+                    source_deployment_id = %source_id,
+                    "Archive reuse unavailable, falling back to download: {e}"
+                );
+                let _ = deploy_dir;
+                false
+            },
+        }
+    }
+
     /// Settle the downloaded bundle to the `restrict_agent_dir_permissions`
     /// policy mode. The downloaders create it 0600 (safe while streaming); this
-    /// is the single chokepoint for S3/GitHub/local-file sources. The default
-    /// (unhardened) mode is 0644.
+    /// is the single chokepoint for S3/GitHub/local-file sources. Ruby parity
+    /// is 0644 (`File.open` under umask 0022).
     ///
     /// Skips symlinks: the `LocalFile` source symlinks `bundle_path` at the user's
     /// ORIGINAL file (`local_file.rs`), and `set_permissions` (chmod) follows
@@ -328,6 +421,7 @@ mod tests {
                 bundle_type: "tar".into(),
             },
             all_possible_lifecycle_events: None,
+            reuse_archive_from_deployment_id: None,
         }
     }
 
@@ -818,6 +912,159 @@ mod tests {
                 "agent must not gate when flag is off, got: {e}"
             );
         }
+    }
+
+    /// Seed a previous deployment that is complete enough to reuse.
+    fn seed_previous(archives: &DeploymentArchives, group: &str, id: &str) {
+        let archive = archives.archive_dir(group, id);
+        fs::create_dir_all(&archive).unwrap();
+        fs::write(archive.join("appspec.yml"), "version: 0.0\nos: linux\n").unwrap();
+        fs::write(archives.artifact_bundle_path(group, id), "bundle-bytes").unwrap();
+    }
+
+    fn reuse_spec(source: &str) -> DeploymentSpec {
+        DeploymentSpec { reuse_archive_from_deployment_id: Some(source.into()), ..s3_spec() }
+    }
+
+    #[test]
+    fn reuse_bypasses_download_when_enabled() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        seed_previous(&archives, "dg-1", "d-PREV");
+
+        let config = AgentConfig { enable_archive_reuse: true, ..AgentConfig::default() };
+        // No S3 client: if this deployment tried to download it would fail, so
+        // success can only mean the on-host archive was reused.
+        let cmd = DownloadCommand::new(archives.clone(), None, Arc::new(config));
+
+        let deploy_dir = archives.deployment_root_dir("dg-1", "d-123");
+        fs::create_dir_all(&deploy_dir).unwrap();
+
+        cmd.execute(&reuse_spec("d-PREV")).unwrap();
+
+        assert!(archives.archive_dir("dg-1", "d-123").join("appspec.yml").exists());
+        assert_eq!(
+            fs::read_to_string(deploy_dir.join(crate::host_command::BUNDLE_SOURCE_FILE)).unwrap(),
+            archive_reuse::SOURCE_ARCHIVE_REUSE
+        );
+    }
+
+    #[test]
+    fn gate_off_ignores_reuse_field_and_downloads() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        seed_previous(&archives, "dg-1", "d-PREV");
+
+        let config = AgentConfig { enable_archive_reuse: false, ..AgentConfig::default() };
+        let cmd = DownloadCommand::new(archives.clone(), None, Arc::new(config));
+
+        let deploy_dir = archives.deployment_root_dir("dg-1", "d-123");
+        fs::create_dir_all(&deploy_dir).unwrap();
+
+        let err = cmd.execute(&reuse_spec("d-PREV")).unwrap_err();
+        assert!(
+            err.to_string().contains("S3 client not configured"),
+            "gate off must take the download path, got: {err}"
+        );
+    }
+
+    #[test]
+    fn missing_source_archive_falls_back_to_download() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        // d-GONE was never seeded: the reuse source does not exist.
+
+        let config = AgentConfig { enable_archive_reuse: true, ..AgentConfig::default() };
+        let cmd = DownloadCommand::new(archives.clone(), None, Arc::new(config));
+
+        let deploy_dir = archives.deployment_root_dir("dg-1", "d-123");
+        fs::create_dir_all(&deploy_dir).unwrap();
+
+        let err = cmd.execute(&reuse_spec("d-GONE")).unwrap_err();
+        assert!(
+            err.to_string().contains("S3 client not configured"),
+            "an absent source archive must fall back to downloading, got: {err}"
+        );
+    }
+
+    #[test]
+    fn malformed_reuse_id_falls_back_to_download() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+
+        let config = AgentConfig { enable_archive_reuse: true, ..AgentConfig::default() };
+        let cmd = DownloadCommand::new(archives.clone(), None, Arc::new(config));
+
+        let deploy_dir = archives.deployment_root_dir("dg-1", "d-123");
+        fs::create_dir_all(&deploy_dir).unwrap();
+
+        let err = cmd.execute(&reuse_spec("d-../../etc")).unwrap_err();
+        assert!(
+            err.to_string().contains("S3 client not configured"),
+            "a traversal attempt must fall back to downloading, got: {err}"
+        );
+        assert!(
+            !dir.path().join("etc").exists(),
+            "traversal must not create anything outside the deployment tree"
+        );
+    }
+
+    #[test]
+    fn incomplete_reused_archive_falls_back_to_download() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        // Source archive exists and is non-empty but has no AppSpec.
+        let archive = archives.archive_dir("dg-1", "d-PREV");
+        fs::create_dir_all(&archive).unwrap();
+        fs::write(archive.join("stray.txt"), "x").unwrap();
+
+        let config = AgentConfig { enable_archive_reuse: true, ..AgentConfig::default() };
+        let cmd = DownloadCommand::new(archives.clone(), None, Arc::new(config));
+
+        let deploy_dir = archives.deployment_root_dir("dg-1", "d-123");
+        fs::create_dir_all(&deploy_dir).unwrap();
+
+        // Must fall back to downloading (which fails here for want of a client)
+        // rather than failing the host on the downstream AppSpec check.
+        let err = cmd.execute(&reuse_spec("d-PREV")).unwrap_err();
+        assert!(
+            err.to_string().contains("S3 client not configured"),
+            "an incomplete archive must fall back to download, got: {err}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn successful_download_records_downloaded_marker() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        let cmd = DownloadCommand::new(archives.clone(), None, Arc::new(AgentConfig::default()));
+
+        let src_dir = dir.path().join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(src_dir.join("appspec.yml"), "version: 0.0\nos: linux").unwrap();
+        let tar_path = dir.path().join("bundle.tar");
+        std::process::Command::new("tar")
+            .args([
+                "-cf",
+                &tar_path.display().to_string(),
+                "-C",
+                &src_dir.display().to_string(),
+                ".",
+            ])
+            .output()
+            .unwrap();
+
+        let deploy_dir = archives.deployment_root_dir("dg-1", "d-123");
+        fs::create_dir_all(&deploy_dir).unwrap();
+
+        cmd.execute(&local_file_spec(&tar_path.display().to_string())).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(deploy_dir.join(crate::host_command::BUNDLE_SOURCE_FILE)).unwrap(),
+            archive_reuse::SOURCE_DOWNLOADED,
+            "a normal download must be recorded as such"
+        );
     }
 
     fn raw_tar_header_for_test(name: &[u8], size: u64) -> [u8; 512] {

@@ -66,6 +66,23 @@ pub(super) fn build(
     let deployment_id = extract_deployment_id(data["DeploymentId"].as_str().unwrap());
     let deployment_group_id = data["DeploymentGroupId"].as_str().unwrap().to_string();
 
+    // Both values become directory names under the deployment root
+    // (DeploymentArchives::deployment_root_dir joins them), and `Path::join` treats
+    // `..` as an ordinary parent component. Reject anything that is not a single
+    // safe component here, at the one place every consumer flows through, rather
+    // than at each of the three call sites that build paths from them. Fails
+    // closed: a spec carrying an unsafe value is rejected, not redirected.
+    for (field, value) in [
+        ("DeploymentId", &deployment_id),
+        ("DeploymentGroupId", &deployment_group_id),
+    ] {
+        if !crate::system::file_ops::is_safe_path_component(value) {
+            return Err(DeploymentSpecError::ParseError(format!(
+                "{field} is not a valid path component: {value:?}"
+            )));
+        }
+    }
+
     let deployment_creator = data
         .get("DeploymentCreator")
         .and_then(|v| v.as_str())
@@ -84,6 +101,17 @@ pub(super) fn build(
         .unwrap_or(DEFAULT_APP_SPEC_PATH)
         .to_string();
 
+    // The AppSpec path is joined to the unpacked archive directory by DownloadBundle, Install and
+    // the lifecycle-event executor, and `Path::join` treats `..` as an ordinary parent component and
+    // an absolute path as a replacement for the whole join. Validate it here, at the same choke
+    // point as the two IDs above, so every consumer inherits the guarantee rather than each having
+    // to repeat the check. Nested paths stay legal; climbing out does not.
+    if !crate::system::file_ops::is_safe_relative_path(&app_spec_path) {
+        return Err(DeploymentSpecError::ParseError(format!(
+            "AppSpecFilename is not a safe revision-relative path: {app_spec_path:?}"
+        )));
+    }
+
     let file_exists_behavior = data
         .get("AgentActionOverrides")
         .and_then(|overrides| overrides.get("AgentOverrides"))
@@ -98,6 +126,15 @@ pub(super) fn build(
                 .collect::<Vec<String>>()
         });
 
+    // Resolved through extract_deployment_id for parity with DeploymentId, so an
+    // ARN-form value normalises to the short form. Format validation happens at
+    // the point of use (see host_command::archive_reuse).
+    let reuse_archive_from_deployment_id = data
+        .get("ReuseArchiveFromDeploymentId")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(extract_deployment_id);
+
     Ok(DeploymentSpec {
         deployment_id,
         deployment_group_id,
@@ -110,6 +147,7 @@ pub(super) fn build(
         revision_source,
         revision,
         all_possible_lifecycle_events,
+        reuse_archive_from_deployment_id,
     })
 }
 
@@ -118,6 +156,116 @@ mod tests {
     use super::*;
     use crate::deployment_specification::types::{RevisionLocation, RevisionSource};
     use serde_json::json;
+
+    fn minimal_revision() -> (RevisionSource, RevisionLocation) {
+        (
+            RevisionSource::S3,
+            RevisionLocation::S3 {
+                bucket: "bucket".to_string(),
+                key: "key".to_string(),
+                bundle_type: "tar".to_string(),
+                version: None,
+                etag: None,
+            },
+        )
+    }
+
+    #[test]
+    fn rejects_traversal_in_deployment_group_id() {
+        let data = json!({
+            "DeploymentId": "d-12345678",
+            "DeploymentGroupId": "../../../../tmp/evil",
+            "DeploymentGroupName": "MyGroup",
+            "ApplicationName": "MyApp"
+        });
+        let (src, rev) = minimal_revision();
+        let err = build(&data, src, rev).unwrap_err();
+        assert!(
+            err.to_string().contains("DeploymentGroupId is not a valid path component"),
+            "got: {err}"
+        );
+    }
+
+    /// The `AppSpec` path is joined to the unpacked archive by `DownloadBundle`, `Install` and the
+    /// lifecycle-event executor, and Install parses whatever it names -- so a climbing path would be
+    /// read and parsed as an `AppSpec`, not merely probed for existence.
+    #[test]
+    fn rejects_traversal_in_app_spec_filename() {
+        for bad in [
+            "../../etc/passwd",
+            "/etc/shadow",
+            "configs/../../appspec.yml",
+        ] {
+            let data = json!({
+                "DeploymentId": "d-12345678",
+                "DeploymentGroupId": "dg-12345678",
+                "DeploymentGroupName": "MyGroup",
+                "ApplicationName": "MyApp",
+                "AppSpecFilename": bad
+            });
+            let (src, rev) = minimal_revision();
+            let err = build(&data, src, rev).unwrap_err();
+            assert!(
+                err.to_string().contains("AppSpecFilename is not a safe revision-relative path"),
+                "must reject {bad:?}, got: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_a_nested_app_spec_filename() {
+        let data = json!({
+            "DeploymentId": "d-12345678",
+            "DeploymentGroupId": "dg-12345678",
+            "DeploymentGroupName": "MyGroup",
+            "ApplicationName": "MyApp",
+            "AppSpecFilename": "configs/appspec.yml"
+        });
+        let (src, rev) = minimal_revision();
+        let spec = build(&data, src, rev).unwrap();
+        assert_eq!(spec.app_spec_path, "configs/appspec.yml");
+    }
+
+    #[test]
+    fn rejects_traversal_in_deployment_id() {
+        let data = json!({
+            "DeploymentId": "..",
+            "DeploymentGroupId": "dg-12345678",
+            "DeploymentGroupName": "MyGroup",
+            "ApplicationName": "MyApp"
+        });
+        let (src, rev) = minimal_revision();
+        let err = build(&data, src, rev).unwrap_err();
+        assert!(
+            err.to_string().contains("DeploymentId is not a valid path component"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn rejects_separator_in_deployment_id() {
+        let data = json!({
+            "DeploymentId": "d-A/../../etc",
+            "DeploymentGroupId": "dg-12345678",
+            "DeploymentGroupName": "MyGroup",
+            "ApplicationName": "MyApp"
+        });
+        let (src, rev) = minimal_revision();
+        assert!(build(&data, src, rev).is_err());
+    }
+
+    #[test]
+    fn accepts_uuid_shaped_deployment_group_id() {
+        let data = json!({
+            "DeploymentId": "d-12345678",
+            "DeploymentGroupId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "DeploymentGroupName": "MyGroup",
+            "ApplicationName": "MyApp"
+        });
+        let (src, rev) = minimal_revision();
+        let spec = build(&data, src, rev).unwrap();
+        assert_eq!(spec.deployment_group_id, "f47ac10b-58cc-4372-a567-0e02b2c3d479");
+    }
 
     #[test]
     fn build_minimal() {

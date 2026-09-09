@@ -29,6 +29,7 @@ fn make_spec() -> DeploymentSpec {
             etag: Some("abc".into()),
         },
         all_possible_lifecycle_events: None,
+        reuse_archive_from_deployment_id: None,
     }
 }
 

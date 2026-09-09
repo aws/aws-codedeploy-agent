@@ -138,6 +138,12 @@ impl CommandDispatcher {
         }
     }
 
+    /// The deployment archives these commands read and write.
+    #[must_use]
+    pub fn archives(&self) -> &DeploymentArchives {
+        self.hook.archives()
+    }
+
     /// Check if a command is a noop (all lifecycle events have no scripts).
     /// `DownloadBundle` and `Install` are never noops.
     #[must_use]
@@ -193,6 +199,7 @@ mod tests {
                 bundle_type: "tar".into(),
             },
             all_possible_lifecycle_events: None,
+            reuse_archive_from_deployment_id: None,
         }
     }
 

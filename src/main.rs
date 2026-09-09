@@ -907,6 +907,7 @@ fn run_deploy_local(
             bundle_type: bundle_type.to_string(),
         },
         all_possible_lifecycle_events: None,
+        reuse_archive_from_deployment_id: None,
     };
 
     execute_local_deployment(
@@ -1114,6 +1115,7 @@ fn run_deploy_local_s3(
             etag: None,
         },
         all_possible_lifecycle_events: None,
+        reuse_archive_from_deployment_id: None,
     };
 
     execute_local_deployment(
@@ -1214,6 +1216,7 @@ fn run_deploy_local_github(
             bundle_type: Some(resolved_bundle_type.to_string()),
         },
         all_possible_lifecycle_events: None,
+        reuse_archive_from_deployment_id: None,
     };
 
     execute_local_deployment(

@@ -38,6 +38,7 @@ fn make_spec(deployment_id: &str, app_name: &str) -> DeploymentSpec {
             etag: None,
         },
         all_possible_lifecycle_events: None,
+        reuse_archive_from_deployment_id: None,
     }
 }
 
@@ -188,6 +189,7 @@ fn pipeline_orchestrates_full_deployment() {
             bundle_type: "directory".into(),
         },
         all_possible_lifecycle_events: None,
+        reuse_archive_from_deployment_id: None,
     };
 
     // 1. Download bundle (local directory copy)
@@ -340,6 +342,7 @@ fn downloads_tar_bundle_and_deploys() {
             bundle_type: "tar".into(),
         },
         all_possible_lifecycle_events: None,
+        reuse_archive_from_deployment_id: None,
     };
 
     // 1. Download + unpack

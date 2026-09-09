@@ -32,6 +32,11 @@
 :max_revisions: 5
 :enable_deployments_log: true
 
+# Reuse a previous deployment's on-host archive when the deployment spec names
+# one, instead of downloading identical bytes again (restart deployments).
+# Any reuse failure falls back to a normal download.
+:enable_archive_reuse: true
+
 # Security
 :use_fips_mode: false
 :enable_auth_policy: false
