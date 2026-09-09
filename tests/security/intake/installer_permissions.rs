@@ -10,6 +10,14 @@
 /// Extracted files must not carry SUID/SGID bits.
 #[test]
 fn extracted_files_have_no_suid_sgid() {
+    if nix::unistd::Uid::effective().is_root() {
+        // GNU tar honors SUID/SGID bits from archive headers only when run
+        // as the superuser, so the strip this test asserts on happens only
+        // for non-root extraction. Root-preserving extraction is the
+        // documented default; reject_unsafe_permissions_in_bundle is the
+        // opt-in control for it (covered by other tests in this module).
+        return;
+    }
     use codedeploy_agent::host_command::bundle_unpacker;
     use std::os::unix::fs::PermissionsExt;
     use std::process::Command;

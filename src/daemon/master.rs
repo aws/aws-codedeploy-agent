@@ -153,15 +153,12 @@ impl Master {
             warn!("Agent is already running (pid {pid})");
             return Ok(StartOutcome::AlreadyRunning { pid });
         }
-        // GRCOV_STOP_COVERAGE
         self.pid_file.write()?;
         if let Err(e) = signal::register_shutdown_handlers(&self.shutdown) {
             let _ = self.pid_file.remove();
             return Err(e);
         }
-        // GRCOV_BEGIN_COVERAGE
 
-        // GRCOV_STOP_COVERAGE
         info!("Master daemon started (pid {})", process::id());
 
         // Start command port if enabled.
@@ -184,7 +181,6 @@ impl Master {
         }
         info!("Master daemon exited");
         Ok(StartOutcome::Started)
-        // GRCOV_BEGIN_COVERAGE
     }
 
     /// Stop a running daemon by reading its PID and sending SIGTERM.
@@ -222,13 +218,10 @@ impl Master {
                         "cannot determine deployment status: {e}"
                     )));
                 },
-                // GRCOV_STOP_COVERAGE
                 Ok(false) => {},
             }
         }
-        // GRCOV_BEGIN_COVERAGE
 
-        // GRCOV_STOP_COVERAGE
         // NOTE: PID file cleanup happens in the master process itself (end of
         // start()) when it exits the monitor loop after receiving SIGTERM.
         // The CLI `stop` caller does not remove the PID file.
@@ -250,7 +243,6 @@ impl Master {
             std::io::ErrorKind::TimedOut,
             "agent did not exit within timeout",
         ))
-        // GRCOV_BEGIN_COVERAGE
     }
 
     /// Report whether the agent is running.
@@ -260,8 +252,6 @@ impl Master {
     pub fn status(&self) -> std::io::Result<bool> {
         Ok(self.pid_file.is_running())
     }
-
-    // GRCOV_STOP_COVERAGE
 
     /// Wait up to `timeout_secs` for a worker child process to exit, escalating
     /// to SIGKILL afterward.
@@ -389,7 +379,6 @@ impl Master {
             thread::sleep(remaining.min(slice));
         }
     }
-    // GRCOV_BEGIN_COVERAGE
 }
 
 #[cfg(test)]

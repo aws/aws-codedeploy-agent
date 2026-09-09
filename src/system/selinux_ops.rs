@@ -61,7 +61,6 @@ impl SeLinuxOps for SystemSeLinuxOps {
 
         let output = cmd.output()?;
 
-        // GRCOV_STOP_COVERAGE — semanage not available in test environments
         if !output.status.success() {
             return Err(io::Error::other(format!(
                 "semanage fcontext -a failed: {}",
@@ -70,12 +69,10 @@ impl SeLinuxOps for SystemSeLinuxOps {
         }
 
         Ok(())
-        // GRCOV_BEGIN_COVERAGE
     }
 
     fn remove_context(&self, path: &Path) -> io::Result<()> {
         let path_str = path.to_string_lossy();
-        // GRCOV_STOP_COVERAGE — semanage not available in test environments
         let output =
             Command::new("semanage").args(["fcontext", "-d", path_str.as_ref()]).output()?;
 
@@ -87,7 +84,6 @@ impl SeLinuxOps for SystemSeLinuxOps {
         }
 
         Ok(())
-        // GRCOV_BEGIN_COVERAGE
     }
 
     fn restore_context(&self, path: &Path) -> io::Result<()> {
@@ -100,7 +96,6 @@ impl SeLinuxOps for SystemSeLinuxOps {
             .args([RESTORECON_FLAGS, path_str.as_ref()])
             .output()?;
 
-        // GRCOV_STOP_COVERAGE
         if !output.status.success() {
             return Err(io::Error::other(format!(
                 "restorecon failed: {}",
@@ -109,7 +104,6 @@ impl SeLinuxOps for SystemSeLinuxOps {
         }
 
         Ok(())
-        // GRCOV_BEGIN_COVERAGE
     }
 }
 

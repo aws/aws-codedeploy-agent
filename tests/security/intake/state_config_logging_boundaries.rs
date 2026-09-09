@@ -36,6 +36,7 @@ struct Checkpoint {
 /// world-readable behavior that host tooling outside the agent depends on. The
 /// restricted mode is available as opt-in hardening, matching the
 /// deployment-dir and log-mode defaults.
+#[cfg(unix)]
 #[test]
 fn state_files_have_restricted_permissions_under_hardening() {
     use std::os::unix::fs::PermissionsExt;
@@ -45,9 +46,7 @@ fn state_files_have_restricted_permissions_under_hardening() {
         dir.path().to_path_buf(),
         SystemFileOperations::with_policy(true),
     );
-    tracker
-        .start_tracking("d-test", "cmd-test")
-        .expect("start tracking");
+    tracker.start_tracking("d-test", "cmd-test").expect("start tracking");
 
     let file_path = dir.path().join("d-test");
     let mode = std::fs::metadata(&file_path)
@@ -60,6 +59,7 @@ fn state_files_have_restricted_permissions_under_hardening() {
 }
 
 /// Default counterpart: with the hardening flag unset the tracker writes 0644.
+#[cfg(unix)]
 #[test]
 fn state_files_are_world_readable_by_default() {
     use std::os::unix::fs::PermissionsExt;
@@ -289,10 +289,7 @@ fn config_http_endpoint_accepted() {
     let permissive = dir.path().join("http.yml");
     std::fs::write(&permissive, "deploy_control_endpoint: \"http://internal-mock.local\"\n")
         .expect("write http config");
-    assert!(
-        AgentConfig::from_file(&permissive).is_ok(),
-        "http:// must be accepted"
-    );
+    assert!(AgentConfig::from_file(&permissive).is_ok(), "http:// must be accepted");
 }
 
 // ---------------------------------------------------------------------------
@@ -344,6 +341,7 @@ fn config_caps_excessive_timeout() {
 /// **Current gap:** `AgentConfig::from_file()` does not check file permissions
 /// before reading. The fix should `stat()` the file and log a warning if
 /// group/world-readable bits are set.
+#[cfg(unix)]
 #[test]
 fn config_warns_on_insecure_permissions() {
     use codedeploy_agent::config::AgentConfig;

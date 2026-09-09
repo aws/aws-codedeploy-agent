@@ -160,13 +160,11 @@ impl Installer {
         }
 
         debug!("Installation completed successfully");
-        // GRCOV_STOP_COVERAGE
         info!(
             deployment_group_id,
             command_count = builder.commands().len(),
             "Installation completed"
         );
-        // GRCOV_BEGIN_COVERAGE
         Ok(())
     }
 
@@ -1230,6 +1228,7 @@ os: linux
         assert!(result.is_err());
     }
 
+    #[cfg(unix)]
     #[test]
     fn install_file_with_mkdir_failure() {
         let archive_dir = TempDir::new().unwrap();
@@ -1289,6 +1288,7 @@ permissions:
         let _ = result;
     }
 
+    #[cfg(unix)]
     #[test]
     fn install_directory_copy_with_permission_denied() {
         let archive_dir = TempDir::new().unwrap();
@@ -1641,6 +1641,7 @@ permissions:
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn install_rejects_source_with_no_file_name() {
         // A source ending in `..` has no final component; must return

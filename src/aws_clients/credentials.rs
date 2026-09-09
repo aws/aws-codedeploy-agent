@@ -98,7 +98,7 @@ impl Credentials {
                     mode: CredentialMode::InstanceProfile,
                 });
             },
-            Err(e) => return Err(e.into()), // GRCOV_IGNORE_LINE
+            Err(e) => return Err(e.into()),
         };
         let contents = crate::config::strip_symbol_keys(&contents);
         let config: OnPremisesConfigFile = serde_yaml::from_str(&contents).map_err(|e| {

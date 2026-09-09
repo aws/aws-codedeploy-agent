@@ -9,6 +9,7 @@ mod command_port_dos;
 mod concurrency;
 mod deployment_flow;
 mod imds_config_permissions;
+#[cfg(unix)]
 mod installer_permissions;
 mod process_isolation;
 mod state_config_logging_boundaries;

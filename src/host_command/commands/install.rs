@@ -78,13 +78,11 @@ impl InstallCommand {
             io::Error::other(format!("Install failed for group {}: {e}", spec.deployment_group_id))
         })?;
 
-        // GRCOV_STOP_COVERAGE
         info!(
             deployment_id = %spec.deployment_id,
             deployment_group = %spec.deployment_group_id,
             file_exists_behavior = %spec.file_exists_behavior,
             "Install completed");
-        // GRCOV_BEGIN_COVERAGE
 
         self.archives.update_last_successful(&spec.deployment_group_id, &deploy_dir)?;
 

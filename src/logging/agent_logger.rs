@@ -226,7 +226,6 @@ fn create_agent_log_dir(log_dir: &Path, restrict: bool) -> std::io::Result<()> {
 /// Agent log dir `0755`, files `0644` — world-readable so non-root log
 /// collectors can tail the agent and updater logs (which hold no sensitive
 /// data). Sensitive per-deployment logs live elsewhere and stay restricted.
-// GRCOV_STOP_COVERAGE
 pub(super) fn init(config: &LogConfig) -> std::io::Result<LogGuard> {
     create_agent_log_dir(&config.log_dir, config.restrict_log_permissions)?;
 
@@ -253,7 +252,6 @@ pub(super) fn init(config: &LogConfig) -> std::io::Result<LogGuard> {
 
     Ok(LogGuard { _worker_guard: guard })
 }
-// GRCOV_BEGIN_COVERAGE
 
 #[cfg(test)]
 mod tests {

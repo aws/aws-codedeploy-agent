@@ -62,7 +62,6 @@ pub fn run(shutdown: &ShutdownFlag, config: &AgentConfig) {
     reset_umask_for_customer_files();
 
     // Resolve credentials.
-    // GRCOV_STOP_COVERAGE
     let mut credentials = match Credentials::load(&config.on_premises_config_file) {
         Ok(c) => c,
         Err(e) => {
@@ -70,12 +69,10 @@ pub fn run(shutdown: &ShutdownFlag, config: &AgentConfig) {
             return;
         },
     };
-    // GRCOV_BEGIN_COVERAGE
 
     // Resolve region and host identifier when not provided by on-premises config
     // (InstanceProfile mode). Uses a single IMDS identity document fetch for both.
     if credentials.region.is_empty() || credentials.host_identifier.is_empty() {
-        // GRCOV_STOP_COVERAGE
         if credentials.region.is_empty() && credentials.host_identifier.is_empty() {
             // Both need resolving — use combined function for single IMDS fetch.
             match resolve_region_and_host_identifier(config.disable_imds_v1) {
@@ -114,7 +111,6 @@ pub fn run(shutdown: &ShutdownFlag, config: &AgentConfig) {
             }
         }
     }
-    // GRCOV_BEGIN_COVERAGE
 
     let host_identifier = credentials.host_identifier.clone();
 
@@ -125,7 +121,6 @@ pub fn run(shutdown: &ShutdownFlag, config: &AgentConfig) {
         config.use_fips_mode,
         config.enable_auth_policy,
     );
-    // GRCOV_STOP_COVERAGE
     if let Err(e) =
         crate::aws_clients::ssl::verify_tls_connection(&endpoint, config.proxy_uri.as_deref())
     {
@@ -133,7 +128,6 @@ pub fn run(shutdown: &ShutdownFlag, config: &AgentConfig) {
         return;
     }
     info!("TLS verification passed for {endpoint}");
-    // GRCOV_BEGIN_COVERAGE
 
     // Create CodeDeploy clients.
     // Two clients needed: HostCommandPoller owns one, CommandProcessor owns the other.
@@ -141,7 +135,6 @@ pub fn run(shutdown: &ShutdownFlag, config: &AgentConfig) {
     // They SHARE a ThrottleGate so a 429 on any thread backs off all threads.
     let http_timeout = std::time::Duration::from_secs(config.http_read_timeout);
     let throttle_gate = std::sync::Arc::new(crate::aws_clients::ThrottleGate::new());
-    // GRCOV_STOP_COVERAGE
     let client = match create_client_with_gate(
         config,
         &credentials,
@@ -183,7 +176,6 @@ pub fn run(shutdown: &ShutdownFlag, config: &AgentConfig) {
             .then(|| (config.log_dir.clone(), config.program_name.clone())),
         ..Default::default()
     };
-    // GRCOV_STOP_COVERAGE
     let s3_client = match crate::aws_clients::s3_client::S3Client::new(s3_credentials, &s3_config) {
         Ok(c) => c,
         Err(e) => {
@@ -260,7 +252,6 @@ pub fn run(shutdown: &ShutdownFlag, config: &AgentConfig) {
     poller.start();
     info!("Worker {pid} shutting down");
 }
-// GRCOV_BEGIN_COVERAGE
 
 fn create_client_with_gate(
     config: &AgentConfig,
@@ -300,7 +291,6 @@ fn default_hook_mapping() -> HookMapping {
     .collect()
 }
 
-// GRCOV_STOP_COVERAGE
 /// Spawn a worker as a child process by re-executing the current binary
 /// with an internal `_worker` subcommand.
 ///
@@ -342,7 +332,6 @@ pub fn bind_lifetime_to_parent() {
 /// No-op on non-Linux: `PR_SET_PDEATHSIG` is Linux-specific.
 #[cfg(not(target_os = "linux"))]
 pub fn bind_lifetime_to_parent() {}
-// GRCOV_BEGIN_COVERAGE
 
 #[cfg(test)]
 mod tests {

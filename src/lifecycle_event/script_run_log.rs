@@ -142,12 +142,10 @@ impl ScriptRunLog {
 
         match open_log_file(path, self.restrict_permissions) {
             Ok(f) => self.file = Some(f),
-            // GRCOV_STOP_COVERAGE
             Err(e) => {
                 self.file = None;
                 return Err(e);
             },
-            // GRCOV_BEGIN_COVERAGE
         }
 
         Ok(())
@@ -198,6 +196,17 @@ fn rotated_path(base: &Path, index: usize) -> PathBuf {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    /// Grow the file past the rotation cap through a dedicated write
+    /// handle (sparse; nothing is actually written).
+    fn inflate_past_cap(path: &Path) {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_len(MAX_FILE_SIZE + 1)
+            .unwrap();
+    }
 
     #[test]
     fn open_creates_parent_dirs_and_file() {
@@ -331,10 +340,10 @@ mod tests {
         log.write_line("[stdout]", "before rotation");
 
         // Inflate live file past MAX_FILE_SIZE (sparse — set_len doesn't
-        // actually write 64 MiB).
-        if let Some(ref f) = log.file {
-            f.set_len(MAX_FILE_SIZE + 1).unwrap();
-        }
+        // actually write 64 MiB). Uses a separate write handle: on Windows
+        // the log's append-mode handle lacks FILE_WRITE_DATA, so set_len
+        // on it is denied.
+        inflate_past_cap(&path);
 
         log.write_line("[stdout]", "after rotation");
 
@@ -365,9 +374,7 @@ mod tests {
             std::fs::write(&rp, format!("old-{i}")).unwrap();
         }
 
-        if let Some(ref f) = log.file {
-            f.set_len(MAX_FILE_SIZE + 1).unwrap();
-        }
+        inflate_past_cap(&path);
         log.write_line("[stdout]", "newest");
 
         // After rotation: old .6 → .7, old .7 dropped, .1 holds the rotated live file.

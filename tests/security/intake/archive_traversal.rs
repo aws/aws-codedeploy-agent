@@ -118,8 +118,7 @@ fn unpack_rejects_symlinks() {
         std::fs::create_dir_all(&dest).expect("create deployment dir");
 
         // Create symlink directly — no tar dependency, deterministic on all platforms
-        std::os::unix::fs::symlink(link_target, dest.join(link_name))
-            .expect("create symlink");
+        std::os::unix::fs::symlink(link_target, dest.join(link_name)).expect("create symlink");
 
         // Post-extraction scan detects the symlink and rejects
         let result = bundle_unpacker::reject_bundle_symlinks(&dest);
@@ -149,8 +148,7 @@ fn symlinks_allowed_when_rejection_disabled() {
     std::fs::create_dir_all(&dest).expect("create deployment dir");
 
     // Create symlink directly — deterministic, no tar dependency
-    std::os::unix::fs::symlink("/etc/passwd", dest.join("my_link"))
-        .expect("create symlink");
+    std::os::unix::fs::symlink("/etc/passwd", dest.join("my_link")).expect("create symlink");
 
     // Without calling reject_bundle_symlinks(), the symlink is preserved
     let link_path = dest.join("my_link");
@@ -185,8 +183,7 @@ fn unpack_rejects_hardlinks_to_sensitive_files() {
     // here we verify the unpacker inspects entry types at all.
     let original = src.join("secret.txt");
     std::fs::write(&original, "sensitive-data").expect("write test fixture");
-    std::fs::hard_link(&original, src.join("hardlink_to_secret"))
-        .expect("create hardlink");
+    std::fs::hard_link(&original, src.join("hardlink_to_secret")).expect("create hardlink");
 
     let tar_path = dir.path().join("hardlink.tar");
     let output = std::process::Command::new("tar")

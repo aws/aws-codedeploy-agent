@@ -16,7 +16,6 @@ use tracing::{error, info, warn};
 ///
 /// Returns `true` if at least one stale deployment was found and reported.
 pub fn recover<T: DeploymentTracker>(client: &CodeDeployCommandClient, tracker: &T) -> bool {
-    // GRCOV_STOP_COVERAGE — requires live service for put_host_command_complete
     let mut recovered_any = false;
 
     loop {
@@ -70,7 +69,6 @@ pub fn recover<T: DeploymentTracker>(client: &CodeDeployCommandClient, tracker: 
     }
 
     recovered_any
-    // GRCOV_BEGIN_COVERAGE
 }
 
 #[cfg(test)]

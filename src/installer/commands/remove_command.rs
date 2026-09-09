@@ -56,6 +56,7 @@ impl RemoveCommand {
 mod tests {
     use super::*;
     use std::fs;
+    #[cfg(unix)]
     use std::os::unix::fs as unix_fs;
 
     #[test]
@@ -70,6 +71,7 @@ mod tests {
         assert!(!file.exists());
     }
 
+    #[cfg(unix)]
     #[test]
     fn execute_symlink() {
         let target = std::env::temp_dir().join("test_target.txt");

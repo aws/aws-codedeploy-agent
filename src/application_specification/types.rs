@@ -400,9 +400,11 @@ mod tests {
     #[test]
     fn from_file_success() {
         use std::io::Write;
-        let mut file = std::fs::File::create("/tmp/test_appspec_success.yaml").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test_appspec_success.yaml");
+        let mut file = std::fs::File::create(&path).unwrap();
         file.write_all(b"version: 0.0\nos: linux\n").unwrap();
-        let result = AppSpec::from_file("/tmp/test_appspec_success.yaml");
+        let result = AppSpec::from_file(&path);
         assert!(result.is_ok());
     }
 

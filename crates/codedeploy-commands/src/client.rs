@@ -61,10 +61,8 @@ impl Client {
         host_identifier: &str,
     ) -> Result<Option<HostCommandInstance>, Error> {
         let input = PollHostCommandInput { host_identifier: host_identifier.to_string() };
-        // GRCOV_STOP_COVERAGE
         let output: PollHostCommandOutput = self.call("PollHostCommand", &input)?;
         Ok(output.host_command)
-        // GRCOV_BEGIN_COVERAGE
     }
 
     /// Acknowledge receipt of a host command.
@@ -80,11 +78,9 @@ impl Client {
             host_command_identifier: host_command_identifier.to_string(),
             diagnostics: diagnostics.cloned(),
         };
-        // GRCOV_STOP_COVERAGE
         let output: PutHostCommandAcknowledgementOutput =
             self.call("PutHostCommandAcknowledgement", &input)?;
         Ok(output.command_status)
-        // GRCOV_BEGIN_COVERAGE
     }
 
     /// Get deployment specification.
@@ -136,13 +132,10 @@ impl Client {
             estimated_completion_time: estimated_completion_time.map(String::from),
             diagnostics: diagnostics.cloned(),
         };
-        // GRCOV_STOP_COVERAGE
         let output: PostHostCommandUpdateOutput = self.call("PostHostCommandUpdate", &input)?;
         Ok(output.command_status)
-        // GRCOV_BEGIN_COVERAGE
     }
 
-    // GRCOV_STOP_COVERAGE
     fn call<I: serde::Serialize, O: serde::de::DeserializeOwned>(
         &self,
         operation: &str,
@@ -236,7 +229,6 @@ impl Client {
         Ok(())
     }
 }
-// GRCOV_BEGIN_COVERAGE
 
 /// Builder for [`Client`].
 #[derive(Debug)]

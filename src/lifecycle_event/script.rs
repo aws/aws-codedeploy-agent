@@ -245,9 +245,8 @@ impl Script {
 
         let status = match joiner.join(child.wait()).await {
             Ok(Ok(status)) => status,
-            Ok(Err(e)) => return Err(e.to_string()), // GRCOV_IGNORE_LINE
-            Err(()) => {
-                // GRCOV_IGNORE_START
+            Ok(Err(e)) => return Err(e.to_string()),
+            Err(super::deadline_joiner::DeadlineExceeded) => {
                 // Timeout: SIGTERM the group, then SIGKILL (uncatchable) if it
                 // outlasts the grace period so a SIGTERM-ignoring hook is still
                 // reaped. The child is unreaped here, so its PID can't be reused
@@ -272,12 +271,10 @@ impl Script {
                     let _ = tokio::time::timeout(SIGKILL_GRACE, child.wait()).await;
                 }
                 return Err("timeout".to_string());
-                // GRCOV_IGNORE_END
             },
         };
 
         // Phase 2: wait for stdout to close.
-        // GRCOV_STOP_COVERAGE
         if joiner.join(stdout_handle).await.is_err() {
             return Err("outputs_left_open".to_string());
         }
@@ -286,7 +283,6 @@ impl Script {
         if joiner.join(stderr_handle).await.is_err() {
             return Err("outputs_left_open".to_string());
         }
-        // GRCOV_BEGIN_COVERAGE
 
         let code = status.code().unwrap_or(1);
         if code != 0 {
@@ -436,14 +432,12 @@ fn log_process_diagnostics(status: std::process::ExitStatus, pid: Option<u32>) {
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
-        // GRCOV_STOP_COVERAGE
         debug!(
             "Script failed. Diagnostics: pid={pid}, exitstatus={:?}, signal={:?}, core_dumped={}",
             status.code(),
             status.signal(),
             status.core_dumped(),
         );
-        // GRCOV_BEGIN_COVERAGE
     }
 
     #[cfg(not(unix))]
@@ -611,6 +605,7 @@ mod tests {
         assert_eq!(mode & 0o777, 0o755, "permissions should be unchanged");
     }
 
+    #[cfg(unix)]
     #[test]
     fn ensure_executable_nonexistent_file() {
         let result = ensure_executable(std::path::Path::new("/nonexistent/script.sh"));

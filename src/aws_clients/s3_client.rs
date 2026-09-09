@@ -62,12 +62,10 @@ fn load_ca_trust_store(ca_dir: Option<String>) -> Option<aws_smithy_http_client:
     for entry in entries {
         let entry = match entry {
             Ok(e) => e,
-            // GRCOV_STOP_COVERAGE
             Err(e) => {
                 tracing::warn!("Error reading entry in AWS_SSL_CA_DIRECTORY={ca_dir}: {e}");
                 continue;
             },
-            // GRCOV_BEGIN_COVERAGE
         };
         let file_path = entry.path();
         if file_path.extension().and_then(|e| e.to_str()) == Some("pem") {
@@ -77,11 +75,9 @@ fn load_ca_trust_store(ca_dir: Option<String>) -> Option<aws_smithy_http_client:
                     loaded += 1;
                     debug!("Loaded CA cert from {}", file_path.display());
                 },
-                // GRCOV_STOP_COVERAGE
                 Err(e) => {
                     tracing::warn!("Failed to read PEM file {}: {e}", file_path.display());
                 },
-                // GRCOV_BEGIN_COVERAGE
             }
         }
     }
@@ -150,12 +146,10 @@ fn build_custom_http_client(
     let proxy_config = match proxy_uri {
         Some(uri) => match aws_smithy_http_client::proxy::ProxyConfig::all(uri) {
             Ok(cfg) => Some(cfg.no_proxy(&no_proxy)),
-            // GRCOV_STOP_COVERAGE
             Err(e) => {
                 tracing::warn!("Invalid proxy_uri '{uri}' for S3 client, ignoring: {e}");
                 None
             },
-            // GRCOV_BEGIN_COVERAGE
         },
         None => None,
     };
@@ -166,7 +160,6 @@ fn build_custom_http_client(
         return None;
     }
 
-    // GRCOV_STOP_COVERAGE — smithy HTTP client builder generates monomorphized code
     // that grcov cannot attribute to source lines.
     // Build the TLS context once (custom CA certs, if any). `proxy_config` lives
     // on the low-level `ConnectorBuilder`, not the high-level `Builder`, so we
@@ -202,7 +195,6 @@ fn build_custom_http_client(
             cb.build()
         },
     ))
-    // GRCOV_BEGIN_COVERAGE
 }
 
 /// Configuration for S3 client construction.
@@ -301,14 +293,12 @@ impl S3Client {
             },
         }
 
-        // GRCOV_STOP_COVERAGE
         if let Some(http_client) = build_custom_http_client(
             std::env::var("AWS_SSL_CA_DIRECTORY").ok(),
             config.proxy_uri.as_deref(),
         ) {
             config_loader = config_loader.http_client(http_client);
         }
-        // GRCOV_BEGIN_COVERAGE
 
         let sdk_config = config_loader.load().await;
 
@@ -331,11 +321,9 @@ impl S3Client {
                     );
                     s3_config = s3_config.interceptor(interceptor);
                 },
-                // GRCOV_STOP_COVERAGE
                 Err(e) => {
                     tracing::warn!("Failed to open S3 wire log (log_aws_wire); disabling: {e}");
                 },
-                // GRCOV_BEGIN_COVERAGE
             }
         }
 
@@ -347,7 +335,6 @@ impl S3Client {
         Ok(aws_sdk_s3::Client::from_conf(s3_config.build()))
     }
 
-    // GRCOV_STOP_COVERAGE
     /// Download an S3 object to a local file.
     ///
     /// Returns the `ETag` of the downloaded object (with quotes stripped).
@@ -394,7 +381,6 @@ impl S3Client {
         info!("Download complete from bucket '{bucket}' and key '{key}'");
         Ok(etag)
     }
-    // GRCOV_BEGIN_COVERAGE
 }
 
 async fn stream_to_file(
@@ -403,9 +389,7 @@ async fn stream_to_file(
 ) -> io::Result<()> {
     // Downloaded bundles are created 0600 so unprivileged users cannot
     // read the archive while the agent is extracting it.
-    // GRCOV_STOP_COVERAGE
     let mut file = crate::system::create_file_secure(dest, 0o600)?;
-    // GRCOV_BEGIN_COVERAGE
     let mut buf = vec![0u8; STREAM_BUFFER_SIZE];
     loop {
         let n = tokio::io::AsyncReadExt::read(&mut reader, &mut buf).await?;

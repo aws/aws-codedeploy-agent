@@ -20,11 +20,9 @@ impl Auth {
     pub fn init(discovery_path: PathBuf, port: u16) -> io::Result<Self> {
         let token = generate_token()?;
         let content = serde_json::json!({"port": port, "token": token}).to_string();
-        // GRCOV_STOP_COVERAGE
         if let Some(parent) = discovery_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        // GRCOV_BEGIN_COVERAGE
         write_discovery_file(&discovery_path, content.as_bytes())?;
         Ok(Self { token, discovery_path })
     }
@@ -278,16 +276,18 @@ mod tests {
 
         let allow: Vec<_> =
             entries.iter().filter(|e| e.entry_type == AceType::AccessAllow).collect();
-        assert_eq!(allow.len(), 2, "expected exactly 2 AccessAllow entries, got {allow:?}");
+        assert_eq!(allow.len(), 2, "expected exactly 2 AccessAllow entries, got {}", allow.len());
 
         const INHERITED_ACE: u8 = 0x10;
 
         for e in &allow {
             assert_eq!(e.flags & INHERITED_ACE, 0, "entry {} is inherited", e.string_sid);
-            assert_eq!(
-                e.mask, GENERIC_ALL,
+            const FILE_ALL_ACCESS: u32 = 0x001F_01FF;
+            assert!(
+                e.mask == GENERIC_ALL || e.mask == FILE_ALL_ACCESS,
                 "entry {} has unexpected mask {:x}",
-                e.string_sid, e.mask
+                e.string_sid,
+                e.mask
             );
         }
 

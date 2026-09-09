@@ -77,7 +77,7 @@ Common tasks are exposed through `make`:
 make help     # List all available targets
 make build    # Build the project
 make test     # Run the test suite
-make ci       # Run all CI checks (format, lint, test)
+make          # Run all CI checks (format, lint, coverage, doctests, release build)
 ```
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for the full development workflow, tooling,

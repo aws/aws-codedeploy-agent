@@ -111,13 +111,11 @@ struct RefreshableInner {
 }
 
 impl std::fmt::Debug for RefreshableInner {
-    // GRCOV_STOP_COVERAGE
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RefreshableInner")
             .field("credential_expiry", &self.credential_expiry)
             .finish_non_exhaustive()
     }
-    // GRCOV_BEGIN_COVERAGE
 }
 
 #[derive(Debug)]
@@ -233,7 +231,6 @@ impl CodeDeployCommandClient {
         &self.throttle_gate
     }
 
-    // GRCOV_STOP_COVERAGE
     /// Refresh credentials if they are near expiry.
     ///
     /// Rebuilds the inner HTTP client with fresh credentials. For `IamSession`,
@@ -453,7 +450,6 @@ impl CodeDeployCommandClient {
             Ok(())
         })
     }
-    // GRCOV_BEGIN_COVERAGE
 
     /// The configured region.
     #[must_use]
@@ -494,7 +490,6 @@ fn to_aws_credentials(creds: &Credentials) -> Result<AwsCredentials, CodeDeployC
             // `credential_expiry`; `refresh_if_needed()` re-fetches before expiry.
             // Returns Err if IMDS is unreachable — the agent cannot start without
             // valid credentials.
-            // GRCOV_STOP_COVERAGE — requires IMDS endpoint
             use crate::aws_clients::imds;
             match imds::fetch_credentials() {
                 Ok(aws_creds) => {
@@ -503,7 +498,6 @@ fn to_aws_credentials(creds: &Credentials) -> Result<AwsCredentials, CodeDeployC
                 },
                 Err(e) => Err(CodeDeployClientError::ImdsUnavailable(e.to_string())),
             }
-            // GRCOV_BEGIN_COVERAGE
         },
         CredentialMode::IamSession { credentials_file } => {
             use crate::aws_clients::file_credentials;

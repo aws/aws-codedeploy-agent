@@ -125,7 +125,7 @@ pub fn load_credentials_from_file(path: &Path) -> Result<AwsCredentials, FileCre
 
     debug!(
         "Loaded credentials from file '{path_str}' (session_token={})",
-        session_token.is_some() // GRCOV_IGNORE_LINE
+        session_token.is_some()
     );
 
     Ok(AwsCredentials::new(
@@ -171,7 +171,7 @@ fn parse_ini(contents: &str) -> HashMap<String, HashMap<String, String>> {
             if let Some(section) = profiles.get_mut(profile) {
                 section.insert(key, value);
             }
-        } // GRCOV_IGNORE_LINE
+        }
     }
 
     profiles
@@ -420,6 +420,11 @@ mod tests {
     fn load_unreadable_file_returns_read_error() {
         use std::os::unix::fs::PermissionsExt;
 
+        if nix::unistd::Uid::effective().is_root() {
+            // Root bypasses DAC permission checks, so the denial this test
+            // relies on never happens (e.g. in CI build containers).
+            return;
+        }
         let mut file = NamedTempFile::new().unwrap();
         writeln!(file, "[default]\naws_access_key_id = KEY\naws_secret_access_key = SECRET")
             .unwrap();

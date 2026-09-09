@@ -8,11 +8,9 @@ pub fn disable() {
 
     match setrlimit(Resource::RLIMIT_CORE, 0, 0) {
         Ok(()) => {},
-        // GRCOV_STOP_COVERAGE
         Err(e) => {
             eprintln!("WARNING: Failed to set RLIMIT_CORE=0; core dumps may be produced: {e}");
         },
-        // GRCOV_BEGIN_COVERAGE
     }
 
     #[cfg(target_os = "linux")]
@@ -20,7 +18,7 @@ pub fn disable() {
         use nix::sys::prctl;
         match prctl::set_dumpable(false) {
             Ok(()) => {},
-            Err(e) => eprintln!("WARNING: Failed to set PR_SET_DUMPABLE=0: {e}"), // GRCOV_IGNORE_LINE
+            Err(e) => eprintln!("WARNING: Failed to set PR_SET_DUMPABLE=0: {e}"),
         }
     }
 }

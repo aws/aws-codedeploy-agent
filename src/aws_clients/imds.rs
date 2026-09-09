@@ -23,7 +23,6 @@ pub enum ImdsError {
 ///
 /// # Errors
 /// Returns error if IMDS is unreachable or no IAM role is attached.
-// GRCOV_STOP_COVERAGE
 pub fn fetch_credentials() -> Result<AwsCredentials, ImdsError> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -45,7 +44,6 @@ pub fn fetch_credentials() -> Result<AwsCredentials, ImdsError> {
         Ok(creds)
     })
 }
-// GRCOV_BEGIN_COVERAGE
 
 #[cfg(test)]
 mod tests {
