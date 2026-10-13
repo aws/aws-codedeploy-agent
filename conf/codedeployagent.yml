@@ -4,6 +4,8 @@
 # Logging
 :program_name: codedeploy-agent
 :log_dir: /var/log/aws/codedeploy-agent
+# macOS: the LaunchDaemon plist also writes codedeploy-agent.launchd.log into
+# the default directory above; changing :log_dir does not move that file.
 :verbose: false
 
 # Capture Amazon S3 HTTP wire logs to <program_name>.aws_wire.log in log_dir

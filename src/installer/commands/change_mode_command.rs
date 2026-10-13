@@ -26,7 +26,7 @@ impl ChangeModeCommand {
     /// # Errors
     /// Returns an error if the command execution fails.
     pub fn execute(&self, _cleanup_file: &mut dyn Write) -> Result<()> {
-        use nix::sys::stat::{Mode, fchmod};
+        use nix::sys::stat::fchmod;
         use std::os::fd::AsRawFd;
         use std::os::unix::fs::OpenOptionsExt;
 
@@ -40,7 +40,7 @@ impl ChangeModeCommand {
             });
         }
 
-        let mode_bits = Mode::from_bits_truncate(mode);
+        let mode_bits = crate::system::file_ops::mode_from_bits(mode);
 
         // By default the chmod follows symlinks (backwards-compatible behavior),
         // which a path-based `chmod` gives.

@@ -87,7 +87,24 @@ impl ScriptLocation {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Username(pub(crate) String);
+pub struct Username(String);
+
+impl Username {
+    /// Reject a `runas` that `su`/`sudo` would read as an option (leading `-`)
+    /// or that contains whitespace/control characters. Everything else is
+    /// accepted (`DOMAIN\user`, `user@realm`); shell metacharacters are inert
+    /// because `runas` is passed as its own argv entry, never through a shell.
+    pub(crate) fn new(name: &str) -> Result<Self, ParseError> {
+        let valid = !name.is_empty()
+            && !name.starts_with('-')
+            && !name.bytes().any(|b| b.is_ascii_whitespace() || b.is_ascii_control());
+        if valid {
+            Ok(Username(name.to_string()))
+        } else {
+            Err(ParseError::InvalidRunas(name.to_string()))
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Timeout(u32);
@@ -117,6 +134,7 @@ impl Default for Timeout {
 
 #[cfg(test)]
 mod tests {
+    use super::{ParseError, Username};
     use crate::application_specification::AppSpec;
 
     #[test]
@@ -138,5 +156,43 @@ mod tests {
         let spec = AppSpec::parse(yaml).unwrap();
         let scripts = spec.hooks().get("ApplicationStop");
         assert!(scripts.is_empty());
+    }
+
+    #[test]
+    fn username_accepts_real_account_names_including_domain_forms() {
+        for n in [
+            "root",
+            "deploy",
+            "www-data",
+            "svc_user",
+            "user.name",
+            "host$",
+            "DOMAIN\\user",
+            "user@realm",
+            "a/b",
+            "root;id",
+            "$(id)",
+        ] {
+            assert!(Username::new(n).is_ok(), "{n:?} should be accepted");
+        }
+    }
+
+    #[test]
+    fn username_rejects_option_like_and_whitespace_names() {
+        for n in [
+            "-c",
+            "--command=id",
+            "-",
+            "a b",
+            "\troot",
+            "root\n",
+            "a\0b",
+            "",
+        ] {
+            assert!(
+                matches!(Username::new(n), Err(ParseError::InvalidRunas(_))),
+                "{n:?} should be rejected"
+            );
+        }
     }
 }

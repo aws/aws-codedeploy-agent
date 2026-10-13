@@ -319,6 +319,36 @@ rustup default stable-x86_64-pc-windows-gnu
 cargo build --release
 ```
 
+## Building on macOS
+
+Targets: `aarch64-apple-darwin` (Apple silicon) and `x86_64-apple-darwin`
+(Intel). Both build on an Apple-silicon Mac with the Xcode command-line tools;
+there is no Intel-only step. `MACOSX_DEPLOYMENT_TARGET=15.0` matches the
+oldest supported macOS (15 Sequoia).
+
+```bash
+xcode-select --install
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+export MACOSX_DEPLOYMENT_TARGET=15.0
+cargo build --release --target aarch64-apple-darwin
+cargo build --release --target x86_64-apple-darwin
+```
+
+Package each binary as a `.pkg` (payload: binary, `codedeploy-local` symlink,
+config template, LaunchDaemon plist; see `macos/pkg/`):
+
+```bash
+macos/pkg/build-pkg.sh target/aarch64-apple-darwin/release/codedeploy-agent aarch64 2.1.1 2.1.1-1 out/
+macos/pkg/build-pkg.sh target/x86_64-apple-darwin/release/codedeploy-agent  x86_64  2.1.1 2.1.1-1 out/
+sudo installer -pkg out/codedeploy-agent-2.1.1-1.aarch64.pkg -target /
+```
+
+The package installs `/Library/LaunchDaemons/com.amazon.aws.codedeploy-agent.plist`
+(the launchd counterpart of `systemd/codedeploy-agent.service`) and starts the
+agent. `sudo launchctl print system/com.amazon.aws.codedeploy-agent` shows its
+state; `sudo /opt/codedeploy-agent/bin/uninstall.sh` removes it.
+
 ## Running the Agent Locally
 
 Build and locate the binary:
@@ -471,6 +501,7 @@ so `teardown` works across terminal sessions.
 | `e2e-ec2-iam-session.sh` | Fresh EC2 instance | On-prem registration, INI file — IMDS bypassed |
 | `e2e-ec2-concurrent.sh` | Fresh EC2 instance | IMDS, runs N parallel deployments (default 3) against the same instance |
 | `e2e-windows.sh` | Fresh Windows Server EC2 | IMDS |
+| _(macOS)_ | No script: EC2 Mac requires a Dedicated Host with a 24 h minimum charge. Build the `.pkg` (see [Building on macOS](#building-on-macos)), install it on a Mac instance and run a deployment by hand. | IMDS |
 
 ### Shortest path to a green E2E run
 

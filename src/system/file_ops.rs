@@ -18,6 +18,15 @@ pub trait PlatformFileOperations: Send + Sync {
     fn write_with_retry(&self, path: &Path, content: &str) -> io::Result<()>;
 }
 
+/// Build a `Mode` from `u32` permission bits. `mode_t` is `u32` on Linux but
+/// `u16` on macOS, so mask to the permission bits (`0o7777`) before the cast.
+#[cfg(unix)]
+#[must_use]
+#[allow(clippy::unnecessary_cast, clippy::cast_possible_truncation)] // width of mode_t is platform-specific
+pub fn mode_from_bits(bits: u32) -> nix::sys::stat::Mode {
+    nix::sys::stat::Mode::from_bits_truncate((bits & 0o7777) as nix::libc::mode_t)
+}
+
 /// If the file has no execute bits, add them. Mirrors
 /// `script_executable?` check + `make_executable` fallback.
 ///
@@ -262,6 +271,14 @@ mod safe_relative_path_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn mode_from_bits_keeps_permission_bits_and_drops_file_type() {
+        let mode = mode_from_bits(0o100_644);
+        assert_eq!(mode, nix::sys::stat::Mode::from_bits_truncate(0o644));
+        assert_eq!(mode_from_bits(0o4755), nix::sys::stat::Mode::from_bits_truncate(0o4755));
+    }
     use std::path::PathBuf;
     use tempfile::TempDir;
 

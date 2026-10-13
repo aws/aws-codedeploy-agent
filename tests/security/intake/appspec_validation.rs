@@ -86,7 +86,8 @@ fn mode_suid_bits_are_detectable() {
 // ---------------------------------------------------------------------------
 
 /// Parser accepts unconfined types; install-time rejection happens in `ChangeContextCommand`.
-#[cfg(unix)]
+// ChangeContextCommand is cfg(target_os = "linux") (semanage is Linux-only).
+#[cfg(target_os = "linux")]
 #[test]
 fn appspec_rejects_unconfined_selinux_context() {
     use codedeploy_agent::installer::InstallerError;

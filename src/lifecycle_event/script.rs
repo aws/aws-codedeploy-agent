@@ -32,7 +32,8 @@ const SIGKILL_GRACE: Duration = Duration::from_secs(5);
 /// profile suppression).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct HookEnvPolicy {
-    /// Strip `LD_PRELOAD`/`LD_LIBRARY_PATH`/`LD_AUDIT` from the hook env.
+    /// Strip the dynamic-loader env vars (`LD_*` on Linux, `DYLD_*` on
+    /// macOS; see `system::DYNAMIC_LOADER_ENV_VARS`) from the hook env.
     pub strip_loader_vars: bool,
     /// Clear the inherited env and rebuild from shell basics + deployment vars.
     pub restrict_to_allowlist: bool,
@@ -166,7 +167,7 @@ impl Script {
         // Strip loader vars last, so an AppSpec `environment:` entry cannot re-add them.
         #[cfg(unix)]
         if self.env_policy.strip_loader_vars {
-            for var in ["LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT"] {
+            for var in crate::system::DYNAMIC_LOADER_ENV_VARS {
                 cmd.env_remove(var);
             }
         }
@@ -309,12 +310,12 @@ pub(super) fn build_command(
     match (runas, sudo) {
         (Some(user), true) => {
             let mut cmd = Command::new("sudo");
-            cmd.args(["su", user, "-c", &script_path.display().to_string()]);
+            cmd.args(["su", user, "-c", &su_command_arg(script_path)]);
             cmd
         },
         (Some(user), false) => {
             let mut cmd = Command::new("su");
-            cmd.args([user, "-c", &script_path.display().to_string()]);
+            cmd.args([user, "-c", &su_command_arg(script_path)]);
             cmd
         },
         (None, true) => {
@@ -323,6 +324,24 @@ pub(super) fn build_command(
             cmd
         },
         (None, false) => Command::new(script_path),
+    }
+}
+
+/// The argument `su -c` hands to the target user's shell. A plain path is
+/// passed as-is (hooks may read `BASH_EXECUTION_STRING` and expect it to
+/// equal the bare path); a path with a space or shell metacharacter is
+/// single-quoted so the shell runs that file instead of parsing the path.
+#[cfg(unix)]
+fn su_command_arg(script_path: &Path) -> String {
+    let path = script_path.display().to_string();
+    let plain = path.bytes().all(|b| {
+        b.is_ascii_alphanumeric()
+            || matches!(b, b'/' | b'.' | b'_' | b'-' | b'+' | b'@' | b':' | b'=')
+    });
+    if plain {
+        path
+    } else {
+        format!("'{}'", path.replace('\'', "'\\''"))
     }
 }
 
@@ -454,9 +473,13 @@ mod tests {
     use std::time::Duration;
     use tempfile::{NamedTempFile, TempDir};
 
-    fn sample_log() -> Arc<Mutex<ScriptRunLog>> {
-        let file = NamedTempFile::new().unwrap();
-        Arc::new(Mutex::new(ScriptRunLog::open(file.path()).unwrap()))
+    // Own the parent dir: ScriptRunLog::open chmods it, which is EPERM on
+    // macOS's root-owned $TMPDIR.
+    fn sample_log() -> (TempDir, Arc<Mutex<ScriptRunLog>>) {
+        let dir = TempDir::new().unwrap();
+        let log =
+            Arc::new(Mutex::new(ScriptRunLog::open(&dir.path().join("scripts.log")).unwrap()));
+        (dir, log)
     }
 
     #[tokio::test]
@@ -467,8 +490,8 @@ mod tests {
         // 64 MiB rotation cap. Asserted on the FILE (the in-memory diagnostics
         // buffer is byte-capped and only keeps the tail, so it can't show the
         // chunk count).
-        let file = NamedTempFile::new().unwrap();
-        let path = file.path().to_path_buf();
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("scripts.log");
         let log = Arc::new(Mutex::new(ScriptRunLog::open(&path).unwrap()));
         let blob = vec![b'A'; MAX_LOG_LINE_BYTES * 3 + 100]; // ~192 KiB, no '\n'
         stream_to_log(Some(std::io::Cursor::new(blob)), &log, "[stdout]").await;
@@ -493,7 +516,7 @@ mod tests {
 
     #[tokio::test]
     async fn stream_to_log_preserves_normal_lines() {
-        let log = sample_log();
+        let (_dir, log) = sample_log();
         let input = b"first line\nsecond line\n".to_vec();
         stream_to_log(Some(std::io::Cursor::new(input)), &log, "[stdout]").await;
         let entries = log.lock().unwrap().entries();
@@ -503,6 +526,31 @@ mod tests {
     }
 
     // --- build_command ---
+
+    #[cfg(unix)]
+    #[test]
+    fn su_command_arg_passes_plain_paths_unchanged() {
+        assert_eq!(
+            su_command_arg(std::path::Path::new(
+                "/opt/codedeploy-agent/deployment-root/d-1/deployment-archive/scripts/start.sh"
+            )),
+            "/opt/codedeploy-agent/deployment-root/d-1/deployment-archive/scripts/start.sh"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn su_command_arg_quotes_paths_with_shell_characters() {
+        assert_eq!(
+            su_command_arg(std::path::Path::new("/tmp/my app/run.sh")),
+            "'/tmp/my app/run.sh'"
+        );
+        assert_eq!(su_command_arg(std::path::Path::new("/tmp/a;id/run.sh")), "'/tmp/a;id/run.sh'");
+        assert_eq!(
+            su_command_arg(std::path::Path::new("/tmp/it's/run.sh")),
+            "'/tmp/it'\\''s/run.sh'"
+        );
+    }
 
     #[cfg(unix)]
     #[test]
@@ -629,13 +677,9 @@ mod tests {
         let mut env = HashMap::new();
         env.insert("KEY".to_string(), "VAL".to_string());
 
-        let script = Script::new(
-            "/test/script.sh".into(),
-            Some("deploy".to_string()),
-            true,
-            &env,
-            sample_log(),
-        );
+        let (_dir, log) = sample_log();
+        let script =
+            Script::new("/test/script.sh".into(), Some("deploy".to_string()), true, &env, log);
 
         let debug = format!("{script:?}");
         assert!(debug.contains("script.sh"));
@@ -645,12 +689,13 @@ mod tests {
 
     #[test]
     fn new_no_runas() {
+        let (_dir, log) = sample_log();
         let script = Script::new(
             "/test/script.sh".into(),
             None,
             false,
             &HashMap::<String, String>::new(),
-            sample_log(),
+            log,
         );
 
         let debug = format!("{script:?}");
@@ -662,12 +707,13 @@ mod tests {
 
     #[test]
     fn execute_nonexistent_script() {
+        let (_dir, log) = sample_log();
         let script = Script::new(
             "/nonexistent/script.sh".into(),
             None,
             false,
             &HashMap::<String, String>::new(),
-            sample_log(),
+            log,
         );
 
         let result = script.execute(Duration::from_secs(10));
@@ -811,6 +857,44 @@ mod tests {
             seen, "",
             "restrict_to_allowlist must scrub non-allowlisted agent var: {seen:?}"
         );
+    }
+
+    /// Checked on the `Command` (`get_envs()`), not in a child: on macOS SIP
+    /// scrubs `DYLD_*` before `/bin/sh` runs, so a child-side check proves nothing.
+    #[cfg(unix)]
+    #[test]
+    fn strip_loader_vars_marks_platform_loader_vars_removed_on_command() {
+        use crate::system::DYNAMIC_LOADER_ENV_VARS;
+
+        let dir = TempDir::new().unwrap();
+        let log = Arc::new(Mutex::new(ScriptRunLog::open(&dir.path().join("log")).unwrap()));
+        let mut env_vars = HashMap::<String, String>::new();
+        for var in DYNAMIC_LOADER_ENV_VARS {
+            env_vars.insert((*var).to_string(), "/tmp/evil".to_string());
+        }
+        let script = Script::with_env_policy(
+            dir.path().join("noop.sh"),
+            None,
+            false,
+            &env_vars,
+            HookEnvPolicy {
+                strip_loader_vars: true,
+                restrict_to_allowlist: false,
+                disable_powershell_profile: false,
+            },
+            log,
+        );
+
+        let mut cmd = Command::new("true");
+        script.apply_env_policy(&mut cmd);
+
+        for var in DYNAMIC_LOADER_ENV_VARS {
+            let entry = cmd.as_std().get_envs().find(|(k, _)| *k == std::ffi::OsStr::new(var));
+            assert!(
+                matches!(entry, Some((_, None))),
+                "{var} must be marked removed on the Command, got {entry:?}"
+            );
+        }
     }
 
     /// The three AWS credential-override names must never reach the hook, even

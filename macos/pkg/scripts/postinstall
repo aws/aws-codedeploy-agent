@@ -1,0 +1,47 @@
+#!/bin/sh
+# pkg postinstall: runs as root after the payload is written.
+#
+# Like rpm %post / deb postinst: restore the config preinstall saved (keeping
+# the new template as .pkgnew), create the log dir launchd writes to, then
+# enable and bootstrap the LaunchDaemon.
+set -eu
+
+LABEL=com.amazon.aws.codedeploy-agent
+PLIST=/Library/LaunchDaemons/$LABEL.plist
+CONF=/etc/codedeploy-agent/conf/codedeployagent.yml
+
+if [ -f "$CONF.pkg-save" ]; then
+    cp -p "$CONF" "$CONF.pkgnew"
+    mv -f "$CONF.pkg-save" "$CONF"
+fi
+
+install -d -m 0755 /var/log/aws/codedeploy-agent
+install -d -m 0755 /opt/codedeploy-agent
+
+launchctl enable "system/$LABEL" || :
+# bootout any stale definition (kickstart would reuse the old one), then
+# bootstrap the plist just installed; a failure fails the install.
+launchctl bootout "system/$LABEL" 2>/dev/null || :
+# Normally nothing is running here; if something re-bootstrapped the agent
+# mid-deployment, wait the same ExitTimeOut bound as preinstall.
+i=0
+while launchctl print "system/$LABEL" >/dev/null 2>&1; do
+    i=$((i + 1))
+    if [ "$i" -ge 7260 ]; then   # ExitTimeOut + margin: let launchd's own SIGKILL land first
+        echo "$LABEL is still loaded after ${i}s (ExitTimeOut); cannot bootstrap the new plist" >&2
+        exit 1
+    fi
+    sleep 1
+done
+# bootstrap can fail transiently right after a bootout; retry briefly.
+i=0
+until launchctl bootstrap system "$PLIST"; do
+    i=$((i + 1))
+    if [ "$i" -ge 5 ]; then
+        echo "$LABEL: launchctl bootstrap failed after $i attempts" >&2
+        exit 1
+    fi
+    sleep 1
+done
+
+exit 0

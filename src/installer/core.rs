@@ -1,5 +1,5 @@
 //! Installer core — executes install commands and manages cleanup files.
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use super::commands::RemoveContextCommand;
 use super::{
     builder::{Command, CommandBuilder},
@@ -270,6 +270,11 @@ impl Installer {
     ) -> Result<()> {
         let object = Path::new(permission.object());
 
+        // On non-Linux Unix, `acls`/`context` are rejected here, before
+        // matching, so an entry that matches no object is still refused.
+        #[cfg(unix)]
+        CommandBuilder::check_permission_fields_supported(object, permission)?;
+
         // Handle directory permissions
         if !builder.copying_file(object) {
             if builder.making_directory(object) || object.is_dir() {
@@ -481,7 +486,7 @@ impl Installer {
             }
 
             if line.starts_with("semanage\0") {
-                #[cfg(unix)]
+                #[cfg(target_os = "linux")]
                 {
                     let object = line.strip_prefix("semanage\0").unwrap();
                     // Validate the SELinux object path the same way as a removal

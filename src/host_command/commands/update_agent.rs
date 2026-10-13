@@ -26,6 +26,13 @@ const SHELL: &str = "/bin/sh";
 /// Package-type arg: `auto` tells the script to detect the package manager.
 const PACKAGE_TYPE_ARG: &str = "auto";
 
+/// Why self-update is refused on macOS. The bucket install script has no
+/// `pkg` package type yet; until it does, running it on macOS would
+/// only fail inside the script after the download.
+#[cfg(target_os = "macos")]
+pub(crate) const UNSUPPORTED_PLATFORM_MESSAGE: &str = "Agent self-update is not supported on macOS yet. \
+     Install the latest .pkg from the regional aws-codedeploy-<region> bucket instead.";
+
 pub struct UpdateAgentCommand {
     region: String,
     s3_client: Option<S3Client>,
@@ -70,6 +77,8 @@ impl UpdateAgentCommand {
     pub fn execute(&self) -> io::Result<Vec<String>> {
         info!("UpdateDeploymentAgent command received");
 
+        Self::check_platform()?;
+
         let s3 = self
             .s3_client
             .as_ref()
@@ -87,6 +96,25 @@ impl UpdateAgentCommand {
 
         info!("Agent install script completed — post-install scripts will restart the agent");
         Ok(vec!["Update installed successfully".to_string()])
+    }
+}
+
+impl UpdateAgentCommand {
+    /// Refuse self-update on platforms the bucket install script cannot
+    /// install on. Called before any credential, IMDS or S3 use so the
+    /// refusal is immediate and needs no network access.
+    ///
+    /// # Errors
+    /// `ErrorKind::Unsupported` on macOS. `Ok` elsewhere.
+    pub fn check_platform() -> io::Result<()> {
+        #[cfg(target_os = "macos")]
+        {
+            Err(io::Error::new(io::ErrorKind::Unsupported, UNSUPPORTED_PLATFORM_MESSAGE))
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            Ok(())
+        }
     }
 }
 
@@ -136,12 +164,13 @@ fn execute_script(script_path: &Path, region: &str) -> io::Result<Output> {
     cmd.output()
 }
 
-/// Strip `LD_*` loader vars so they can't inject a shared library into the
-/// root-run install script or its sub-processes. Mirrors `Script::execute_async`.
+/// Strip the dynamic-loader vars (`LD_*` on Linux, `DYLD_*` on macOS) so they
+/// can't inject a shared library into the root-run install script or its
+/// sub-processes. Mirrors `Script::execute_async`.
 /// Call after any `.env()` mutation so the removal is unconditional.
 fn strip_dynamic_loader_vars(cmd: &mut Command) {
     #[cfg(unix)]
-    for var in ["LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT"] {
+    for var in crate::system::DYNAMIC_LOADER_ENV_VARS {
         cmd.env_remove(var);
     }
     #[cfg(not(unix))]
@@ -259,6 +288,24 @@ mod tests {
         assert!(debug.contains("us-east-1"));
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn check_platform_refuses_macos_before_any_network_use() {
+        let err = UpdateAgentCommand::check_platform().unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::Unsupported);
+        assert!(err.to_string().contains("not supported on macOS"));
+        // execute() must return the same refusal even with no S3 client.
+        let cmd = UpdateAgentCommand::new("us-east-1".into(), None);
+        assert_eq!(cmd.execute().unwrap_err().kind(), io::ErrorKind::Unsupported);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn check_platform_allows_non_macos() {
+        assert!(UpdateAgentCommand::check_platform().is_ok());
+    }
+
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn execute_without_s3_client_errors() {
         let cmd = UpdateAgentCommand::new("us-east-1".into(), None);
@@ -355,6 +402,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn strip_dynamic_loader_vars_removes_loader_env_from_child() {
+        use crate::system::DYNAMIC_LOADER_ENV_VARS;
         use std::os::unix::fs::OpenOptionsExt;
         let tmp = tempfile::tempdir().unwrap();
         let script = tmp.path().join("install");
@@ -366,30 +414,37 @@ mod tests {
             .mode(0o600)
             .open(&script)
             .unwrap();
-        // Report the loader vars the script sees; all must be empty.
-        writeln!(
-            f,
-            "#!/bin/sh\nprintf '[%s][%s][%s]' \
-             \"$LD_PRELOAD\" \"$LD_LIBRARY_PATH\" \"$LD_AUDIT\" > \"{}\"",
-            marker.display()
-        )
-        .unwrap();
+        // Print every platform loader var; all must be empty.
+        let refs: Vec<String> = DYNAMIC_LOADER_ENV_VARS.iter().map(|v| format!("[${v}]")).collect();
+        writeln!(f, "#!/bin/sh\nprintf '%s' \"{}\" > \"{}\"", refs.join(""), marker.display())
+            .unwrap();
         drop(f);
 
         // Seed the loader vars directly on the Command (simulating inheritance
         // from the agent env) without mutating the test process's own env —
         // the crate forbids unsafe, so std::env::set_var is unavailable.
         let mut cmd = Command::new(SHELL);
-        cmd.arg(&script)
-            .env("LD_PRELOAD", "/tmp/evil.so")
-            .env("LD_LIBRARY_PATH", "/tmp/evil")
-            .env("LD_AUDIT", "/tmp/audit.so");
+        cmd.arg(&script);
+        for var in DYNAMIC_LOADER_ENV_VARS {
+            cmd.env(var, "/tmp/evil");
+        }
 
         strip_dynamic_loader_vars(&mut cmd);
 
+        // `env_remove` shows as `None` in `get_envs()`. This is the check that
+        // holds on macOS, where SIP scrubs DYLD_* before /bin/sh could see them.
+        for var in DYNAMIC_LOADER_ENV_VARS {
+            let entry = cmd.get_envs().find(|(k, _)| *k == std::ffi::OsStr::new(var));
+            assert!(
+                matches!(entry, Some((_, None))),
+                "{var} must be marked removed on the Command, got {entry:?}"
+            );
+        }
+
         let output = cmd.output().unwrap();
         assert!(output.status.success());
-        assert_eq!(std::fs::read_to_string(&marker).unwrap(), "[][][]");
+        let expected = "[]".repeat(DYNAMIC_LOADER_ENV_VARS.len());
+        assert_eq!(std::fs::read_to_string(&marker).unwrap(), expected);
     }
 
     #[cfg(unix)]

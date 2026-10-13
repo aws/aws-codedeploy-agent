@@ -34,6 +34,11 @@ pub enum ParseError {
     InvalidTimeout,
 
     #[error(
+        "The deployment failed because the runas value ({0}) in the application specification file is not a valid user name. The name must not be empty, must not start with '-', and must not contain whitespace or control characters. Update the value, and then try again."
+    )]
+    InvalidRunas(String),
+
+    #[error(
         "The deployment failed because the application specification file specifies a destination file, but no source file. Update the files section of the AppSpec file, and then try again."
     )]
     MissingSource,
@@ -267,6 +272,7 @@ mod tests {
             ParseError::InvalidFileExistsBehavior("bad".to_string()),
             ParseError::EmptyScriptLocation,
             ParseError::InvalidTimeout,
+            ParseError::InvalidRunas("-c".to_string()),
             ParseError::MissingSource,
             ParseError::MissingDestination("file".to_string()),
             ParseError::PermissionsOnWindows,
