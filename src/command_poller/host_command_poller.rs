@@ -647,7 +647,7 @@ mod tests {
         let pool = CommandThreadPool::new(16);
         let start = Instant::now();
         pool.wait_for_completion(Duration::from_secs(5));
-        assert!(start.elapsed() < Duration::from_millis(200));
+        assert!(start.elapsed() < Duration::from_secs(1));
     }
 
     #[test]

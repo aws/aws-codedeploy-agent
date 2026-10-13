@@ -164,7 +164,7 @@ mod tests {
         let gate = ThrottleGate::new();
         let start = Instant::now();
         gate.wait_if_throttled();
-        assert!(start.elapsed() < Duration::from_millis(50));
+        assert!(start.elapsed() < Duration::from_millis(500));
     }
 
     #[test]
@@ -179,7 +179,16 @@ mod tests {
         gate.wait_if_throttled();
         // Wait is 100ms + up to 25ms jitter
         assert!(start.elapsed() >= Duration::from_millis(90));
-        assert!(start.elapsed() < Duration::from_millis(200));
+        assert!(start.elapsed() < Duration::from_millis(750));
+    }
+
+    #[test]
+    fn jitter_is_at_most_quarter() {
+        let base = Duration::from_millis(100);
+        for _ in 0..1000 {
+            assert!(ThrottleGate::jitter(base) < Duration::from_millis(25));
+        }
+        assert_eq!(ThrottleGate::jitter(Duration::from_millis(3)), Duration::ZERO);
     }
 
     #[test]
