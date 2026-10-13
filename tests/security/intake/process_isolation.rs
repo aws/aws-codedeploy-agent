@@ -358,16 +358,33 @@ fn script_path_does_not_contain_dangerous_directories() {
     let log =
         Arc::new(Mutex::new(ScriptRunLog::open(&dir.path().join("log")).expect("create log")));
 
-    let script = Script::with_env_policy(
-        script_path,
-        None,
-        false,
-        &HashMap::<String, String>::new(),
-        HARDENED,
-        log,
-    );
+    let make_script = || {
+        Script::with_env_policy(
+            script_path.clone(),
+            None,
+            false,
+            &HashMap::<String, String>::new(),
+            HARDENED,
+            log.clone(),
+        )
+    };
 
-    let exit_code = script.execute(Duration::from_secs(5)).expect("execute script");
+    // Retry exec on ETXTBSY: when tests run in parallel, a child forked by
+    // another test thread can briefly inherit this just-written script's
+    // write descriptor, making exec fail with "Text file busy". The window
+    // is microseconds wide; a bounded retry removes the flake without
+    // masking real failures.
+    let mut attempts = 0;
+    let exit_code = loop {
+        match make_script().execute(Duration::from_secs(5)) {
+            Ok(code) => break code,
+            Err(e) if attempts < 5 && e.contains("Text file busy") => {
+                attempts += 1;
+                std::thread::sleep(Duration::from_millis(50));
+            },
+            Err(e) => panic!("execute script: {e:?}"),
+        }
+    };
     assert_eq!(exit_code, 0);
 
     let path_value = std::fs::read_to_string(&output_file)
