@@ -3,7 +3,7 @@ mod agent_logger;
 mod deployment_logger;
 
 pub use agent_logger::LogGuard;
-pub use deployment_logger::DeploymentLogger;
+pub use deployment_logger::{DeploymentLogSink, DeploymentLogger, SharedDeploymentLog};
 
 use std::path::PathBuf;
 

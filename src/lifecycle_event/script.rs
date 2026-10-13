@@ -410,10 +410,12 @@ async fn stream_to_log(
     let mut buf: Vec<u8> = Vec::with_capacity(MAX_LOG_LINE_BYTES);
     let mut byte = [0u8; 1];
 
-    let flush = |log: &Arc<Mutex<ScriptRunLog>>, buf: &mut Vec<u8>| {
-        if buf.is_empty() {
-            return;
-        }
+    // `write_line` records `buf` as one line. A blank output line is logged
+    // as a bare `[stdout]` record. A newline that
+    // ends a line already flushed at the chunk cap is not a blank line, so
+    // `chunk_flushed` suppresses that record. At EOF an empty buffer is not a
+    // line either.
+    let write_line = |log: &Arc<Mutex<ScriptRunLog>>, buf: &mut Vec<u8>| {
         let line = String::from_utf8_lossy(buf);
         if let Ok(mut log) = log.lock() {
             log.write_line(prefix, &line);
@@ -421,25 +423,32 @@ async fn stream_to_log(
         buf.clear();
     };
 
+    let mut chunk_flushed = false;
     loop {
         match reader.read(&mut byte).await {
             // EOF (Ok(0)) or a read error: stop draining this stream.
             Ok(0) | Err(_) => break,
             Ok(_) => {
                 if byte[0] == b'\n' {
-                    flush(log, &mut buf);
+                    if !(buf.is_empty() && chunk_flushed) {
+                        write_line(log, &mut buf);
+                    }
+                    chunk_flushed = false;
                 } else {
                     buf.push(byte[0]);
                     if buf.len() >= MAX_LOG_LINE_BYTES {
                         // Newline-free run hit the chunk cap — flush so rotation
                         // is evaluated and memory stays bounded.
-                        flush(log, &mut buf);
+                        write_line(log, &mut buf);
+                        chunk_flushed = true;
                     }
                 }
             },
         }
     }
-    flush(log, &mut buf); // trailing partial line (no final newline)
+    if !buf.is_empty() {
+        write_line(log, &mut buf); // trailing partial line (no final newline)
+    }
 }
 
 /// Log process exit diagnostics at debug level.
@@ -475,6 +484,15 @@ mod tests {
 
     // Own the parent dir: ScriptRunLog::open chmods it, which is EPERM on
     // macOS's root-owned $TMPDIR.
+    /// `scripts.log` records with the `YYYY-MM-DD HH:MM:SS ` prefix removed.
+    fn logged_records(dir: &TempDir) -> Vec<String> {
+        std::fs::read_to_string(dir.path().join("scripts.log"))
+            .unwrap()
+            .lines()
+            .map(|l| l.get(20..).unwrap_or_default().to_string())
+            .collect()
+    }
+
     fn sample_log() -> (TempDir, Arc<Mutex<ScriptRunLog>>) {
         let dir = TempDir::new().unwrap();
         let log =
@@ -523,6 +541,53 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert!(entries[0].contains("first line"));
         assert!(entries[1].contains("second line"));
+    }
+
+    #[tokio::test]
+    async fn stream_to_log_keeps_blank_lines() {
+        let (_dir, log) = sample_log();
+        let input = b"before\n\nafter\n".to_vec();
+
+        stream_to_log(Some(std::io::Cursor::new(input)), &log, "[stdout]").await;
+
+        let entries = log.lock().unwrap().entries();
+        assert_eq!(entries.len(), 3, "blank line must be its own record: {entries:?}");
+        assert!(entries[1].ends_with(" [stdout]\n"), "got {:?}", entries[1]);
+    }
+
+    #[tokio::test]
+    async fn stream_to_log_adds_no_blank_record_after_line_at_exact_chunk_cap() {
+        let (dir, log) = sample_log();
+        let mut input = vec![b'x'; MAX_LOG_LINE_BYTES];
+        input.extend_from_slice(b"\nnext\n");
+
+        stream_to_log(Some(std::io::Cursor::new(input)), &log, "[stdout]").await;
+
+        let records = logged_records(&dir);
+        assert_eq!(records.len(), 2, "cap-length line + next, no phantom blank record");
+        assert_eq!(records[1], "[stdout]next");
+    }
+
+    #[tokio::test]
+    async fn stream_to_log_keeps_blank_line_after_line_at_exact_chunk_cap() {
+        let (dir, log) = sample_log();
+        let mut input = vec![b'x'; MAX_LOG_LINE_BYTES];
+        input.extend_from_slice(b"\n\nnext\n");
+
+        stream_to_log(Some(std::io::Cursor::new(input)), &log, "[stdout]").await;
+
+        let records = logged_records(&dir);
+        assert_eq!(records.len(), 3, "cap-length line, real blank line, next");
+        assert_eq!(records[1], "[stdout]");
+    }
+
+    #[tokio::test]
+    async fn stream_to_log_writes_nothing_for_empty_output() {
+        let (_dir, log) = sample_log();
+
+        stream_to_log(Some(std::io::Cursor::new(Vec::new())), &log, "[stdout]").await;
+
+        assert!(log.lock().unwrap().entries().is_empty());
     }
 
     // --- build_command ---

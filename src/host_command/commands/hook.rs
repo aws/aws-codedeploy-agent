@@ -6,7 +6,7 @@
 use crate::deployment_specification::types::DeploymentSpec;
 use crate::host_command::DeploymentArchives;
 use crate::lifecycle_event::{HookEnvPolicy, LifecycleEventExecutor, ScriptError};
-use crate::logging::{DeploymentLogger, LogConfig};
+use crate::logging::{LogConfig, SharedDeploymentLog};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -18,11 +18,12 @@ pub type HookMapping = HashMap<String, Vec<String>>;
 pub struct HookCommand {
     archives: Arc<DeploymentArchives>,
     hook_mapping: HookMapping,
-    /// When set, per-deployment lifecycle/script log lines are mirrored to
+    /// When set, every lifecycle/script log line is also written to
     /// `<root_dir>/deployment-logs/<program_name>-deployments.log` (the
     /// documented `CodeDeploy` deployment log). `None` disables it
-    /// (`enable_deployments_log: false`, and the default in tests).
-    deployment_log_config: Option<LogConfig>,
+    /// (`enable_deployments_log: false`, and the default in tests). One handle
+    /// is shared by all deployments.
+    deployment_log: Option<SharedDeploymentLog>,
     /// Opt-in hook-env hardening, from `strip_loader_env_in_hooks` /
     /// `restrict_hook_env_to_allowlist`. Default (all-`false`) = full inheritance.
     env_policy: HookEnvPolicy,
@@ -42,7 +43,7 @@ impl HookCommand {
         Self {
             archives,
             hook_mapping,
-            deployment_log_config: None,
+            deployment_log: None,
             env_policy: HookEnvPolicy::default(),
             reject_path_traversal: false,
             restrict_log_permissions: false,
@@ -80,7 +81,7 @@ impl HookCommand {
     /// `LogConfig`'s `root_dir`/`program_name` determine the log location.
     #[must_use]
     pub fn with_deployment_log_config(mut self, config: LogConfig) -> Self {
-        self.deployment_log_config = Some(config);
+        self.deployment_log = Some(SharedDeploymentLog::new(config));
         self
     }
 
@@ -122,54 +123,25 @@ impl HookCommand {
             "Executing hook command"
         );
 
-        // Open the per-deployment log up front (best-effort) so the
+        // Open the deployment log up front (best-effort) so the
         // `deployment-logs/` directory and `…-deployments.log` file exist for
         // the deployment even before the first line is written. A failure here
         // must not fail the deployment — it's a diagnostic side-channel.
-        let mut deployment_log =
-            self.deployment_log_config
-                .as_ref()
-                .and_then(|cfg| match DeploymentLogger::new(cfg) {
-                    Ok(logger) => Some(logger),
-                    Err(e) => {
-                        warn!("Could not open deployment log: {e}");
-                        None
-                    },
-                });
+        if let Some(log) = &self.deployment_log
+            && let Err(e) = log.ensure_open()
+        {
+            warn!("Could not open deployment log: {e}");
+        }
 
+        // Lines reach the deployment log as each one is written to
+        // `scripts.log`, so a failing event needs no extra writes here and
+        // the deployment log gets no failure-summary line.
         let mut all_logs = Vec::new();
         for event_name in events {
             let executor = self.create_executor(event_name, spec)?;
-            // Run the event; on script failure still flush whatever was logged
-            // to the deployment log before propagating the error.
-            let result = executor.execute();
-            if let Some(logger) = deployment_log.as_mut() {
-                match &result {
-                    // Success: the returned lines already include the
-                    // "LifecycleEvent - {event}" header, so just mirror them.
-                    Ok(logs) => Self::mirror_to_deployment_log(logger, logs),
-                    // Failure: `execute()` returns no lines, so the header is
-                    // not in `result`. Write it before the failure summary so
-                    // the deployment log keeps context for the event that failed.
-                    Err(e) => {
-                        let _ = logger.log(&format!("LifecycleEvent - {event_name}"));
-                        let _ = logger
-                            .log(&format!("{command_name}/{event_name} failed: {}", e.message));
-                    },
-                }
-            }
-            let logs = result?;
-            all_logs.extend(logs);
+            all_logs.extend(executor.execute()?);
         }
         Ok(all_logs)
-    }
-
-    /// Mirror a lifecycle event's collected log lines to the per-deployment log.
-    /// Best-effort: write failures are ignored (the log is diagnostic only).
-    fn mirror_to_deployment_log(logger: &mut DeploymentLogger, lines: &[String]) {
-        for line in lines {
-            let _ = logger.log(line);
-        }
     }
 
     /// Check if a command has any lifecycle events mapped.
@@ -248,6 +220,9 @@ impl HookCommand {
                 .with_env_policy(self.env_policy)
                 .with_reject_path_traversal(self.reject_path_traversal)
                 .with_restrict_log_permissions(self.restrict_log_permissions)
+                .with_deployment_log(
+                    self.deployment_log.as_ref().map(|log| log.for_deployment(&spec.deployment_id)),
+                )
         })
     }
 }
@@ -463,43 +438,105 @@ mod tests {
         }
     }
 
-    /// When the deployment log is enabled, executing a hook creates
-    /// `deployment-logs/<program_name>-deployments.log` and writes the event's
-    /// log lines to it.
+    /// Write an `AfterInstall` hook running `script_body` into the archive of
+    /// `deployment_id`, and return the `HookCommand` spec for it.
     #[cfg(unix)]
-    #[test]
-    fn deployment_log_created_and_written_when_enabled() {
+    fn stage_after_install(
+        archives: &DeploymentArchives,
+        deployment_id: &str,
+        script_body: &str,
+    ) -> DeploymentSpec {
         use std::os::unix::fs::PermissionsExt;
 
-        let dir = TempDir::new().unwrap();
-        let archives = test_archives(&dir);
-        // root_dir for the deployment log = the executor's deploy dir parent;
-        // point LogConfig.root_dir at the deployments root so we can assert.
-        let root = dir.path().join("deployments");
-        let cmd = HookCommand::new(archives.clone(), test_mapping())
-            .with_deployment_log_config(log_config_for(&root));
-
-        // A real AfterInstall hook that succeeds, so execute() returns log lines.
-        let archive_dir = archives.archive_dir("dg-1", "d-123");
+        let archive_dir = archives.archive_dir("dg-1", deployment_id);
         let scripts = archive_dir.join("scripts");
         fs::create_dir_all(&scripts).unwrap();
         fs::write(
             archive_dir.join("appspec.yml"),
-            "version: 0.0\nos: linux\nhooks:\n  AfterInstall:\n    - location: scripts/ok.sh\n      timeout: 10\n",
+            "version: 0.0\nos: linux\nhooks:\n  AfterInstall:\n    - location: scripts/run.sh\n      timeout: 30\n",
         )
         .unwrap();
-        fs::write(scripts.join("ok.sh"), "#!/bin/sh\necho hi\n").unwrap();
-        fs::set_permissions(scripts.join("ok.sh"), fs::Permissions::from_mode(0o755)).unwrap();
+        fs::write(scripts.join("run.sh"), format!("#!/bin/sh\n{script_body}")).unwrap();
+        fs::set_permissions(scripts.join("run.sh"), fs::Permissions::from_mode(0o755)).unwrap();
+        DeploymentSpec { deployment_id: deployment_id.into(), ..test_spec() }
+    }
 
-        cmd.execute("AfterInstall", &test_spec()).unwrap();
+    /// Lines of the deployment log under `root`, with the
+    /// `[YYYY-MM-DD HH:MM:SS.mmm] ` prefix checked and removed.
+    #[cfg(unix)]
+    fn deployment_log_messages(root: &std::path::Path) -> Vec<String> {
+        let body =
+            fs::read_to_string(root.join("deployment-logs/codedeploy-agent-deployments.log"))
+                .unwrap();
+        body.lines()
+            .map(|line| {
+                let (ts, msg) = line
+                    .strip_prefix('[')
+                    .and_then(|l| l.split_once("] "))
+                    .unwrap_or_else(|| panic!("line lacks a [timestamp] prefix: {line:?}"));
+                assert!(
+                    chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S%.3f").is_ok(),
+                    "bad timestamp {ts:?} in {line:?}"
+                );
+                msg.to_string()
+            })
+            .collect()
+    }
 
-        let log_path = root.join("deployment-logs/codedeploy-agent-deployments.log");
-        assert!(log_path.exists(), "deployment log must be created at {}", log_path.display());
-        let body = fs::read_to_string(&log_path).unwrap();
-        assert!(
-            body.contains("LifecycleEvent - AfterInstall"),
-            "deployment log must contain the event's lines, got: {body:?}"
+    /// Each line is written as
+    /// `[<ts>] [<deployment_id>]<message stripped>`, once, with no second
+    /// timestamp and no blank line, and stdout/stderr are included.
+    #[cfg(unix)]
+    #[test]
+    fn deployment_log_uses_one_record_per_script_line() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        let root = dir.path().join("deployments");
+        let cmd = HookCommand::new(archives.clone(), test_mapping())
+            .with_deployment_log_config(log_config_for(&root));
+        let spec = stage_after_install(&archives, "d-123", "echo hi\necho oops >&2\n");
+
+        cmd.execute("AfterInstall", &spec).unwrap();
+
+        let mut messages = deployment_log_messages(&root);
+        // stdout and stderr are read by separate tasks, so their relative
+        // order is not deterministic; sort the output lines.
+        messages[2..].sort();
+        assert_eq!(
+            messages,
+            vec![
+                "[d-123]LifecycleEvent - AfterInstall",
+                "[d-123]Script - scripts/run.sh",
+                "[d-123][stderr]oops",
+                "[d-123][stdout]hi",
+            ]
         );
+    }
+
+    /// The deployment log must hold all script output, not the 2048-byte
+    /// diagnostic tail that is sent to the service.
+    #[cfg(unix)]
+    #[test]
+    fn deployment_log_keeps_output_beyond_diagnostic_tail() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        let root = dir.path().join("deployments");
+        let cmd = HookCommand::new(archives.clone(), test_mapping())
+            .with_deployment_log_config(log_config_for(&root));
+        // 200 lines of ~40 bytes is well past the 2048-byte tail.
+        let spec = stage_after_install(
+            &archives,
+            "d-123",
+            "i=0; while [ $i -lt 200 ]; do echo \"line $i padded to be longer\"; i=$((i+1)); done\n",
+        );
+
+        cmd.execute("AfterInstall", &spec).unwrap();
+
+        let messages = deployment_log_messages(&root);
+        assert_eq!(messages.len(), 202, "header + script line + 200 output lines");
+        assert_eq!(messages[0], "[d-123]LifecycleEvent - AfterInstall");
+        assert_eq!(messages[2], "[d-123][stdout]line 0 padded to be longer");
+        assert_eq!(messages[201], "[d-123][stdout]line 199 padded to be longer");
     }
 
     /// When the deployment log is NOT configured (the default, i.e.
@@ -532,47 +569,64 @@ mod tests {
         );
     }
 
-    /// A failing script with the deployment log enabled must still record a
-    /// failure line in the deployment log and then propagate the error.
-    /// Exercises the `Err(e) => logger.log(...)` arm in `execute`.
+    /// A failing script's output must be in the deployment log, and no
+    /// failure-summary line is added: the deployment log holds only script
+    /// log lines.
     #[cfg(unix)]
     #[test]
-    fn deployment_log_records_failure_line() {
-        use std::os::unix::fs::PermissionsExt;
-
+    fn deployment_log_keeps_failing_script_output_without_summary_line() {
         let dir = TempDir::new().unwrap();
         let archives = test_archives(&dir);
         let root = dir.path().join("deployments");
         let cmd = HookCommand::new(archives.clone(), test_mapping())
             .with_deployment_log_config(log_config_for(&root));
+        let spec = stage_after_install(&archives, "d-123", "echo before-failure\nexit 1\n");
 
-        let archive_dir = archives.archive_dir("dg-1", "d-123");
-        let scripts = archive_dir.join("scripts");
-        fs::create_dir_all(&scripts).unwrap();
-        fs::write(
-            archive_dir.join("appspec.yml"),
-            "version: 0.0\nos: linux\nhooks:\n  AfterInstall:\n    - location: scripts/fail.sh\n      timeout: 10\n",
-        )
-        .unwrap();
-        fs::write(scripts.join("fail.sh"), "#!/bin/sh\nexit 1\n").unwrap();
-        fs::set_permissions(scripts.join("fail.sh"), fs::Permissions::from_mode(0o755)).unwrap();
-
-        let result = cmd.execute("AfterInstall", &test_spec());
+        let result = cmd.execute("AfterInstall", &spec);
         assert!(result.is_err(), "failing script must propagate an error");
 
-        let log_path = root.join("deployment-logs/codedeploy-agent-deployments.log");
-        assert!(log_path.exists(), "deployment log must exist even on failure");
-        let body = fs::read_to_string(&log_path).unwrap();
-        assert!(
-            body.contains("AfterInstall/AfterInstall failed:"),
-            "deployment log must record the failure, got: {body:?}"
+        assert_eq!(
+            deployment_log_messages(&root),
+            vec![
+                "[d-123]LifecycleEvent - AfterInstall",
+                "[d-123]Script - scripts/run.sh",
+                "[d-123][stdout]before-failure",
+            ]
         );
-        // The event header must precede the failure summary so the log keeps
-        // context for which event failed.
-        assert!(
-            body.contains("LifecycleEvent - AfterInstall"),
-            "deployment log must record the event header on failure, got: {body:?}"
-        );
+    }
+
+    /// Concurrent deployments share one deployment log handle: every record stays whole and is tagged with
+    /// its own deployment ID.
+    #[cfg(unix)]
+    #[test]
+    fn concurrent_deployments_share_one_deployment_log() {
+        let dir = TempDir::new().unwrap();
+        let archives = test_archives(&dir);
+        let root = dir.path().join("deployments");
+        let cmd = HookCommand::new(archives.clone(), test_mapping())
+            .with_deployment_log_config(log_config_for(&root));
+        let script = "i=0; while [ $i -lt 50 ]; do echo \"out $i\"; i=$((i+1)); done\n";
+        let specs: Vec<_> = ["d-aaa", "d-bbb"]
+            .iter()
+            .map(|id| stage_after_install(&archives, id, script))
+            .collect();
+
+        std::thread::scope(|scope| {
+            for spec in &specs {
+                let cmd = &cmd;
+                scope.spawn(move || cmd.execute("AfterInstall", spec).unwrap());
+            }
+        });
+
+        let messages = deployment_log_messages(&root);
+        for id in ["d-aaa", "d-bbb"] {
+            let mine: Vec<_> =
+                messages.iter().filter(|m| m.starts_with(&format!("[{id}]"))).collect();
+            assert_eq!(mine.len(), 52, "{id}: header + script line + 50 output lines");
+            assert_eq!(*mine[0], format!("[{id}]LifecycleEvent - AfterInstall"));
+            assert_eq!(*mine[51], format!("[{id}][stdout]out 49"));
+        }
+        assert_eq!(messages.len(), 104, "no stray or split records: {messages:?}");
     }
 
     /// If the deployment log can't be opened (its dir can't be created), the

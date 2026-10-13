@@ -11,6 +11,7 @@
 //! from filling the disk.
 
 use super::bounded_fifo_vec::BoundedFifoVec;
+use crate::logging::DeploymentLogSink;
 use chrono::Local;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -43,6 +44,8 @@ pub struct ScriptRunLog {
     buffer: BoundedFifoVec,
     /// Mode policy for the file (and rotation reopens); see [`log_file_mode`].
     restrict_permissions: bool,
+    /// When set, every line is also written to the shared deployment log.
+    deployment_log: Option<DeploymentLogSink>,
 }
 
 impl ScriptRunLog {
@@ -73,6 +76,7 @@ impl ScriptRunLog {
             file: Some(file),
             buffer: BoundedFifoVec::new(),
             restrict_permissions,
+            deployment_log: None,
         })
     }
 
@@ -85,7 +89,16 @@ impl ScriptRunLog {
             file: None,
             buffer: BoundedFifoVec::new(),
             restrict_permissions: false,
+            deployment_log: None,
         }
+    }
+
+    /// Also write every line to the deployment log
+    /// (`deployment-logs/<program_name>-deployments.log`). `None` disables it.
+    #[must_use]
+    pub fn with_deployment_log(mut self, sink: Option<DeploymentLogSink>) -> Self {
+        self.deployment_log = sink;
+        self
     }
 
     /// Write a single line to both the file and the bounded buffer.
@@ -98,8 +111,16 @@ impl ScriptRunLog {
     /// ANSI escape sequences are stripped from `line` before formatting so
     /// hostile script output cannot forge log entries via cursor positioning,
     /// screen clearing, or color codes.
+    ///
+    /// With a deployment log attached, the line is written there at the same
+    /// time, as `[<deployment_id>]<prefix><line>`, under one lock so both
+    /// files see lines in the same order. The deployment log gets the same
+    /// ANSI-stripped line.
     pub fn write_line(&mut self, prefix: &str, line: &str) {
         let line = strip_ansi_escapes::strip_str(line);
+        if let Some(sink) = &self.deployment_log {
+            sink.log(&format!("{prefix}{line}"));
+        }
         let ts = Local::now().format("%Y-%m-%d %H:%M:%S");
         let formatted = format!("{ts} {prefix}{line}\n");
 
@@ -311,6 +332,27 @@ mod tests {
 
         let entries = log.into_entries();
         assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn write_line_sends_ansi_stripped_line_to_deployment_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = crate::logging::LogConfig {
+            root_dir: dir.path().to_path_buf(),
+            ..crate::logging::LogConfig::default()
+        };
+        let shared = crate::logging::SharedDeploymentLog::new(config);
+        shared.ensure_open().unwrap();
+        let mut log =
+            ScriptRunLog::in_memory().with_deployment_log(Some(shared.for_deployment("d-1")));
+
+        log.write_line("[stdout]", "\x1b[31mred\x1b[0m");
+
+        assert!(log.entries()[0].ends_with(" [stdout]red\n"));
+        let body =
+            fs::read_to_string(dir.path().join("deployment-logs/codedeploy-agent-deployments.log"))
+                .unwrap();
+        assert!(body.ends_with("] [d-1][stdout]red\n"), "got {body:?}");
     }
 
     #[test]
