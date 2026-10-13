@@ -1,3 +1,38 @@
+## 2.1.2
+
+### Added
+
+* **macOS support** on EC2 Mac, macOS 15 and later (aarch64 and x86_64). The agent ships as a `.pkg` and runs as a launchd LaunchDaemon. Deployments use AppSpec `os: linux`. AppSpec `permissions` entries that set `acls` or `context` are rejected before the install runs; `owner`, `group` and `mode` apply. Agent self-update is not available on macOS yet.
+* **Optional parallel S3 bundle downloads.** Setting `s3_download_max_concurrency` above 1 (max 64) downloads a bundle in parallel HTTP range requests of `s3_download_chunk_size` bytes (default 8MiB, minimum 64KiB). Every range is pinned to the object's ETag, or to its version when one is set, so an object replaced mid-download fails the deployment. The default of 1 keeps the single-request download.
+
+### Changed
+
+* **The deployment log is written as script output is produced.** Each `scripts.log` line is also written to the deployment log as `[<timestamp>] [<deployment_id>]<message>`, replacing the 2048-byte tail copied after each lifecycle event. Older output is no longer lost, the failure-summary line is removed, and blank script output lines are logged as a bare `[stdout]` record in both files.
+
+### Fixed
+
+* **Command endpoints in the European Sovereign Cloud and ISO partitions.** Hosts in `eusc-*`, `us-iso-*`, `us-isob-*`, `eu-isoe-*` and `us-isof-*` regions resolved an `amazonaws.com` endpoint that does not exist. Each partition now uses its own DNS suffix.
+
+### Security
+
+* **(opt-in)** On macOS, `strip_loader_env_in_hooks` strips the `DYLD_*` loader variables from hook environments.
+
+## 2.1.0
+
+### Added
+
+* **`RESTART` deployment mode.** The agent installs from the copy of the revision from the deployment group's last successful deployment already on the instance. If that copy is missing or incomplete, the agent downloads the revision.
+
+### Security
+
+* A deployment whose AppSpec file path resolves outside the application revision directory is rejected. Nested paths such as `configs/appspec.yml` are still supported.
+
+## 2.0.1
+
+### Fixed
+
+* **Windows AppSpec paths with leading separators.** A `files.source` or `hooks.location` beginning with `\` (including the bare `\` form) or `/` resolved against the drive root instead of the deployment archive, failing Install events with access-denied errors. Leading separators are now stripped.
+
 ## 2.0.0
 
 Version 2.0.0 replaces the Ruby runtime with a single statically linked binary in Rust, completely removing the dependency on a Ruby runtime.
