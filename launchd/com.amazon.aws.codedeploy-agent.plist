@@ -34,8 +34,9 @@
                           the agent's logs but not this file.
 
   Stop is `launchctl bootout` (SIGTERM to the agent; daemon/signal.rs). No
-  KillMode=control-group equivalent: launchd SIGKILLs the job's process group
-  when the master exits (covers workers); hooks run in their own group and
+  KillMode=control-group equivalent: launchd treats the job as stopped once
+  the master exits, so the worker watches the master's pid (kqueue NOTE_EXIT,
+  daemon/worker.rs) and exits with it. Hooks run in their own group and
   are orphaned only if the master is SIGKILLed at ExitTimeOut mid-hook.
 -->
 <plist version="1.0">

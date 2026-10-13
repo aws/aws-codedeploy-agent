@@ -329,13 +329,138 @@ pub fn bind_lifetime_to_parent() {
     }
 }
 
-/// No-op on non-Linux: `PR_SET_PDEATHSIG` is Linux-specific.
-#[cfg(not(target_os = "linux"))]
+/// macOS counterpart of the Linux `PR_SET_PDEATHSIG` binding. macOS has no
+/// parent-death signal, and launchd has no control group that holds a stop open
+/// until every process exits: once the master is gone launchd considers the job
+/// stopped, and a restart starts a second master and worker next to a worker
+/// that is still running.
+///
+/// Watch the master's pid with kqueue (`EVFILT_PROC` / `NOTE_EXIT`) on a
+/// background thread and exit the moment it fires, however the master died.
+/// The window between `getppid()` and registering the watch is closed the same
+/// way as on Linux: `ESRCH` from the registration, or a parent that is no
+/// longer the one we registered, means the master is already gone.
+#[cfg(target_os = "macos")]
+pub fn bind_lifetime_to_parent() {
+    use nix::errno::Errno;
+    use nix::unistd::{Pid, getppid};
+
+    let parent = getppid();
+    if parent == Pid::from_raw(1) {
+        info!("Master already exited before worker startup; exiting to avoid orphan");
+        process::exit(0);
+    }
+    let kq = match watch_process_exit(parent) {
+        Ok(kq) => kq,
+        Err(Errno::ESRCH) => {
+            info!("Master already exited before worker startup; exiting to avoid orphan");
+            process::exit(0);
+        },
+        Err(e) => {
+            error!("Worker failed to watch master pid {parent}; master death may orphan it: {e}");
+            return;
+        },
+    };
+    if getppid() != parent {
+        info!("Master already exited before worker startup; exiting to avoid orphan");
+        process::exit(0);
+    }
+    let spawned = std::thread::Builder::new().name("master-watch".into()).spawn(move || {
+        match wait_for_process_exit(&kq) {
+            Ok(()) => {
+                error!("Master (pid {parent}) exited; worker exiting to avoid running orphaned");
+                // Give the non-blocking log writer a moment to flush that line;
+                // process::exit runs no destructors.
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                process::exit(1);
+            },
+            Err(e) => {
+                error!("Watch on master pid {parent} failed; master death may orphan it: {e}");
+            },
+        }
+    });
+    if let Err(e) = spawned {
+        error!("Worker failed to start the master watch thread; master death may orphan it: {e}");
+    }
+}
+
+/// Register a one-shot kqueue watch for `pid`'s exit. Returns `ESRCH` when the
+/// process no longer exists.
+#[cfg(target_os = "macos")]
+fn watch_process_exit(pid: nix::unistd::Pid) -> nix::Result<nix::sys::event::Kqueue> {
+    use nix::sys::event::{EventFilter, EventFlag, FilterFlag, KEvent, Kqueue};
+
+    let ident = usize::try_from(pid.as_raw()).map_err(|_| nix::errno::Errno::EINVAL)?;
+    let kq = Kqueue::new()?;
+    let watch = KEvent::new(
+        ident,
+        EventFilter::EVFILT_PROC,
+        EventFlag::EV_ADD | EventFlag::EV_ONESHOT,
+        FilterFlag::NOTE_EXIT,
+        0,
+        0,
+    );
+    kq.kevent(&[watch], &mut [], None)?;
+    Ok(kq)
+}
+
+/// Block until the watch registered by [`watch_process_exit`] fires.
+#[cfg(target_os = "macos")]
+fn wait_for_process_exit(kq: &nix::sys::event::Kqueue) -> nix::Result<()> {
+    use nix::errno::Errno;
+    use nix::sys::event::{EventFilter, EventFlag, FilterFlag, KEvent};
+
+    let mut fired = [KEvent::new(
+        0,
+        EventFilter::EVFILT_PROC,
+        EventFlag::empty(),
+        FilterFlag::empty(),
+        0,
+        0,
+    )];
+    loop {
+        match kq.kevent(&[], &mut fired, None) {
+            Ok(0) | Err(Errno::EINTR) => {},
+            Ok(_) => return Ok(()),
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// No-op on other targets (Windows): neither mechanism above exists there.
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub fn bind_lifetime_to_parent() {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The kqueue watch the macOS worker puts on its master fires when the
+    /// watched process exits, so a worker cannot outlive its master.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn process_exit_watch_fires_when_watched_process_dies() {
+        let mut child = process::Command::new("sleep").arg("60").spawn().expect("spawn sleep");
+        let pid = nix::unistd::Pid::from_raw(i32::try_from(child.id()).expect("pid fits i32"));
+        let kq = watch_process_exit(pid).expect("register exit watch");
+
+        child.kill().expect("kill sleep");
+
+        assert_eq!(wait_for_process_exit(&kq), Ok(()));
+        child.wait().expect("reap sleep");
+    }
+
+    /// A master that is already gone is reported as `ESRCH`, so the worker
+    /// exits instead of waiting on a watch that can never fire.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn process_exit_watch_reports_esrch_for_a_gone_process() {
+        let mut child = process::Command::new("true").spawn().expect("spawn true");
+        let pid = nix::unistd::Pid::from_raw(i32::try_from(child.id()).expect("pid fits i32"));
+        child.wait().expect("reap true");
+
+        assert_eq!(watch_process_exit(pid).err(), Some(nix::errno::Errno::ESRCH));
+    }
 
     /// The worker must reset the umask to 0o022 so no-stored-mode customer files
     /// land at 0644.

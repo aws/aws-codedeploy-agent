@@ -603,6 +603,10 @@ fn run(command: &Command, config_file: Option<&Path>) {
                 eprintln!("Failed to register signal handlers: {e}");
                 process::exit(1);
             }
+            // Ensure this worker dies with the master, however the master
+            // dies (e.g. by SIGKILL, which runs no graceful shutdown), so it
+            // can't be orphaned: on Linux it would hold the systemd service
+            // cgroup open, on macOS it would run next to a restarted agent.
             worker::bind_lifetime_to_parent();
             worker::run(&shutdown, &config);
         },
