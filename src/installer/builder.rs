@@ -205,6 +205,14 @@ impl CommandBuilder {
         }
     }
 
+    /// Queue the mode, ACL, `SELinux` context and owner changes `permission`
+    /// asks for on `object`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InstallerError::DuplicatePermission`] if `object` already has
+    /// permissions queued, and [`InstallerError::PermissionFieldNotSupported`]
+    /// if `permission` uses a field this platform cannot apply.
     pub fn set_permissions(&mut self, object: &Path, permission: &Permission) -> Result<()> {
         debug!("Setting permissions on {}", object.display());
 
