@@ -721,6 +721,9 @@ fn run_update(config: &AgentConfig) {
         wire_log: config
             .log_aws_wire
             .then(|| (config.log_dir.clone(), config.program_name.clone())),
+        // Only fetches the small install script.
+        download_max_concurrency: 1,
+        download_chunk_size: config.s3_download_chunk_size,
         ..Default::default()
     };
     let s3_client = match S3Client::new(credentials, &s3_config) {
@@ -1098,6 +1101,8 @@ fn run_deploy_local_s3(
         wire_log: config
             .log_aws_wire
             .then(|| (config.log_dir.clone(), config.program_name.clone())),
+        download_max_concurrency: config.s3_download_max_concurrency,
+        download_chunk_size: config.s3_download_chunk_size,
         ..Default::default()
     };
     let s3_client = match S3Client::new(credentials, &s3_config) {

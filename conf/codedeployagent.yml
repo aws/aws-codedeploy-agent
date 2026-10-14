@@ -125,6 +125,15 @@
 # :archive_max_extraction_size: "4GiB"       # binary (powers of 1024)
 # :archive_max_extraction_size: "4GB"        # SI (powers of 1000)
 
+# Bundle download tuning (Amazon S3 revisions). By default the agent downloads
+# a bundle with a single GetObject.
+# s3_download_max_concurrency: parallel HTTP range requests in flight
+#   (default 1, max 64). Set above 1 to download in parallel ranges.
+# s3_download_chunk_size: bytes per request (default 8MiB, minimum 64KiB).
+#   Accepts bytes or strings like "16MB".
+# :s3_download_max_concurrency: 10
+# :s3_download_chunk_size: "8MiB"
+
 # Endpoints (leave empty for defaults)
 # :deploy_control_endpoint:
 # :s3_endpoint_override:

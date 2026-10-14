@@ -16,7 +16,7 @@ pub mod version_file;
 #[cfg(unix)]
 pub use env_ops::DYNAMIC_LOADER_ENV_VARS;
 pub use env_ops::{EnvOps, SystemEnvOps};
-pub use file_ops::{PlatformFileOperations, SystemFileOperations, ensure_executable};
+pub use file_ops::{PlatformFileOperations, SystemFileOperations, ensure_executable, write_all_at};
 #[cfg(target_os = "linux")]
 pub use linux_ops::{LinuxOps, SystemLinuxOps};
 pub use process_ops::kill_process_group;

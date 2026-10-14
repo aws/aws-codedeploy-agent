@@ -174,6 +174,8 @@ pub fn run(shutdown: &ShutdownFlag, config: &AgentConfig) {
         wire_log: config
             .log_aws_wire
             .then(|| (config.log_dir.clone(), config.program_name.clone())),
+        download_max_concurrency: config.s3_download_max_concurrency,
+        download_chunk_size: config.s3_download_chunk_size,
         ..Default::default()
     };
     let s3_client = match crate::aws_clients::s3_client::S3Client::new(s3_credentials, &s3_config) {
@@ -183,17 +185,22 @@ pub fn run(shutdown: &ShutdownFlag, config: &AgentConfig) {
             return;
         },
     };
-    // S3Client is not Clone (tokio Runtime is not Clone), so we create a
-    // separate client for the update command. Both use the same credentials
-    // and config.
-    let update_s3_client =
-        match crate::aws_clients::s3_client::S3Client::new(credentials.clone(), &s3_config) {
-            Ok(c) => c,
-            Err(e) => {
-                error!("Worker failed to create update S3 client: {e}");
-                return;
-            },
-        };
+    // The update command only fetches the install script, so its client
+    // downloads serially and starts no worker threads.
+    let update_s3_config = crate::aws_clients::s3_client::S3ClientConfig {
+        download_max_concurrency: 1,
+        ..s3_config.clone()
+    };
+    let update_s3_client = match crate::aws_clients::s3_client::S3Client::new(
+        credentials.clone(),
+        &update_s3_config,
+    ) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Worker failed to create update S3 client: {e}");
+            return;
+        },
+    };
     let region = credentials.region.clone();
     let dispatcher = CommandDispatcher::new(
         archives,

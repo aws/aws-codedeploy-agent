@@ -36,6 +36,14 @@ const FIPS_ENABLED_REGIONS: &[&str] = &[
     "us-gov-east-1",
 ];
 
+/// S3 download defaults and bounds, defined once in the S3 client.
+pub use crate::aws_clients::s3_client::{
+    DEFAULT_DOWNLOAD_CHUNK_SIZE as DEFAULT_S3_DOWNLOAD_CHUNK_SIZE,
+    DEFAULT_DOWNLOAD_MAX_CONCURRENCY as DEFAULT_S3_DOWNLOAD_MAX_CONCURRENCY,
+    MAX_DOWNLOAD_MAX_CONCURRENCY as MAX_S3_DOWNLOAD_MAX_CONCURRENCY,
+    MIN_DOWNLOAD_CHUNK_SIZE as MIN_S3_DOWNLOAD_CHUNK_SIZE,
+};
+
 /// Maximum allowed value for `kill_agent_max_wait_time_seconds` (24 hours).
 ///
 /// A misconfigured value (e.g. `999999999`) would prevent the agent from
@@ -56,7 +64,7 @@ where
     use serde::de::Error;
 
     #[derive(Deserialize)]
-    #[serde(untagged)]
+    #[serde(untagged, expecting = "a byte count or a size string like \"8MiB\"")]
     enum ByteSizeValue {
         Int(u64),
         Str(String),
@@ -70,6 +78,14 @@ where
         ByteSizeValue::Int(n) => Ok(Some(n)),
         ByteSizeValue::Str(s) => parse_byte_size(&s).map(Some).map_err(Error::custom),
     }
+}
+
+/// Deserialize `s3_download_chunk_size`; an empty value means the default.
+fn deserialize_chunk_size<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(deserialize_byte_size_option(deserializer)?.unwrap_or(DEFAULT_S3_DOWNLOAD_CHUNK_SIZE))
 }
 
 /// Parse a human-readable byte size string into bytes.
@@ -312,6 +328,17 @@ pub struct AgentConfig {
     /// Custom S3 endpoint override. `None`.
     pub s3_endpoint_override: Option<String>,
 
+    /// Parallel range requests per S3 bundle download. Default: `1`, which means
+    /// a single `GetObject`. Clamped to
+    /// `1..=`[`MAX_S3_DOWNLOAD_MAX_CONCURRENCY`].
+    pub s3_download_max_concurrency: usize,
+
+    /// Bytes per S3 range request. Default: 8 MiB. Objects this size or smaller
+    /// take one request. Accepts bytes or strings like `"16MB"`. Floored at
+    /// [`MIN_S3_DOWNLOAD_CHUNK_SIZE`].
+    #[serde(deserialize_with = "deserialize_chunk_size")]
+    pub s3_download_chunk_size: u64,
+
     /// Disable `IMDSv1` fallback. Default: `false`.
     /// When `true`, only `IMDSv2` (token-based) is used for metadata requests.
     pub disable_imds_v1: bool,
@@ -388,6 +415,8 @@ impl Default for AgentConfig {
             ongoing_deployment_tracking: "ongoing-deployment".to_string(),
             deploy_control_endpoint: None,
             s3_endpoint_override: None,
+            s3_download_max_concurrency: DEFAULT_S3_DOWNLOAD_MAX_CONCURRENCY,
+            s3_download_chunk_size: DEFAULT_S3_DOWNLOAD_CHUNK_SIZE,
             disable_imds_v1: false,
             enable_command_port: false,
             enable_archive_reuse: true,
@@ -480,6 +509,25 @@ impl AgentConfig {
                 "kill_agent_max_wait_time_seconds exceeds maximum, capping"
             );
             self.kill_agent_max_wait_time_seconds = MAX_KILL_AGENT_WAIT_SECONDS;
+        }
+        // Clamp the download settings rather than fail startup.
+        let concurrency =
+            self.s3_download_max_concurrency.clamp(1, MAX_S3_DOWNLOAD_MAX_CONCURRENCY);
+        if concurrency != self.s3_download_max_concurrency {
+            tracing::warn!(
+                configured = self.s3_download_max_concurrency,
+                using = concurrency,
+                "s3_download_max_concurrency out of range"
+            );
+            self.s3_download_max_concurrency = concurrency;
+        }
+        if self.s3_download_chunk_size < MIN_S3_DOWNLOAD_CHUNK_SIZE {
+            tracing::warn!(
+                configured = self.s3_download_chunk_size,
+                using = MIN_S3_DOWNLOAD_CHUNK_SIZE,
+                "s3_download_chunk_size below minimum"
+            );
+            self.s3_download_chunk_size = MIN_S3_DOWNLOAD_CHUNK_SIZE;
         }
     }
 
@@ -1285,6 +1333,8 @@ disable_imds_v1: true
 enable_command_port: true
 disable_core_dumps: false
 log_aws_wire: true
+s3_download_max_concurrency: 20
+s3_download_chunk_size: "16MiB"
 "#;
         let config = AgentConfig::from_yaml(yaml, Path::new("test.yml")).unwrap();
         assert_eq!(config.program_name, "my-agent");
@@ -1309,6 +1359,87 @@ log_aws_wire: true
         assert!(config.enable_command_port);
         assert!(!config.disable_core_dumps);
         assert!(config.log_aws_wire);
+        assert_eq!(config.s3_download_max_concurrency, 20);
+        assert_eq!(config.s3_download_chunk_size, 16 * 1024 * 1024);
+    }
+
+    #[test]
+    fn s3_download_defaults() {
+        let config = AgentConfig::default();
+        assert_eq!(config.s3_download_max_concurrency, 1);
+        assert_eq!(config.s3_download_chunk_size, 8 * 1024 * 1024);
+    }
+
+    #[test]
+    fn s3_download_settings_parse_symbol_keys() {
+        let config = AgentConfig::from_yaml(
+            ":s3_download_max_concurrency: 4\n:s3_download_chunk_size: 32MB\n",
+            Path::new("test.yml"),
+        )
+        .unwrap();
+        assert_eq!(config.s3_download_max_concurrency, 4);
+        assert_eq!(config.s3_download_chunk_size, 32_000_000);
+        assert!(
+            config.unknown_keys.is_empty(),
+            "download keys must not land in the unknown_keys catch-all: {:?}",
+            config.unknown_keys
+        );
+    }
+
+    #[test]
+    fn s3_download_chunk_size_accepts_raw_bytes() {
+        let config =
+            AgentConfig::from_yaml("s3_download_chunk_size: 1048576\n", Path::new("test.yml"))
+                .unwrap();
+        assert_eq!(config.s3_download_chunk_size, 1_048_576);
+    }
+
+    #[test]
+    fn s3_download_chunk_size_empty_value_uses_default() {
+        let config =
+            AgentConfig::from_yaml(":s3_download_chunk_size:\n", Path::new("test.yml")).unwrap();
+        assert_eq!(config.s3_download_chunk_size, DEFAULT_S3_DOWNLOAD_CHUNK_SIZE);
+    }
+
+    #[test]
+    fn s3_download_chunk_size_rejects_bad_suffix() {
+        assert!(
+            AgentConfig::from_yaml("s3_download_chunk_size: 5ZB\n", Path::new("test.yml")).is_err()
+        );
+    }
+
+    #[test]
+    fn normalize_clamps_s3_download_concurrency_high() {
+        let mut config =
+            AgentConfig { s3_download_max_concurrency: 10_000, ..AgentConfig::default() };
+        config.normalize();
+        assert_eq!(config.s3_download_max_concurrency, MAX_S3_DOWNLOAD_MAX_CONCURRENCY);
+    }
+
+    #[test]
+    fn normalize_treats_zero_s3_download_concurrency_as_serial() {
+        let mut config = AgentConfig { s3_download_max_concurrency: 0, ..AgentConfig::default() };
+        config.normalize();
+        assert_eq!(config.s3_download_max_concurrency, 1);
+    }
+
+    #[test]
+    fn normalize_floors_s3_download_chunk_size() {
+        let mut config = AgentConfig { s3_download_chunk_size: 512, ..AgentConfig::default() };
+        config.normalize();
+        assert_eq!(config.s3_download_chunk_size, MIN_S3_DOWNLOAD_CHUNK_SIZE);
+    }
+
+    #[test]
+    fn normalize_leaves_valid_s3_download_settings_alone() {
+        let mut config = AgentConfig {
+            s3_download_max_concurrency: 16,
+            s3_download_chunk_size: 16 * 1024 * 1024,
+            ..AgentConfig::default()
+        };
+        config.normalize();
+        assert_eq!(config.s3_download_max_concurrency, 16);
+        assert_eq!(config.s3_download_chunk_size, 16 * 1024 * 1024);
     }
 
     #[test]

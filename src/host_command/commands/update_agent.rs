@@ -86,7 +86,7 @@ impl UpdateAgentCommand {
 
         let bucket = s3_bucket_name(&self.region);
 
-        // Download to a temp file (created 0600 by stream_to_file, auto-cleaned on drop).
+        // Download to a temp file (created 0600 by the S3 client, auto-cleaned on drop).
         let tmp_file = NamedTempFile::new()?;
         let tmp_path = tmp_file.path();
         s3.download_to_file(&bucket, INSTALL_SCRIPT_KEY, None, tmp_path)?;
