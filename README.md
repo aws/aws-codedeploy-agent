@@ -31,17 +31,6 @@ Windows ship as rpm/deb and msi; macOS ships as a `.pkg` (see
 | Windows Server | 2016, 2019, 2022, 2025 | x86_64 | Service Control Manager |
 | macOS (EC2 Mac) | 15 Sequoia, 26 Tahoe, 27 | aarch64 | launchd |
 
-macOS notes:
-- Supported macOS versions are the current major release and the two before
-  it, reviewed each September. Only Apple silicon (aarch64) EC2 Mac instances
-  are supported.
-- AppSpec `os: linux` is used for macOS deployments (`os: macos` is not a
-  valid value).
-- AppSpec `permissions` fields `acls` and `context` (SELinux) are rejected on
-  macOS before the install runs; `owner`, `group` and `mode` work.
-- Agent self-update (`UpdateDeploymentAgent`, `codedeploy-agent update`) is
-  not available on macOS yet; install the latest `.pkg` instead.
-
 ## Getting Started
 
 ### Prerequisites
