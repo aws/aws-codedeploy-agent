@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  AWS CodeDeploy Agent LaunchDaemon. Installed by the .pkg (macos/pkg/) to
+  /Library/LaunchDaemons. Mirrors systemd/codedeploy-agent.service; keep them
+  in step.
+
+  ProgramArguments: the systemd ExecStart string, plus `exec` so the agent
+  (not bash) is the PID launchd signals on bootout; without it the agent is
+  SIGKILLed with the process group and cannot drain. `-a` exports
+  BASH_EXECUTION_STRING, which hooks may read and expect to equal the Linux
+  string exactly, so it is reassigned before `exec`.
+  Do not otherwise change the string. The master runs in the foreground
+  (Type=simple).
+
+  RunAtLoad               start at boot
+  KeepAlive Crashed=true  Restart=on-abnormal: restart after a signal death
+                          only. Not SuccessfulExit=false, which would loop a
+                          clean non-zero startup exit every ThrottleInterval.
+  ThrottleInterval 10     RestartSec=10
+  ExitTimeOut 7200        TimeoutStopSec=7200: SIGTERM, then SIGKILL after
+                          this long, so a deployment in progress can finish
+                          (kill_agent_max_wait_time_seconds). Default is 20 s.
+  NumberOfFiles 65536     LimitNOFILE
+  Core -1                 LimitCORE=infinity; daemon::core_dumps decides.
+  Standard*Path           codedeploy-agent.launchd.log: panics and stderr
+                          before the logger is up. A separate file because
+                          launchd holds its fd for the job's lifetime; it
+                          would follow the agent log's rename-rotation into
+                          the archive and keep writing to an unlinked inode
+                          after pruning. The agent never writes tracing to
+                          stdout, so this file stays small. The path is fixed
+                          here; changing log_dir in codedeployagent.yml moves
+                          the agent's logs but not this file.
+
+  Stop is `launchctl bootout` (SIGTERM to the agent; daemon/signal.rs). No
+  KillMode=control-group equivalent: launchd treats the job as stopped once
+  the master exits, so the worker watches the master's pid (kqueue NOTE_EXIT,
+  daemon/worker.rs) and exits with it. Hooks run in their own group and
+  are orphaned only if the master is SIGKILLed at ExitTimeOut mid-hook.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.amazon.aws.codedeploy-agent</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-a</string>
+        <string>-c</string>
+        <string>[ -f /etc/profile ] &amp;&amp; source /etc/profile; BASH_EXECUTION_STRING='[ -f /etc/profile ] &amp;&amp; source /etc/profile; /opt/codedeploy-agent/bin/codedeploy-agent start'; exec /opt/codedeploy-agent/bin/codedeploy-agent start</string>
+    </array>
+
+    <key>UserName</key>
+    <string>root</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>ExitTimeOut</key>
+    <integer>7200</integer>
+
+    <!-- LimitCORE=infinity: leave the hard limit unbounded so the in-process
+         policy (daemon::core_dumps, disable_core_dumps) is the only knob, as
+         on Linux. -1 is RLIM_INFINITY. -->
+    <key>SoftResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>65536</integer>
+        <key>Core</key>
+        <integer>-1</integer>
+    </dict>
+    <key>HardResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>65536</integer>
+        <key>Core</key>
+        <integer>-1</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/var/log/aws/codedeploy-agent/codedeploy-agent.launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/aws/codedeploy-agent/codedeploy-agent.launchd.log</string>
+
+    <!-- Adaptive, not Background: Background puts the agent and the hook
+         scripts it spawns in the throttled scheduling tier (lower CPU
+         priority, I/O throttling), slowing deployments. -->
+    <key>ProcessType</key>
+    <string>Adaptive</string>
+</dict>
+</plist>

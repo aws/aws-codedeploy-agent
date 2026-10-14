@@ -48,7 +48,7 @@ impl CopyCommand {
         } else {
             #[cfg(unix)]
             {
-                use nix::sys::stat::{Mode, fchmod};
+                use nix::sys::stat::fchmod;
                 use nix::unistd::fchown;
                 use std::os::fd::AsRawFd;
                 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
@@ -89,7 +89,7 @@ impl CopyCommand {
                 // Preserve permissions on the fd, after fchown so SUID/SGID bits
                 // survive. Uses fd-based src_meta so owner, mode, and timestamps
                 // share one race-free source.
-                let mode = Mode::from_bits_truncate(src_meta.permissions().mode());
+                let mode = crate::system::file_ops::mode_from_bits(src_meta.permissions().mode());
                 fchmod(dest.as_raw_fd(), mode)
                     .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
 

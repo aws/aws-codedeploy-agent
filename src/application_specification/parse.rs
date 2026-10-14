@@ -80,14 +80,10 @@ impl RawScript {
             None => return Err(ParseError::EmptyScriptLocation),
         };
 
-        let runas = self.runas.and_then(|s| {
-            let trimmed = s.trim().to_string();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(Username(trimmed))
-            }
-        });
+        let runas = match self.runas.as_deref().map(str::trim) {
+            None | Some("") => None,
+            Some(trimmed) => Some(Username::new(trimmed)?),
+        };
 
         let timeout = match self.timeout {
             Some(t) => Timeout::new(t)?,
@@ -1058,5 +1054,11 @@ mod tests {
         let ctx = perm.context().unwrap();
         assert_eq!(ctx.user(), Some("system_u"));
         assert_eq!(ctx.type_(), "object_t");
+    }
+
+    #[test]
+    fn script_runas_option_like_value_is_rejected() {
+        let yaml = "version: 0.0\nos: linux\nhooks:\n  ApplicationStart:\n    - location: start.sh\n      runas: \"-c\"\n";
+        assert!(matches!(AppSpec::parse(yaml), Err(ParseError::InvalidRunas(v)) if v == "-c"));
     }
 }

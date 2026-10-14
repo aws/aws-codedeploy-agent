@@ -183,8 +183,9 @@ fn infinite_loop_script_terminated_at_timeout() {
     assert!(elapsed >= Duration::from_secs(1), "Timeout fired too early: {elapsed:?}");
 }
 
-// Validates: A script trapping SIGTERM (trap '' TERM; sleep infinity) is eventually killed
+// Validates: A script trapping SIGTERM (trap '' TERM; sleep 3600) is eventually killed
 // via SIGKILL escalation after a grace period, preventing unkillable zombie processes.
+// `sleep infinity` is GNU-only; BSD sleep (macOS) rejects it.
 #[cfg(unix)]
 #[test]
 fn sigterm_trapping_script_killed_by_sigkill() {
@@ -197,7 +198,7 @@ fn sigterm_trapping_script_killed_by_sigkill() {
 
     std::fs::write(
         &script_path,
-        format!("#!/bin/sh\ntrap '' TERM\necho $$ > {}\nsleep infinity\n", pid_file.display()),
+        format!("#!/bin/sh\ntrap '' TERM\necho $$ > {}\nsleep 3600\n", pid_file.display()),
     )
     .expect("write script");
     std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
@@ -358,16 +359,33 @@ fn script_path_does_not_contain_dangerous_directories() {
     let log =
         Arc::new(Mutex::new(ScriptRunLog::open(&dir.path().join("log")).expect("create log")));
 
-    let script = Script::with_env_policy(
-        script_path,
-        None,
-        false,
-        &HashMap::<String, String>::new(),
-        HARDENED,
-        log,
-    );
+    let make_script = || {
+        Script::with_env_policy(
+            script_path.clone(),
+            None,
+            false,
+            &HashMap::<String, String>::new(),
+            HARDENED,
+            log.clone(),
+        )
+    };
 
-    let exit_code = script.execute(Duration::from_secs(5)).expect("execute script");
+    // Retry exec on ETXTBSY: when tests run in parallel, a child forked by
+    // another test thread can briefly inherit this just-written script's
+    // write descriptor, making exec fail with "Text file busy". The window
+    // is microseconds wide; a bounded retry removes the flake without
+    // masking real failures.
+    let mut attempts = 0;
+    let exit_code = loop {
+        match make_script().execute(Duration::from_secs(5)) {
+            Ok(code) => break code,
+            Err(e) if attempts < 5 && e.contains("Text file busy") => {
+                attempts += 1;
+                std::thread::sleep(Duration::from_millis(50));
+            },
+            Err(e) => panic!("execute script: {e:?}"),
+        }
+    };
     assert_eq!(exit_code, 0);
 
     let path_value = std::fs::read_to_string(&output_file)
@@ -394,44 +412,47 @@ fn script_path_does_not_contain_dangerous_directories() {
     }
 }
 
-// Validates: with the opt-in strip_loader_vars policy, LD_PRELOAD, LD_LIBRARY_PATH
-// and LD_AUDIT are absent from the lifecycle script environment, preventing shared
-// library injection attacks — even when supplied via the AppSpec env map.
-#[cfg(unix)]
+// Validates: with the opt-in strip_loader_vars policy, the platform's dynamic
+// loader variables (LD_PRELOAD/LD_LIBRARY_PATH/LD_AUDIT on Linux,
+// DYLD_INSERT_LIBRARIES/DYLD_LIBRARY_PATH/DYLD_FRAMEWORK_PATH on macOS) are
+// absent from the lifecycle script environment, preventing shared library
+// injection attacks — even when supplied via the AppSpec env map.
+//
+// Linux-only: on macOS SIP scrubs DYLD_* before /bin/sh runs, so this check
+// would pass regardless. `script::tests::strip_loader_vars_marks_platform_
+// loader_vars_removed_on_command` covers every Unix via `Command::get_envs()`.
+#[cfg(target_os = "linux")]
 #[test]
 fn ld_preload_and_ld_library_path_not_in_script_env() {
+    use codedeploy_agent::system::DYNAMIC_LOADER_ENV_VARS;
     use std::os::unix::fs::PermissionsExt;
 
     let dir = tempfile::TempDir::new().expect("create tempdir");
     let script_path = dir.path().join("check_ld.sh");
     let output_file = dir.path().join("ld_output.txt");
 
-    std::fs::write(
-        &script_path,
-        format!(
-            "#!/bin/sh\n\
-             echo \"LD_PRELOAD=${{LD_PRELOAD:-UNSET}}\" > {out}\n\
-             echo \"LD_LIBRARY_PATH=${{LD_LIBRARY_PATH:-UNSET}}\" >> {out}\n\
-             echo \"LD_AUDIT=${{LD_AUDIT:-UNSET}}\" >> {out}\n",
+    // One `NAME=${NAME:-UNSET}` line per platform loader var.
+    let mut body = String::from("#!/bin/sh\n");
+    for (i, var) in DYNAMIC_LOADER_ENV_VARS.iter().enumerate() {
+        let redirect = if i == 0 { ">" } else { ">>" };
+        body.push_str(&format!(
+            "echo \"{var}=${{{var}:-UNSET}}\" {redirect} {out}\n",
             out = output_file.display()
-        ),
-    )
-    .expect("write script");
+        ));
+    }
+    std::fs::write(&script_path, body).expect("write script");
     std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
         .expect("set permissions");
 
     let log =
         Arc::new(Mutex::new(ScriptRunLog::open(&dir.path().join("log")).expect("create log")));
 
-    // Pass LD_PRELOAD/LD_LIBRARY_PATH/LD_AUDIT via the AppSpec environment-variable
-    // HashMap — these must be stripped even when supplied directly by the customer
-    // bundle, not only when inherited from the agent's own environment. Stripping
-    // must therefore happen after the `env_vars` entries are applied to the
-    // command, otherwise those entries silently re-add the variables.
+    // Supply the loader vars via the AppSpec env map: they must be stripped
+    // even when the bundle sets them, not only when inherited from the agent.
     let mut env_vars = HashMap::<String, String>::new();
-    env_vars.insert("LD_PRELOAD".to_string(), "/tmp/evil.so".to_string());
-    env_vars.insert("LD_LIBRARY_PATH".to_string(), "/tmp/evil-libs".to_string());
-    env_vars.insert("LD_AUDIT".to_string(), "/tmp/evil-audit.so".to_string());
+    for var in DYNAMIC_LOADER_ENV_VARS {
+        env_vars.insert((*var).to_string(), "/tmp/evil".to_string());
+    }
 
     let script = Script::with_env_policy(script_path, None, false, &env_vars, HARDENED, log);
 
@@ -440,18 +461,12 @@ fn ld_preload_and_ld_library_path_not_in_script_env() {
 
     let output = std::fs::read_to_string(&output_file).expect("read output file");
 
-    assert!(
-        output.contains("LD_PRELOAD=UNSET"),
-        "LD_PRELOAD must be stripped even when supplied via AppSpec env_vars. Got: {output}"
-    );
-    assert!(
-        output.contains("LD_LIBRARY_PATH=UNSET"),
-        "LD_LIBRARY_PATH must be stripped even when supplied via AppSpec env_vars. Got: {output}"
-    );
-    assert!(
-        output.contains("LD_AUDIT=UNSET"),
-        "LD_AUDIT must be stripped even when supplied via AppSpec env_vars. Got: {output}"
-    );
+    for var in DYNAMIC_LOADER_ENV_VARS {
+        assert!(
+            output.contains(&format!("{var}=UNSET")),
+            "{var} must be stripped even when supplied via AppSpec env_vars. Got: {output}"
+        );
+    }
 }
 
 // Validates: IFS (Internal Field Separator) in the script environment is the default

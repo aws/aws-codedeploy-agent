@@ -1,4 +1,21 @@
 //! Testable environment variable access.
+
+/// Dynamic-loader variables that can inject shared libraries into a child
+/// process; stripped from the self-update script and (opt-in) from hooks.
+/// glibc reads `LD_*`, dyld reads `DYLD_*` and ignores `LD_*`.
+#[cfg(target_os = "macos")]
+pub const DYNAMIC_LOADER_ENV_VARS: &[&str] = &[
+    "DYLD_INSERT_LIBRARIES",
+    "DYLD_LIBRARY_PATH",
+    "DYLD_FRAMEWORK_PATH",
+    "DYLD_FALLBACK_LIBRARY_PATH",
+    "DYLD_FALLBACK_FRAMEWORK_PATH",
+    "DYLD_VERSIONED_LIBRARY_PATH",
+    "DYLD_VERSIONED_FRAMEWORK_PATH",
+];
+#[cfg(all(unix, not(target_os = "macos")))]
+pub const DYNAMIC_LOADER_ENV_VARS: &[&str] = &["LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT"];
+
 /// Environment variable access abstraction.
 ///
 /// Production code uses `SystemEnvOps` which reads real env vars.
@@ -50,6 +67,24 @@ mod mock {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn loader_vars_are_dyld_names_on_macos() {
+        assert!(DYNAMIC_LOADER_ENV_VARS.iter().all(|v| v.starts_with("DYLD_")));
+        assert!(DYNAMIC_LOADER_ENV_VARS.contains(&"DYLD_INSERT_LIBRARIES"));
+        assert!(DYNAMIC_LOADER_ENV_VARS.contains(&"DYLD_FALLBACK_LIBRARY_PATH"));
+        assert!(DYNAMIC_LOADER_ENV_VARS.contains(&"DYLD_FALLBACK_FRAMEWORK_PATH"));
+        assert!(DYNAMIC_LOADER_ENV_VARS.contains(&"DYLD_VERSIONED_LIBRARY_PATH"));
+        assert!(DYNAMIC_LOADER_ENV_VARS.contains(&"DYLD_VERSIONED_FRAMEWORK_PATH"));
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn loader_vars_are_ld_names_on_linux() {
+        assert!(DYNAMIC_LOADER_ENV_VARS.iter().all(|v| v.starts_with("LD_")));
+        assert!(DYNAMIC_LOADER_ENV_VARS.contains(&"LD_PRELOAD"));
+    }
 
     #[test]
     fn system_env_reads_path() {

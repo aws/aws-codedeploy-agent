@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Template for productbuild; build-pkg.sh substitutes the @...@ fields. -->
+<installer-gui-script minSpecVersion="2">
+    <title>AWS CodeDeploy Agent</title>
+    <organization>com.amazon.aws</organization>
+    <domains enable_localSystem="true" enable_anywhere="false" enable_currentUserHome="false"/>
+    <options customize="never" require-scripts="true" rootVolumeOnly="true" hostArchitectures="@HOST_ARCH@"/>
+    <!-- Oldest supported macOS. -->
+    <volume-check>
+        <allowed-os-versions>
+            <os-version min="@MIN_OS@"/>
+        </allowed-os-versions>
+    </volume-check>
+    <choices-outline>
+        <line choice="default">
+            <line choice="com.amazon.aws.codedeploy-agent"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="com.amazon.aws.codedeploy-agent" visible="false">
+        <pkg-ref id="com.amazon.aws.codedeploy-agent"/>
+    </choice>
+    <pkg-ref id="com.amazon.aws.codedeploy-agent" version="@VERSION@" onConclusion="none">com.amazon.aws.codedeploy-agent.pkg</pkg-ref>
+</installer-gui-script>

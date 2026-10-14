@@ -28,7 +28,9 @@ impl SeLinuxContext {
     ///
     /// This is only used for testing the role validation error path.
     /// In production, role is always None.
-    #[cfg(test)]
+    // SELinux is Linux-only; macOS is unix but not linux. The only caller is the
+    // Linux-gated ChangeContextCommand test.
+    #[cfg(all(test, target_os = "linux"))]
     pub(crate) fn new_with_role(
         user: Option<String>,
         role: Option<String>,

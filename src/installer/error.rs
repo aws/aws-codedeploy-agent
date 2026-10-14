@@ -48,6 +48,14 @@ pub enum InstallerError {
         object: PathBuf,
     },
     SelinuxRoleNotSupported,
+    /// An `AppSpec` `permissions` field that requires a Linux-only tool
+    /// (`acls` → setfacl, `context` → semanage/restorecon) was used on a
+    /// non-Linux Unix host (macOS). Raised before any command is built.
+    PermissionFieldNotSupported {
+        object: PathBuf,
+        field: &'static str,
+        platform: &'static str,
+    },
     UnconfinedSelinuxRejected {
         type_: String,
     },
@@ -171,6 +179,14 @@ impl fmt::Display for InstallerError {
                 write!(
                     f,
                     "The deployment failed because the application specification file specifies a role, but roles are not supported. Remove the role from the AppSpec file, and then try again."
+                )
+            },
+
+            Self::PermissionFieldNotSupported { object, field, platform } => {
+                write!(
+                    f,
+                    "The deployment failed because the application specification file specifies '{field}' for {}, but '{field}' is not supported on {platform}. Remove '{field}' from the permissions entry in the AppSpec file, and then try again.",
+                    object.display()
                 )
             },
 
@@ -330,6 +346,19 @@ mod tests {
     fn selinux_role_not_supported_display() {
         let err = InstallerError::SelinuxRoleNotSupported;
         assert!(err.to_string().contains("roles are not supported"));
+    }
+
+    #[test]
+    fn permission_field_not_supported_display() {
+        let err = InstallerError::PermissionFieldNotSupported {
+            object: PathBuf::from("/var/www/app"),
+            field: "context",
+            platform: "macOS",
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("'context'"));
+        assert!(msg.contains("/var/www/app"));
+        assert!(msg.contains("not supported on macOS"));
     }
 
     #[test]

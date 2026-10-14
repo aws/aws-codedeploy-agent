@@ -24,13 +24,25 @@ pub fn resolve(
         service.push_str("-fips");
     }
 
-    let domain = if region.starts_with("cn-") {
+    format!("https://{service}.{region}.{}", partition_dns_suffix(region))
+}
+
+fn partition_dns_suffix(region: &str) -> &'static str {
+    if region.starts_with("cn-") {
         "amazonaws.com.cn"
+    } else if region.starts_with("eusc-") {
+        "amazonaws.eu"
+    } else if region.starts_with("us-iso-") {
+        "c2s.ic.gov"
+    } else if region.starts_with("us-isob-") {
+        "sc2s.sgov.gov"
+    } else if region.starts_with("eu-isoe-") {
+        "cloud.adc-e.uk"
+    } else if region.starts_with("us-isof-") {
+        "csp.hci.ic.gov"
     } else {
         "amazonaws.com"
-    };
-
-    format!("https://{service}.{region}.{domain}")
+    }
 }
 
 #[cfg(test)]
@@ -74,6 +86,70 @@ mod tests {
         assert_eq!(
             resolve("cn-north-1", None, false, false),
             "https://codedeploy-commands.cn-north-1.amazonaws.com.cn"
+        );
+    }
+
+    #[test]
+    fn eusc_region_endpoint() {
+        assert_eq!(
+            resolve("eusc-de-east-1", None, false, false),
+            "https://codedeploy-commands.eusc-de-east-1.amazonaws.eu"
+        );
+    }
+
+    #[test]
+    fn eusc_region_secure_endpoint() {
+        assert_eq!(
+            resolve("eusc-de-east-1", None, false, true),
+            "https://codedeploy-commands-secure.eusc-de-east-1.amazonaws.eu"
+        );
+    }
+
+    #[test]
+    fn gov_cloud_stays_on_default_domain() {
+        assert_eq!(
+            resolve("us-gov-west-1", None, false, true),
+            "https://codedeploy-commands-secure.us-gov-west-1.amazonaws.com"
+        );
+    }
+
+    #[test]
+    fn iso_region_endpoint() {
+        assert_eq!(
+            resolve("us-iso-east-1", None, false, false),
+            "https://codedeploy-commands.us-iso-east-1.c2s.ic.gov"
+        );
+    }
+
+    #[test]
+    fn iso_b_region_endpoint() {
+        assert_eq!(
+            resolve("us-isob-east-1", None, false, false),
+            "https://codedeploy-commands.us-isob-east-1.sc2s.sgov.gov"
+        );
+    }
+
+    #[test]
+    fn iso_e_region_endpoint() {
+        assert_eq!(
+            resolve("eu-isoe-west-1", None, false, false),
+            "https://codedeploy-commands.eu-isoe-west-1.cloud.adc-e.uk"
+        );
+    }
+
+    #[test]
+    fn iso_f_region_endpoint() {
+        assert_eq!(
+            resolve("us-isof-south-1", None, false, false),
+            "https://codedeploy-commands.us-isof-south-1.csp.hci.ic.gov"
+        );
+    }
+
+    #[test]
+    fn iso_region_secure_endpoint() {
+        assert_eq!(
+            resolve("us-iso-east-1", None, false, true),
+            "https://codedeploy-commands-secure.us-iso-east-1.c2s.ic.gov"
         );
     }
 

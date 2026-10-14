@@ -1,9 +1,9 @@
 //! Install command builder — generates copy, permission, and cleanup commands from `AppSpec`.
 use crate::application_specification::Permission;
+#[cfg(target_os = "linux")]
+use crate::installer::commands::{ChangeAclCommand, ChangeContextCommand};
 #[cfg(unix)]
-use crate::installer::commands::{
-    ChangeAclCommand, ChangeContextCommand, ChangeModeCommand, ChangeOwnerCommand,
-};
+use crate::installer::commands::{ChangeModeCommand, ChangeOwnerCommand};
 use crate::installer::commands::{CopyCommand, MakeDirectoryCommand, RemoveCommand};
 use crate::installer::{InstallerError, Result};
 use nu_path;
@@ -18,6 +18,8 @@ pub struct CommandBuilder {
     copy_targets: HashMap<PathBuf, PathBuf>,
     mkdir_targets: HashSet<PathBuf>,
     permission_targets: HashSet<PathBuf>,
+    // SELinux is Linux-only; macOS is unix but not linux.
+    #[cfg(target_os = "linux")]
     reject_unconfined_selinux: bool,
     reject_unsafe_permissions: bool,
     reject_symlink_permission_targets: bool,
@@ -32,9 +34,9 @@ pub enum Command {
     Chmod(ChangeModeCommand),
     #[cfg(unix)]
     Chown(ChangeOwnerCommand),
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     Acl(ChangeAclCommand),
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     Context(ChangeContextCommand),
 }
 
@@ -50,9 +52,9 @@ impl Command {
             Command::Chmod(cmd) => cmd.execute(cleanup),
             #[cfg(unix)]
             Command::Chown(cmd) => cmd.execute(cleanup),
-            #[cfg(unix)]
+            #[cfg(target_os = "linux")]
             Command::Acl(cmd) => cmd.execute(cleanup),
-            #[cfg(unix)]
+            #[cfg(target_os = "linux")]
             Command::Context(cmd) => cmd.execute(cleanup),
         }
     }
@@ -68,9 +70,9 @@ impl Command {
             Command::Chmod(cmd) => cmd.to_h(),
             #[cfg(unix)]
             Command::Chown(cmd) => cmd.to_h(),
-            #[cfg(unix)]
+            #[cfg(target_os = "linux")]
             Command::Acl(cmd) => cmd.to_h(),
-            #[cfg(unix)]
+            #[cfg(target_os = "linux")]
             Command::Context(cmd) => cmd.to_h(),
         }
     }
@@ -94,11 +96,16 @@ impl CommandBuilder {
         reject_unsafe_permissions: bool,
         reject_symlink_permission_targets: bool,
     ) -> Self {
+        // Same signature on every platform; unused off Linux.
+        #[cfg(not(target_os = "linux"))]
+        let _ = reject_unconfined_selinux;
         Self {
             commands: Vec::new(),
             copy_targets: HashMap::new(),
             mkdir_targets: HashSet::new(),
             permission_targets: HashSet::new(),
+            // SELinux is Linux-only; macOS is unix but not linux.
+            #[cfg(target_os = "linux")]
             reject_unconfined_selinux,
             reject_unsafe_permissions,
             reject_symlink_permission_targets,
@@ -166,6 +173,46 @@ impl CommandBuilder {
 
     /// # Errors
     /// Returns an error if there's a duplicate permission target.
+    /// `acls` (setfacl) and `context` (semanage) exist on Linux only;
+    /// reject them on other Unix before any command is built. Called on entry
+    /// to `Installer::process_permission` (so it fires even when the entry
+    /// matches nothing) and from `set_permissions`.
+    pub fn check_permission_fields_supported(object: &Path, permission: &Permission) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        {
+            let _ = (object, permission);
+            Ok(())
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let platform = if cfg!(target_os = "macos") {
+                "macOS"
+            } else {
+                std::env::consts::OS
+            };
+            let field = if permission.acls().is_some() {
+                "acls"
+            } else if permission.context().is_some() {
+                "context"
+            } else {
+                return Ok(());
+            };
+            Err(InstallerError::PermissionFieldNotSupported {
+                object: object.to_path_buf(),
+                field,
+                platform,
+            })
+        }
+    }
+
+    /// Queue the mode, ACL, `SELinux` context and owner changes `permission`
+    /// asks for on `object`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InstallerError::DuplicatePermission`] if `object` already has
+    /// permissions queued, and [`InstallerError::PermissionFieldNotSupported`]
+    /// if `permission` uses a field this platform cannot apply.
     pub fn set_permissions(&mut self, object: &Path, permission: &Permission) -> Result<()> {
         debug!("Setting permissions on {}", object.display());
 
@@ -181,6 +228,8 @@ impl CommandBuilder {
 
         #[cfg(unix)]
         {
+            Self::check_permission_fields_supported(&object, permission)?;
+
             if let Some(mode) = permission.mode() {
                 self.commands.push(Command::Chmod(ChangeModeCommand::new(
                     object.clone(),
@@ -190,21 +239,24 @@ impl CommandBuilder {
                 )));
             }
 
-            if let Some(acls) = permission.acls() {
-                self.commands.push(Command::Acl(ChangeAclCommand::new(
-                    object.clone(),
-                    acls.clone(),
-                    self.reject_symlink_permission_targets,
-                )));
-            }
+            #[cfg(target_os = "linux")]
+            {
+                if let Some(acls) = permission.acls() {
+                    self.commands.push(Command::Acl(ChangeAclCommand::new(
+                        object.clone(),
+                        acls.clone(),
+                        self.reject_symlink_permission_targets,
+                    )));
+                }
 
-            if let Some(context) = permission.context() {
-                self.commands.push(Command::Context(ChangeContextCommand::new(
-                    object.clone(),
-                    context.clone(),
-                    self.reject_unconfined_selinux,
-                    self.reject_symlink_permission_targets,
-                )));
+                if let Some(context) = permission.context() {
+                    self.commands.push(Command::Context(ChangeContextCommand::new(
+                        object.clone(),
+                        context.clone(),
+                        self.reject_unconfined_selinux,
+                        self.reject_symlink_permission_targets,
+                    )));
+                }
             }
 
             if permission.owner().is_some() || permission.group().is_some() {
@@ -502,7 +554,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     fn command_execute_acl() {
         use crate::application_specification::Acl;
 
@@ -518,7 +570,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     fn command_execute_context() {
         use crate::application_specification::SeLinuxContext;
 
@@ -715,7 +767,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     fn set_permissions_with_acl() {
         use crate::application_specification::{Acl, ObjectType, Permission};
 
@@ -747,8 +799,103 @@ mod tests {
         fs::remove_file(&dst).ok();
     }
 
+    /// On a non-Linux Unix host `acls` has no setfacl to call, so the
+    /// builder must reject it before any command is queued.
     #[test]
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "linux")))]
+    fn set_permissions_rejects_acls_on_non_linux_unix() {
+        use crate::application_specification::{Acl, ObjectType, Permission};
+
+        let mut builder = CommandBuilder::new();
+        let dst = std::env::temp_dir().join("test_setperm_acl_nonlinux.txt");
+        fs::write(&dst, "test").unwrap();
+
+        let acl = Acl::parse(&["user:testuser:rwx".to_string()]).unwrap();
+        let perm = Permission::new_for_test(
+            "**".to_string(),
+            vec![ObjectType::File],
+            vec![],
+            None,
+            None,
+            // `mode` set: the rejection must come before the chmod is queued.
+            Some(crate::application_specification::Mode::from_octal("0644").unwrap()),
+            Some(acl),
+            None,
+        );
+
+        let err = builder.set_permissions(&dst, &perm).unwrap_err();
+        assert!(
+            matches!(err, InstallerError::PermissionFieldNotSupported { field: "acls", .. }),
+            "expected PermissionFieldNotSupported for acls, got {err:?}"
+        );
+        assert!(builder.commands().is_empty(), "no command may be queued after rejection");
+
+        fs::remove_file(&dst).ok();
+    }
+
+    /// The rejection is independent of whether the permission entry
+    /// matches any object; `process_permission` calls this on entry.
+    #[test]
+    #[cfg(all(unix, not(target_os = "linux")))]
+    fn check_permission_fields_rejects_context_without_a_match() {
+        use crate::application_specification::{ObjectType, Permission, SeLinuxContext};
+
+        let ctx = SeLinuxContext::new(None, "httpd_sys_content_t".to_string(), None);
+        let perm = Permission::new_for_test(
+            "/nonexistent/dir".to_string(),
+            vec![ObjectType::Directory],
+            vec![],
+            None,
+            None,
+            None,
+            None,
+            Some(ctx),
+        );
+
+        let err =
+            CommandBuilder::check_permission_fields_supported(Path::new("/nonexistent/dir"), &perm)
+                .unwrap_err();
+        assert!(
+            matches!(err, InstallerError::PermissionFieldNotSupported { field: "context", .. }),
+            "expected PermissionFieldNotSupported for context, got {err:?}"
+        );
+    }
+
+    /// `context` (SELinux) is rejected the same way on non-Linux Unix.
+    #[test]
+    #[cfg(all(unix, not(target_os = "linux")))]
+    fn set_permissions_rejects_context_on_non_linux_unix() {
+        use crate::application_specification::{ObjectType, Permission, SeLinuxContext};
+
+        let mut builder = CommandBuilder::new();
+        let dst = std::env::temp_dir().join("test_setperm_ctx_nonlinux.txt");
+        fs::write(&dst, "test").unwrap();
+
+        let ctx = SeLinuxContext::new(None, "httpd_sys_content_t".to_string(), None);
+        let perm = Permission::new_for_test(
+            "**".to_string(),
+            vec![ObjectType::File],
+            vec![],
+            None,
+            None,
+            // `mode` set: the rejection must come before the chmod is queued.
+            Some(crate::application_specification::Mode::from_octal("0644").unwrap()),
+            None,
+            Some(ctx),
+        );
+
+        let err = builder.set_permissions(&dst, &perm).unwrap_err();
+        assert!(
+            matches!(err, InstallerError::PermissionFieldNotSupported { field: "context", .. }),
+            "expected PermissionFieldNotSupported for context, got {err:?}"
+        );
+        assert!(builder.commands().is_empty());
+
+        fs::remove_file(&dst).ok();
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
     fn set_permissions_with_context() {
         use crate::application_specification::{ObjectType, Permission, SeLinuxContext};
 
@@ -855,7 +1002,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     fn command_to_h_acl() {
         use crate::application_specification::Acl;
         let file = std::env::temp_dir().join("test_acl.txt");
@@ -870,7 +1017,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     fn command_to_h_context() {
         use crate::application_specification::SeLinuxContext;
         let file = std::env::temp_dir().join("test_ctx.txt");

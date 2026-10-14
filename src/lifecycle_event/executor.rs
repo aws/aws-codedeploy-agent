@@ -3,11 +3,9 @@
 //! Selects the correct deployment directory, parses the appspec, and executes
 //! each script for a given lifecycle event in order.
 //!
-//! ## Not yet implemented
-//!
-//! - **Deployment log**: Writes to a secondary `DeploymentLog` when
-//!   `enable_deployments_log` config is set. `DeploymentLogger` exists in `logging/`
-//!   but is not wired into the executor yet. Needs config system integration.
+//! Every `scripts.log` line is also written to the deployment log when one is
+//! attached with [`LifecycleEventExecutor::with_deployment_log`] (set when
+//! `enable_deployments_log` is on).
 
 use super::LifecycleEventType;
 use super::deployment_selector::select_deployment_dir;
@@ -16,6 +14,7 @@ use super::script::{HookEnvPolicy, Script};
 use super::script_run_log::ScriptRunLog;
 use crate::application_specification::AppSpec;
 use crate::deployment_specification::types::{DeploymentSpec, RevisionLocation, RevisionSource};
+use crate::logging::DeploymentLogSink;
 use crate::paths::APPSPEC_PATH_SEPARATORS;
 use crate::system::file_ops::ensure_executable;
 use std::collections::HashMap;
@@ -43,6 +42,9 @@ pub struct LifecycleEventExecutor {
     /// `restrict_agent_dir_permissions`. Default `false` (world-readable
     /// 0755/0644); `true` = hardened 0750/0640.
     restrict_log_permissions: bool,
+    /// Deployment log writer for this deployment; `None` when
+    /// `enable_deployments_log` is off.
+    deployment_log: Option<DeploymentLogSink>,
 }
 
 impl LifecycleEventExecutor {
@@ -94,7 +96,16 @@ impl LifecycleEventExecutor {
             env_policy: HookEnvPolicy::default(),
             reject_path_traversal: false,
             restrict_log_permissions: false,
+            deployment_log: None,
         })
+    }
+
+    /// Write every `scripts.log` line to the deployment log too. `None`
+    /// (the default) disables it.
+    #[must_use]
+    pub fn with_deployment_log(mut self, sink: Option<DeploymentLogSink>) -> Self {
+        self.deployment_log = sink;
+        self
     }
 
     /// Set the opt-in hook-environment hardening policy. Defaults to
@@ -175,7 +186,8 @@ impl LifecycleEventExecutor {
         let log_path = self.current_deployment_root_dir.join("logs/scripts.log");
         let log = Arc::new(Mutex::new(
             ScriptRunLog::open_with_policy(&log_path, self.restrict_log_permissions)
-                .unwrap_or_else(|_| ScriptRunLog::in_memory()),
+                .unwrap_or_else(|_| ScriptRunLog::in_memory())
+                .with_deployment_log(self.deployment_log.clone()),
         ));
 
         log.lock().unwrap().write_line("", &format!("LifecycleEvent - {event_name}"));

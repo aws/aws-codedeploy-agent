@@ -1,0 +1,38 @@
+#!/bin/sh
+# pkg preinstall: runs as root before the payload is written.
+#
+# Like rpm %pre / deb preinst: save the operator's config for postinstall to
+# restore (the payload ships the template), then stop the agent and wait for
+# it to exit so the binary is not replaced under it.
+set -eu
+
+LABEL=com.amazon.aws.codedeploy-agent
+CONF=/etc/codedeploy-agent/conf/codedeployagent.yml
+
+if [ -f "$CONF" ]; then
+    # Keep an existing save: after a crashed upgrade $CONF may be the template
+    # and .pkg-save the only copy of the operator's config. postinstall removes
+    # the save on success, so a lingering one always means "restore me".
+    [ -f "$CONF.pkg-save" ] || cp -p "$CONF" "$CONF.pkg-save"
+else
+    # Fresh install: a stale save must not be restored over the template.
+    rm -f "$CONF.pkg-save"
+fi
+
+if launchctl print "system/$LABEL" >/dev/null 2>&1; then
+    launchctl bootout "system/$LABEL" || :
+    # bootout only sends SIGTERM; wait for the job to unload before the payload
+    # replaces the binary. launchd SIGKILLs at ExitTimeOut (7200 s), so a job
+    # still present after that means launchd is wedged: fail the install.
+    i=0
+    while launchctl print "system/$LABEL" >/dev/null 2>&1; do
+        i=$((i + 1))
+        if [ "$i" -ge 7260 ]; then   # ExitTimeOut + margin: let launchd's own SIGKILL land first
+            echo "$LABEL did not exit within ExitTimeOut; aborting install" >&2
+            exit 1
+        fi
+        sleep 1
+    done
+fi
+
+exit 0

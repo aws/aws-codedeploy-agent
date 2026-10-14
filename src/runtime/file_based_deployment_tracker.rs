@@ -610,7 +610,8 @@ mod edge_case_tests {
         );
     }
 
-    #[cfg(unix)]
+    // APFS (macOS) rejects non-UTF-8 filenames with EILSEQ; the invalid-name path is only reachable on Linux filesystems.
+    #[cfg(target_os = "linux")]
     #[test]
     fn get_active_deployment_invalid_filename() {
         use std::ffi::OsStr;

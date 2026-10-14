@@ -7,7 +7,7 @@ edition = "2024"
 rust-version = "1.91"
 homepage = "https://aws.amazon.com/codedeploy/"
 repository = "https://github.com/aws/aws-codedeploy-agent"
-version = "2.1.0"
+version = "2.1.2"
 description = "AWS CodeDeploy agent responsible for deploying software on an individual EC2/On-prem instance"
 license = "Apache-2.0"
 authors = ["Amazon Web Services"]
@@ -27,7 +27,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "regist
 tracing-appender = "0.2"
 time = { version = "0.3", features = ["macros", "formatting"] }
 nu-path = "0.110"
-tokio = { version = "1", features = ["process", "io-util", "time", "rt", "macros", "sync"] }
+# `rt-multi-thread`: parallel S3 range downloads.
+tokio = { version = "1", features = ["process", "io-util", "time", "rt", "rt-multi-thread", "macros", "sync"] }
 chrono = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 # `vendored`: ship OpenSSL inside the binary so one artifact runs across
@@ -53,7 +54,7 @@ subtle = "2"
 strip-ansi-escapes = "0.2"
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.29", features = ["user", "fs", "signal", "process", "resource"] }
+nix = { version = "0.29", features = ["user", "fs", "signal", "process", "resource", "event"] }
 signal-hook = "0.3"
 
 [target.'cfg(windows)'.dependencies]

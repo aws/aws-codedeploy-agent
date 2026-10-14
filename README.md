@@ -14,6 +14,23 @@ AWS Lambda compute platform.
 
 The agent is licensed under [Apache License 2.0](LICENSE).
 
+## Supported platforms
+
+The agent is built and tested on the following operating systems. Linux and
+Windows ship as rpm/deb and msi; macOS ships as a `.pkg` (see
+[Building on macOS](DEVELOPMENT.md#building-on-macos)).
+
+| Platform | Versions | Architectures | Service manager |
+|---|---|---|---|
+| Amazon Linux | 2, 2023 | x86_64, aarch64 | systemd |
+| RHEL, Oracle Linux | 8, 9, 10 | x86_64, aarch64 | systemd |
+| Rocky Linux, CentOS Stream | 9, 10 | x86_64, aarch64 | systemd |
+| SLES | 15 | x86_64, aarch64 | systemd |
+| Debian | 11, 12, 13 | x86_64, aarch64 | systemd |
+| Ubuntu Server | 16.04–26.04 LTS, 25.04 | x86_64, aarch64 | systemd |
+| Windows Server | 2016, 2019, 2022, 2025 | x86_64 | Service Control Manager |
+| macOS (EC2 Mac) | 15 Sequoia, 26 Tahoe, 27 | aarch64 | launchd |
+
 ## Getting Started
 
 ### Prerequisites

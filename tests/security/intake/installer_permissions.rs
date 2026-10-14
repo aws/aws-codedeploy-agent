@@ -205,7 +205,9 @@ fn privilege_separation_is_documented() {
 // ---------------------------------------------------------------------------
 
 /// `ChangeContextCommand` rejects unconfined types when the toggle is on.
+// setfacl/semanage are Linux-only; the commands are cfg(target_os = "linux").
 #[test]
+#[cfg(target_os = "linux")]
 fn change_context_rejects_unconfined() {
     use codedeploy_agent::application_specification::AppSpec;
     use codedeploy_agent::installer::InstallerError;
@@ -253,7 +255,9 @@ fn change_context_rejects_unconfined() {
 /// Backwards-compatible default: unconfined types reach `semanage` when the
 /// toggle is off.
 /// Accepts `Ok` (semanage present and ran) or any non-`UnconfinedSelinuxRejected` error.
+// setfacl/semanage are Linux-only; the commands are cfg(target_os = "linux").
 #[test]
+#[cfg(target_os = "linux")]
 fn unconfined_selinux_allowed_when_rejection_disabled() {
     use codedeploy_agent::application_specification::AppSpec;
     use codedeploy_agent::installer::InstallerError;
@@ -470,7 +474,9 @@ fn change_mode_rejects_symlink_target() {
 
 /// A symlinked permission target must be rejected by ChangeContextCommand
 /// before the `canonicalize`/`semanage` path (which resolves the link).
+// setfacl/semanage are Linux-only; the commands are cfg(target_os = "linux").
 #[test]
+#[cfg(target_os = "linux")]
 fn change_context_rejects_symlink_target() {
     use codedeploy_agent::application_specification::AppSpec;
     use codedeploy_agent::installer::InstallerError;
@@ -500,7 +506,9 @@ fn change_context_rejects_symlink_target() {
 
 /// A symlinked permission target must be rejected by ChangeAclCommand rather
 /// than followed (setfacl redirected onto the link target).
+// setfacl/semanage are Linux-only; the commands are cfg(target_os = "linux").
 #[test]
+#[cfg(target_os = "linux")]
 fn change_acl_rejects_symlink_target() {
     use codedeploy_agent::application_specification::AppSpec;
     use codedeploy_agent::installer::InstallerError;
@@ -596,6 +604,8 @@ proptest! {
 // ---------------------------------------------------------------------------
 
 // Every blocklist member is rejected across randomised target paths.
+// setfacl/semanage are Linux-only; ChangeContextCommand is cfg(target_os = "linux").
+#[cfg(target_os = "linux")]
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(100))]
 

@@ -603,6 +603,10 @@ fn run(command: &Command, config_file: Option<&Path>) {
                 eprintln!("Failed to register signal handlers: {e}");
                 process::exit(1);
             }
+            // Ensure this worker dies with the master, however the master
+            // dies (e.g. by SIGKILL, which runs no graceful shutdown), so it
+            // can't be orphaned: on Linux it would hold the systemd service
+            // cgroup open, on macOS it would run next to a restarted agent.
             worker::bind_lifetime_to_parent();
             worker::run(&shutdown, &config);
         },
@@ -682,6 +686,13 @@ const VALID_FILE_EXISTS_BEHAVIORS: &[&str] = &["DISALLOW", "OVERWRITE", "RETAIN"
 fn run_update(config: &AgentConfig) {
     use codedeploy_agent::host_command::commands::UpdateAgentCommand;
 
+    // Refuse unsupported platforms (macOS) before touching
+    // credentials, IMDS or S3 — same shape as the Windows branch above.
+    if let Err(e) = UpdateAgentCommand::check_platform() {
+        eprintln!("{e}");
+        process::exit(1);
+    }
+
     // Resolve credentials + region exactly as the worker / S3 deploy path do:
     // on-premises config region first, then AWS_REGION env / IMDS.
     let mut credentials = match Credentials::load(&config.on_premises_config_file) {
@@ -710,6 +721,9 @@ fn run_update(config: &AgentConfig) {
         wire_log: config
             .log_aws_wire
             .then(|| (config.log_dir.clone(), config.program_name.clone())),
+        // Only fetches the small install script.
+        download_max_concurrency: 1,
+        download_chunk_size: config.s3_download_chunk_size,
         ..Default::default()
     };
     let s3_client = match S3Client::new(credentials, &s3_config) {
@@ -1087,6 +1101,8 @@ fn run_deploy_local_s3(
         wire_log: config
             .log_aws_wire
             .then(|| (config.log_dir.clone(), config.program_name.clone())),
+        download_max_concurrency: config.s3_download_max_concurrency,
+        download_chunk_size: config.s3_download_chunk_size,
         ..Default::default()
     };
     let s3_client = match S3Client::new(credentials, &s3_config) {

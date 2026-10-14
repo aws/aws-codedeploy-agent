@@ -18,6 +18,15 @@ pub trait PlatformFileOperations: Send + Sync {
     fn write_with_retry(&self, path: &Path, content: &str) -> io::Result<()>;
 }
 
+/// Build a `Mode` from `u32` permission bits. `mode_t` is `u32` on Linux but
+/// `u16` on macOS, so mask to the permission bits (`0o7777`) before the cast.
+#[cfg(unix)]
+#[must_use]
+#[allow(clippy::unnecessary_cast, clippy::cast_possible_truncation)] // width of mode_t is platform-specific
+pub fn mode_from_bits(bits: u32) -> nix::sys::stat::Mode {
+    nix::sys::stat::Mode::from_bits_truncate((bits & 0o7777) as nix::libc::mode_t)
+}
+
 /// If the file has no execute bits, add them. Mirrors
 /// `script_executable?` check + `make_executable` fallback.
 ///
@@ -208,6 +217,40 @@ pub fn copy_dir_recursive(src: &Path, dest: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Write all of `buf` to `file` at `offset`, so several threads can write
+/// different regions of one handle. Uses `pwrite` on Unix and `seek_write` on
+/// Windows; `seek_write` also moves the cursor, which is harmless because every
+/// write passes its own offset.
+///
+/// # Errors
+/// Returns an error if the write fails or writes zero bytes.
+pub fn write_all_at(file: &std::fs::File, buf: &[u8], offset: u64) -> io::Result<()> {
+    let mut buf = buf;
+    let mut offset = offset;
+    while !buf.is_empty() {
+        #[cfg(unix)]
+        let written = std::os::unix::fs::FileExt::write_at(file, buf, offset);
+        #[cfg(windows)]
+        let written = std::os::windows::fs::FileExt::seek_write(file, buf, offset);
+
+        match written {
+            Ok(0) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    "positioned write wrote zero bytes",
+                ));
+            },
+            Ok(n) => {
+                buf = &buf[n..];
+                offset += n as u64;
+            },
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => {},
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 #[derive(Debug)]
 pub struct MockFileOperations {
@@ -262,6 +305,14 @@ mod safe_relative_path_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn mode_from_bits_keeps_permission_bits_and_drops_file_type() {
+        let mode = mode_from_bits(0o100_644);
+        assert_eq!(mode, nix::sys::stat::Mode::from_bits_truncate(0o644));
+        assert_eq!(mode_from_bits(0o4755), nix::sys::stat::Mode::from_bits_truncate(0o4755));
+    }
     use std::path::PathBuf;
     use tempfile::TempDir;
 
@@ -426,5 +477,80 @@ mod tests {
 
         let mode = std::fs::metadata(dest.join("scripts")).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o751, "expected 0751 preserved, got {mode:#o}");
+    }
+
+    #[test]
+    fn write_all_at_writes_at_offset() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("out.bin");
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(8).unwrap();
+        write_all_at(&file, b"BBBB", 4).unwrap();
+        write_all_at(&file, b"AAAA", 0).unwrap();
+        drop(file);
+        assert_eq!(std::fs::read(&path).unwrap(), b"AAAABBBB");
+    }
+
+    #[test]
+    fn write_all_at_extends_file_and_zero_fills_gap() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("sparse.bin");
+        let file = std::fs::File::create(&path).unwrap();
+        // Writing past the end extends the file; the skipped region reads as zeros.
+        write_all_at(&file, b"Z", 3).unwrap();
+        drop(file);
+        assert_eq!(std::fs::read(&path).unwrap(), b"\0\0\0Z");
+    }
+
+    #[test]
+    fn write_all_at_empty_buffer_is_noop() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("empty.bin");
+        let file = std::fs::File::create(&path).unwrap();
+        write_all_at(&file, b"", 0).unwrap();
+        drop(file);
+        assert_eq!(std::fs::read(&path).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn write_all_at_read_only_handle_errors() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("ro.bin");
+        std::fs::write(&path, b"data").unwrap();
+        let file = std::fs::File::open(&path).unwrap();
+        assert!(write_all_at(&file, b"x", 0).is_err());
+    }
+
+    #[test]
+    fn write_all_at_concurrent_ranges_do_not_interleave() {
+        use std::sync::Arc;
+        // Threads writing distinct regions of one handle produce the exact file.
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("parallel.bin");
+        let chunk = 4096;
+        let threads = 8;
+        let file = Arc::new(std::fs::File::create(&path).unwrap());
+        file.set_len((chunk * threads) as u64).unwrap();
+
+        let handles: Vec<_> = (0..threads)
+            .map(|i| {
+                let file = Arc::clone(&file);
+                std::thread::spawn(move || {
+                    let buf = vec![b'a' + u8::try_from(i).unwrap(); chunk];
+                    write_all_at(&file, &buf, (i * chunk) as u64).unwrap();
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+        drop(file);
+
+        let written = std::fs::read(&path).unwrap();
+        assert_eq!(written.len(), chunk * threads);
+        for i in 0..threads {
+            let expected = vec![b'a' + u8::try_from(i).unwrap(); chunk];
+            assert_eq!(&written[i * chunk..(i + 1) * chunk], &expected[..], "region {i} corrupted");
+        }
     }
 }

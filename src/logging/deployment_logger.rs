@@ -4,6 +4,7 @@ use std::io::{self, Write};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use chrono::Local;
 
@@ -62,7 +63,8 @@ impl DeploymentLogger {
     pub fn log(&mut self, message: &str) -> io::Result<()> {
         self.rotate_if_needed()?;
         let ts = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
-        writeln!(self.file, "[{ts}] {message}")
+        // One `write_all` per record so concurrent appenders cannot split it.
+        self.file.write_all(format!("[{ts}] {message}\n").as_bytes())
     }
 
     fn rotate_if_needed(&mut self) -> io::Result<()> {
@@ -91,6 +93,78 @@ impl DeploymentLogger {
 
         Ok(())
     }
+}
+
+/// Process-wide handle to the deployment log, shared by every deployment.
+///
+/// All concurrent deployments append through one handle and one rotation. A
+/// handle per hook command would let one deployment rotate the file while
+/// another keeps writing to the renamed file.
+///
+/// The file is opened by [`Self::ensure_open`]; a failed open is retried on
+/// the next call, so a transient failure does not disable the log for the
+/// life of the process.
+#[derive(Debug, Clone)]
+pub struct SharedDeploymentLog {
+    config: LogConfig,
+    logger: Arc<Mutex<Option<DeploymentLogger>>>,
+}
+
+impl SharedDeploymentLog {
+    #[must_use]
+    pub fn new(config: LogConfig) -> Self {
+        Self { config, logger: Arc::new(Mutex::new(None)) }
+    }
+
+    /// Open the log file if it is not open yet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the log directory or file cannot be created.
+    pub fn ensure_open(&self) -> io::Result<()> {
+        let mut guard = self.logger.lock().unwrap_or_else(PoisonError::into_inner);
+        if guard.is_none() {
+            *guard = Some(DeploymentLogger::new(&self.config)?);
+        }
+        Ok(())
+    }
+
+    /// A writer that tags every record with `deployment_id`.
+    #[must_use]
+    pub fn for_deployment(&self, deployment_id: &str) -> DeploymentLogSink {
+        DeploymentLogSink { log: self.clone(), deployment_id: deployment_id.to_string() }
+    }
+
+    fn log(&self, message: &str) {
+        let mut guard = self.logger.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(logger) = guard.as_mut() {
+            // Best-effort: the deployment log is diagnostic only.
+            let _ = logger.log(message);
+        }
+    }
+}
+
+/// Writes one deployment's script-log records to the shared deployment log.
+#[derive(Debug, Clone)]
+pub struct DeploymentLogSink {
+    log: SharedDeploymentLog,
+    deployment_id: String,
+}
+
+impl DeploymentLogSink {
+    /// Write `message` as `[<deployment_id>]<message stripped>`.
+    ///
+    /// Called for every `scripts.log` line. Does nothing if the log is not open.
+    pub fn log(&self, message: &str) {
+        self.log
+            .log(&format!("[{}]{}", self.deployment_id, strip_ascii_whitespace(message)));
+    }
+}
+
+/// Trims NUL, `\t`, `\n`, `\v`, `\f`, `\r` and space.
+/// Narrower than `str::trim`, which also removes Unicode whitespace.
+fn strip_ascii_whitespace(s: &str) -> &str {
+    s.trim_matches(|c| matches!(c, '\0' | '\t' | '\n' | '\x0b' | '\x0c' | '\r' | ' '))
 }
 
 /// Open (or create) the deployment log file with the policy mode.
@@ -217,6 +291,64 @@ mod tests {
         // Verify timestamp format: [YYYY-MM-DD HH:MM:SS.mmm]
         assert!(lines[0].starts_with('['));
         assert!(lines[0].contains(']'));
+    }
+
+    #[test]
+    fn writes_one_line_per_message_without_blank_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut logger = DeploymentLogger::new(&test_config(dir.path())).unwrap();
+
+        logger.log("one").unwrap();
+        logger.log("two").unwrap();
+
+        let content = fs::read_to_string(&logger.path).unwrap();
+        assert_eq!(content.matches('\n').count(), 2, "exactly one newline per record: {content:?}");
+        assert!(!content.contains("\n\n"));
+    }
+
+    #[test]
+    fn strip_ascii_whitespace_leaves_unicode_whitespace() {
+        assert_eq!(strip_ascii_whitespace(" \t[stdout]hi\r\n\0"), "[stdout]hi");
+        // Unicode whitespace is not stripped.
+        assert_eq!(strip_ascii_whitespace("\u{a0}x\u{a0}"), "\u{a0}x\u{a0}");
+    }
+
+    #[test]
+    fn sink_prefixes_deployment_id_and_strips_message() {
+        let dir = tempfile::tempdir().unwrap();
+        let shared = SharedDeploymentLog::new(test_config(dir.path()));
+        shared.ensure_open().unwrap();
+
+        shared.for_deployment("d-1").log("[stdout]hello  \n");
+
+        let path = dir.path().join("deployment-logs/test-agent-deployments.log");
+        let content = fs::read_to_string(path).unwrap();
+        let (_, message) = content.trim_end().split_once("] ").unwrap();
+        assert_eq!(message, "[d-1][stdout]hello");
+    }
+
+    #[test]
+    fn sink_is_a_no_op_until_opened() {
+        let dir = tempfile::tempdir().unwrap();
+        let shared = SharedDeploymentLog::new(test_config(dir.path()));
+
+        shared.for_deployment("d-1").log("dropped");
+
+        assert!(!dir.path().join("deployment-logs").exists());
+    }
+
+    #[test]
+    fn ensure_open_retries_after_a_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        // A regular file where `deployment-logs/`'s parent should be.
+        let blocker = dir.path().join("root");
+        fs::write(&blocker, "x").unwrap();
+        let shared = SharedDeploymentLog::new(test_config(&blocker));
+        assert!(shared.ensure_open().is_err());
+
+        fs::remove_file(&blocker).unwrap();
+
+        assert!(shared.ensure_open().is_ok(), "a later call must open the log");
     }
 
     #[test]

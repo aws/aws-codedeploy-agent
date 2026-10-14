@@ -1,3 +1,35 @@
+## 2.1.2
+
+### Added
+
+* **macOS support** on EC2 Mac, macOS 15 and later (Apple silicon, aarch64). The agent ships as a `.pkg` and runs as a launchd LaunchDaemon. Deployments use AppSpec `os: linux`. AppSpec `permissions` entries that set `acls` or `context` are rejected before the install runs; `owner`, `group` and `mode` apply. Agent self-update is not available on macOS yet.
+* **Optional parallel S3 bundle downloads.** Setting `s3_download_max_concurrency` above 1 (max 64) downloads a bundle in parallel HTTP range requests of `s3_download_chunk_size` bytes (default 8MiB, minimum 64KiB). Every range is pinned to the object's ETag, or to its version when one is set, so an object replaced mid-download fails the deployment. The default of 1 keeps the single-request download.
+
+### Fixed
+
+* **Deployment log format matches the 1.x agent ([#430](https://github.com/aws/aws-codedeploy-agent/issues/430)).** Each `scripts.log` line is now written to `codedeploy-agent-deployments.log` as it is produced, as `[<timestamp>] [<deployment_id>]<message>`. Previously the agent copied the last 2048 bytes of script output into the log after each lifecycle event, which dropped the deployment ID, doubled the timestamp, added a blank line after each record, and lost `LifecycleEvent` headers and any older output. The failure-summary line is removed, and blank script output lines are logged as a bare `[stdout]` record in both files.
+* **Command endpoints in the European Sovereign Cloud and ISO partitions.** Hosts in `eusc-*`, `us-iso-*`, `us-isob-*`, `eu-isoe-*` and `us-isof-*` regions resolved an `amazonaws.com` endpoint that does not exist. Each partition now uses its own DNS suffix.
+
+### Security
+
+* **(opt-in)** On macOS, `strip_loader_env_in_hooks` strips the `DYLD_*` loader variables from hook environments.
+
+## 2.1.0
+
+### Added
+
+* **`RESTART` deployment mode.** The agent installs from the copy of the revision from the deployment group's last successful deployment already on the instance. If that copy is missing or incomplete, the agent downloads the revision.
+
+### Security
+
+* A deployment whose AppSpec file path resolves outside the application revision directory is rejected. Nested paths such as `configs/appspec.yml` are still supported.
+
+## 2.0.1
+
+### Fixed
+
+* **Windows AppSpec paths with leading separators.** A `files.source` or `hooks.location` beginning with `\` (including the bare `\` form) or `/` resolved against the drive root instead of the deployment archive, failing Install events with access-denied errors. Leading separators are now stripped.
+
 ## 2.0.0
 
 Version 2.0.0 replaces the Ruby runtime with a single statically linked binary in Rust, completely removing the dependency on a Ruby runtime.
