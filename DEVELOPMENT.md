@@ -321,21 +321,19 @@ cargo build --release
 
 ## Building on macOS
 
-Targets: `aarch64-apple-darwin` (Apple silicon) and `x86_64-apple-darwin`
-(Intel). Both build on an Apple-silicon Mac with the Xcode command-line tools;
-there is no Intel-only step. `MACOSX_DEPLOYMENT_TARGET=15.0` matches the
-oldest supported macOS (15 Sequoia).
+Target: `aarch64-apple-darwin` (Apple silicon), built with the Xcode
+command-line tools. `MACOSX_DEPLOYMENT_TARGET=15.0` matches the oldest
+supported macOS (15 Sequoia).
 
 ```bash
 xcode-select --install
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
+rustup target add aarch64-apple-darwin
 
 export MACOSX_DEPLOYMENT_TARGET=15.0
 cargo build --release --target aarch64-apple-darwin
-cargo build --release --target x86_64-apple-darwin
 ```
 
-Package each binary as a `.pkg` (payload: binary, `codedeploy-local` symlink,
+Package the binary as a `.pkg` (payload: binary, `codedeploy-local` symlink,
 config template, LaunchDaemon plist; see `macos/pkg/`):
 
 ```bash

@@ -29,12 +29,12 @@ Windows ship as rpm/deb and msi; macOS ships as a `.pkg` (see
 | Debian | 11, 12, 13 | x86_64, aarch64 | systemd |
 | Ubuntu Server | 16.04–26.04 LTS, 25.04 | x86_64, aarch64 | systemd |
 | Windows Server | 2016, 2019, 2022, 2025 | x86_64 | Service Control Manager |
-| macOS (EC2 Mac) | 15 Sequoia, 26 Tahoe, 27 | aarch64 (all); x86_64 (15) | launchd |
+| macOS (EC2 Mac) | 15 Sequoia, 26 Tahoe, 27 | aarch64 | launchd |
 
 macOS notes:
 - Supported macOS versions are the current major release and the two before
-  it, reviewed each September. On EC2, Tahoe (26) and later are Apple silicon
-  only; `mac1.metal` (x86_64) tops out at 15.
+  it, reviewed each September. Only Apple silicon (aarch64) EC2 Mac instances
+  are supported.
 - AppSpec `os: linux` is used for macOS deployments (`os: macos` is not a
   valid value).
 - AppSpec `permissions` fields `acls` and `context` (SELinux) are rejected on
