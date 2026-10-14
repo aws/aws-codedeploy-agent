@@ -5,12 +5,9 @@
 * **macOS support** on EC2 Mac, macOS 15 and later (Apple silicon, aarch64). The agent ships as a `.pkg` and runs as a launchd LaunchDaemon. Deployments use AppSpec `os: linux`. AppSpec `permissions` entries that set `acls` or `context` are rejected before the install runs; `owner`, `group` and `mode` apply. Agent self-update is not available on macOS yet.
 * **Optional parallel S3 bundle downloads.** Setting `s3_download_max_concurrency` above 1 (max 64) downloads a bundle in parallel HTTP range requests of `s3_download_chunk_size` bytes (default 8MiB, minimum 64KiB). Every range is pinned to the object's ETag, or to its version when one is set, so an object replaced mid-download fails the deployment. The default of 1 keeps the single-request download.
 
-### Changed
-
-* **The deployment log is written as script output is produced.** Each `scripts.log` line is also written to the deployment log as `[<timestamp>] [<deployment_id>]<message>`, replacing the 2048-byte tail copied after each lifecycle event. Older output is no longer lost, the failure-summary line is removed, and blank script output lines are logged as a bare `[stdout]` record in both files.
-
 ### Fixed
 
+* **Deployment log format matches the 1.x agent ([#430](https://github.com/aws/aws-codedeploy-agent/issues/430)).** Each `scripts.log` line is now written to `codedeploy-agent-deployments.log` as it is produced, as `[<timestamp>] [<deployment_id>]<message>`. Previously the agent copied the last 2048 bytes of script output into the log after each lifecycle event, which dropped the deployment ID, doubled the timestamp, added a blank line after each record, and lost `LifecycleEvent` headers and any older output. The failure-summary line is removed, and blank script output lines are logged as a bare `[stdout]` record in both files.
 * **Command endpoints in the European Sovereign Cloud and ISO partitions.** Hosts in `eusc-*`, `us-iso-*`, `us-isob-*`, `eu-isoe-*` and `us-isof-*` regions resolved an `amazonaws.com` endpoint that does not exist. Each partition now uses its own DNS suffix.
 
 ### Security
