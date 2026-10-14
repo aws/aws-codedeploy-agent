@@ -389,9 +389,6 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // Split by platform: on macOS UpdateAgentCommand refuses before the S3 check
-    // (UNSUPPORTED_PLATFORM_MESSAGE), so the S3-error assertion only holds elsewhere.
-    #[cfg(not(target_os = "macos"))]
     #[test]
     fn update_deployment_agent_returns_error_without_s3() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -406,24 +403,6 @@ mod tests {
         let result = dispatcher.execute_command("UpdateDeploymentAgent", &test_spec());
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("S3 client not configured"));
-    }
-
-    // On macOS self-update is refused before the S3 check (see update_agent.rs).
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn update_deployment_agent_refuses_on_macos() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let dispatcher = CommandDispatcher::new(
-            test_archives(&dir),
-            None,
-            HashMap::new(),
-            "us-east-1",
-            None,
-            Arc::new(AgentConfig::default()),
-        );
-        let result = dispatcher.execute_command("UpdateDeploymentAgent", &test_spec());
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not supported on macOS"));
     }
 
     #[test]

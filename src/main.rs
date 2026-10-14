@@ -686,13 +686,6 @@ const VALID_FILE_EXISTS_BEHAVIORS: &[&str] = &["DISALLOW", "OVERWRITE", "RETAIN"
 fn run_update(config: &AgentConfig) {
     use codedeploy_agent::host_command::commands::UpdateAgentCommand;
 
-    // Refuse unsupported platforms (macOS) before touching
-    // credentials, IMDS or S3 — same shape as the Windows branch above.
-    if let Err(e) = UpdateAgentCommand::check_platform() {
-        eprintln!("{e}");
-        process::exit(1);
-    }
-
     // Resolve credentials + region exactly as the worker / S3 deploy path do:
     // on-premises config region first, then AWS_REGION env / IMDS.
     let mut credentials = match Credentials::load(&config.on_premises_config_file) {

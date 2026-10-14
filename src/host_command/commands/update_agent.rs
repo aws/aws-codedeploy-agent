@@ -26,13 +26,6 @@ const SHELL: &str = "/bin/sh";
 /// Package-type arg: `auto` tells the script to detect the package manager.
 const PACKAGE_TYPE_ARG: &str = "auto";
 
-/// Why self-update is refused on macOS. The bucket install script has no
-/// `pkg` package type yet; until it does, running it on macOS would
-/// only fail inside the script after the download.
-#[cfg(target_os = "macos")]
-pub(crate) const UNSUPPORTED_PLATFORM_MESSAGE: &str = "Agent self-update is not supported on macOS yet. \
-     Install the latest .pkg from the regional aws-codedeploy-<region> bucket instead.";
-
 pub struct UpdateAgentCommand {
     region: String,
     s3_client: Option<S3Client>,
@@ -77,8 +70,6 @@ impl UpdateAgentCommand {
     pub fn execute(&self) -> io::Result<Vec<String>> {
         info!("UpdateDeploymentAgent command received");
 
-        Self::check_platform()?;
-
         let s3 = self
             .s3_client
             .as_ref()
@@ -96,25 +87,6 @@ impl UpdateAgentCommand {
 
         info!("Agent install script completed — post-install scripts will restart the agent");
         Ok(vec!["Update installed successfully".to_string()])
-    }
-}
-
-impl UpdateAgentCommand {
-    /// Refuse self-update on platforms the bucket install script cannot
-    /// install on. Called before any credential, IMDS or S3 use so the
-    /// refusal is immediate and needs no network access.
-    ///
-    /// # Errors
-    /// `ErrorKind::Unsupported` on macOS. `Ok` elsewhere.
-    pub fn check_platform() -> io::Result<()> {
-        #[cfg(target_os = "macos")]
-        {
-            Err(io::Error::new(io::ErrorKind::Unsupported, UNSUPPORTED_PLATFORM_MESSAGE))
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            Ok(())
-        }
     }
 }
 
@@ -288,24 +260,6 @@ mod tests {
         assert!(debug.contains("us-east-1"));
     }
 
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn check_platform_refuses_macos_before_any_network_use() {
-        let err = UpdateAgentCommand::check_platform().unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::Unsupported);
-        assert!(err.to_string().contains("not supported on macOS"));
-        // execute() must return the same refusal even with no S3 client.
-        let cmd = UpdateAgentCommand::new("us-east-1".into(), None);
-        assert_eq!(cmd.execute().unwrap_err().kind(), io::ErrorKind::Unsupported);
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    fn check_platform_allows_non_macos() {
-        assert!(UpdateAgentCommand::check_platform().is_ok());
-    }
-
-    #[cfg(not(target_os = "macos"))]
     #[test]
     fn execute_without_s3_client_errors() {
         let cmd = UpdateAgentCommand::new("us-east-1".into(), None);
