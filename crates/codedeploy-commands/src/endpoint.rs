@@ -27,25 +27,6 @@ pub fn resolve(
     format!("https://{service}.{region}.{}", partition_dns_suffix(region))
 }
 
-/// Map a region to its partition's DNS suffix.
-///
-/// The default AWS partition uses `amazonaws.com`; other partitions have
-/// distinct suffixes and are matched by their region-name prefix:
-/// - `cn-*` (China) -> `amazonaws.com.cn`
-/// - `eusc-*` (European Sovereign Cloud) -> `amazonaws.eu`
-/// - `us-iso-*` (ISO) -> `c2s.ic.gov`
-/// - `us-isob-*` (ISO-B) -> `sc2s.sgov.gov`
-/// - `eu-isoe-*` (ISO-E) -> `cloud.adc-e.uk`
-/// - `us-isof-*` (ISO-F) -> `csp.hci.ic.gov`
-///
-/// `GovCloud` (`us-gov-*`) intentionally stays on `amazonaws.com`.
-///
-/// NOTE: this prefix table is a stopgap. The legacy Ruby agent read the domain
-/// directly from IMDS (`/latest/meta-data/services/domain`), which resolves
-/// every partition without hardcoding. Once IMDS domain resolution lands, the
-/// non-commercial entries here should be removed. The ISO prefixes are
-/// mutually disjoint (`us-iso-`, `us-isob-`, `us-isof-` never overlap), so
-/// match order is not significant.
 fn partition_dns_suffix(region: &str) -> &'static str {
     if region.starts_with("cn-") {
         "amazonaws.com.cn"
