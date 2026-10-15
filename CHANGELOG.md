@@ -2,7 +2,7 @@
 
 ### Added
 
-* **macOS support** on EC2 Mac, macOS 15 and later (Apple silicon, aarch64). The agent ships as a `.pkg` and runs as a launchd LaunchDaemon. Deployments use AppSpec `os: linux`. AppSpec `permissions` entries that set `acls` or `context` are rejected before the install runs; `owner`, `group` and `mode` apply. Agent self-update is not available on macOS yet.
+* **macOS support** on EC2 Mac, macOS 15 and later (Apple silicon, aarch64). The agent ships as a `.pkg` and runs as a launchd LaunchDaemon. Deployments use AppSpec `os: linux`. AppSpec `permissions` entries that set `acls` or `context` are rejected before the install runs; `owner`, `group` and `mode` apply. Agent self-update installs the `.pkg` on macOS.
 * **Optional parallel S3 bundle downloads.** Setting `s3_download_max_concurrency` above 1 (max 64) downloads a bundle in parallel HTTP range requests of `s3_download_chunk_size` bytes (default 8MiB, minimum 64KiB). Every range is pinned to the object's ETag, or to its version when one is set, so an object replaced mid-download fails the deployment. The default of 1 keeps the single-request download.
 
 ### Fixed
