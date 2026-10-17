@@ -17,10 +17,18 @@ impl MakeDirectoryCommand {
     }
 
     /// # Errors
-    /// Returns an error if the command execution fails.
+    /// Returns an error if the command execution fails, unless the path already exists
     pub fn execute(&self, cleanup_file: &mut dyn Write) -> Result<()> {
-        fs::create_dir(&self.directory)?;
-        writeln!(cleanup_file, "{}", self.directory.display())?;
+        match fs::create_dir(&self.directory) {
+            Ok(()) => {
+                writeln!(cleanup_file, "{}", self.directory.display())?;
+            }
+            Err(e)
+                if e.kind() == std::io::ErrorKind::AlreadyExists
+                    && self.directory.is_dir() => {}
+            Err(e) => return Err(e.into()),
+        }
+    
         Ok(())
     }
 
