@@ -17,18 +17,18 @@ impl MakeDirectoryCommand {
     }
 
     /// # Errors
-    /// Returns an error if the command execution fails, unless the path already exists
+    /// Returns an error if the directory cannot be created, unless a directory
+    /// already exists at the path.
     pub fn execute(&self, cleanup_file: &mut dyn Write) -> Result<()> {
         match fs::create_dir(&self.directory) {
             Ok(()) => {
                 writeln!(cleanup_file, "{}", self.directory.display())?;
-            }
-            Err(e)
-                if e.kind() == std::io::ErrorKind::AlreadyExists
-                    && self.directory.is_dir() => {}
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && self.directory.is_dir() => {
+            },
             Err(e) => return Err(e.into()),
         }
-    
+
         Ok(())
     }
 
@@ -70,9 +70,44 @@ mod tests {
 
         let cmd = MakeDirectoryCommand::new(dir.clone());
         let mut cleanup = Vec::new();
-        assert!(cmd.execute(&mut cleanup).is_err());
+        cmd.execute(&mut cleanup).unwrap();
+
+        assert!(dir.is_dir());
+        assert!(cleanup.is_empty());
 
         fs::remove_dir(&dir).ok();
+    }
+
+    #[test]
+    fn execute_file_exists() {
+        let path = std::env::temp_dir().join("test_mkdir_file_exists");
+        let _ = fs::remove_dir_all(&path);
+        fs::write(&path, b"").unwrap();
+
+        let cmd = MakeDirectoryCommand::new(path.clone());
+        let mut cleanup = Vec::new();
+        assert!(cmd.execute(&mut cleanup).is_err());
+        assert!(cleanup.is_empty());
+
+        fs::remove_file(&path).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execute_symlink_to_dir_exists() {
+        let target = std::env::temp_dir().join("test_mkdir_symlink_target");
+        let link = std::env::temp_dir().join("test_mkdir_symlink_link");
+        let _ = fs::remove_file(&link);
+        fs::create_dir_all(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        let cmd = MakeDirectoryCommand::new(link.clone());
+        let mut cleanup = Vec::new();
+        cmd.execute(&mut cleanup).unwrap();
+        assert!(cleanup.is_empty());
+
+        fs::remove_file(&link).ok();
+        fs::remove_dir(&target).ok();
     }
 
     #[test]
