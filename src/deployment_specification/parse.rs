@@ -33,15 +33,15 @@ impl DeploymentSpec {
 }
 
 fn parse_deployment_spec_data(data: &str) -> Result<DeploymentSpec> {
-    let mut parsed: Value = serde_json::from_str(data)
+    let parsed: Value = serde_json::from_str(data)
         .map_err(|e| DeploymentSpecError::ParseError(format!("JSON parse error: {e}")))?;
 
-    // The token must be redacted before logging.
-    if let Some(token) = parsed.get_mut("GitHubAccessToken") {
+    // Redact a copy for logging; build the spec from the original.
+    let mut sanitized = parsed.clone();
+    if let Some(token) = sanitized.get_mut("GitHubAccessToken") {
         *token = Value::String("REDACTED".to_string());
     }
-
-    debug!("Parse: {parsed}");
+    debug!("Parse: {sanitized}");
 
     DeploymentSpec::new(&parsed)
 }
@@ -180,6 +180,9 @@ mod tests {
         assert_eq!(spec.deployment_id, "d-12345678");
     }
 
+    /// The debug log must show the redacted spec, while the parsed spec must
+    /// keep the real token so the GitHub downloader can authenticate.
+    #[tracing_test::traced_test]
     #[test]
     fn github_token_redaction() {
         let data = json!({
@@ -203,6 +206,19 @@ mod tests {
             payload: serde_json::to_string(&data).unwrap(),
         };
 
-        let _spec = DeploymentSpec::parse_with_env(&envelope, &dev_mode_env()).unwrap();
+        let spec = DeploymentSpec::parse_with_env(&envelope, &dev_mode_env()).unwrap();
+        match spec.revision {
+            RevisionLocation::GitHub { auth_token, anonymous, .. } => {
+                assert_eq!(auth_token.as_deref(), Some("secret-token"));
+                assert!(!anonymous);
+            },
+            other => panic!("expected GitHub revision, got {other:?}"),
+        }
+        // The spec was actually logged (guards against a vacuous pass)...
+        assert!(logs_contain("Parse:"), "expected the spec debug log line");
+        // ...with the token redacted...
+        assert!(logs_contain(r#""GitHubAccessToken":"REDACTED""#));
+        // ...and the real token nowhere in the captured logs.
+        assert!(!logs_contain("secret-token"), "real token leaked into logs");
     }
 }
