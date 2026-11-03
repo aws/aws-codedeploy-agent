@@ -30,9 +30,20 @@ impl CopyCommand {
     /// # Errors
     /// Returns an error if the command execution fails.
     pub fn execute(&self, cleanup_file: &mut dyn Write) -> Result<()> {
-        writeln!(cleanup_file, "{}", self.destination.display())?;
-
         let metadata = fs::symlink_metadata(&self.source)?;
+
+        #[cfg(unix)]
+        if metadata.is_symlink()
+            && fs::symlink_metadata(&self.destination).is_ok_and(|m| m.is_dir())
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("cannot replace directory {} with a symlink", self.destination.display()),
+            )
+            .into());
+        }
+
+        crate::installer::cleanup_file::write_line(cleanup_file, b"", &self.destination)?;
 
         if metadata.is_symlink() {
             let target = fs::read_link(&self.source)?;
@@ -175,8 +186,8 @@ impl CopyCommand {
     pub fn to_h(&self) -> Value {
         json!({
             "type": "copy",
-            "source": self.source,
-            "destination": self.destination
+            "source": self.source.to_string_lossy(),
+            "destination": self.destination.to_string_lossy()
         })
     }
 }
@@ -282,6 +293,19 @@ mod tests {
         assert_eq!(hash["type"], "copy");
         assert_eq!(hash["source"], "/source/file.txt");
         assert_eq!(hash["destination"], "/dest/file.txt");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn to_h_non_utf8_path() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let name = OsStr::from_bytes(b"/dest/caf\xe9.txt");
+        let cmd = CopyCommand::new("/source/file.txt".into(), name.into());
+        let hash = cmd.to_h();
+
+        assert_eq!(hash["destination"], "/dest/caf\u{fffd}.txt");
     }
 
     #[test]

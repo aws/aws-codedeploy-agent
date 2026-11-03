@@ -70,7 +70,7 @@ impl ChangeOwnerCommand {
             "type": "chown",
             "owner": self.owner,
             "group": self.group,
-            "file": self.object
+            "file": self.object.to_string_lossy()
         })
     }
 }

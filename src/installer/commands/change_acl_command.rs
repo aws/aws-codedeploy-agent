@@ -194,7 +194,7 @@ impl<L: LinuxOps> ChangeAclCommand<L> {
         json!({
             "type": "setfacl",
             "acl": acl_strings,
-            "file": self.object
+            "file": self.object.to_string_lossy()
         })
     }
 }

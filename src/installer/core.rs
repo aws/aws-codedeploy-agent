@@ -1,4 +1,5 @@
 //! Installer core — executes install commands and manages cleanup files.
+use super::cleanup_file;
 #[cfg(target_os = "linux")]
 use super::commands::RemoveContextCommand;
 use super::{
@@ -14,12 +15,20 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::{debug, info};
 
+/// Cleanup entries are newline-delimited, so a destination containing a
+/// line break is refused.
+fn reject_line_break(path: &Path) -> Result<()> {
+    if path.as_os_str().as_encoded_bytes().iter().any(|b| matches!(b, b'\n' | b'\r')) {
+        return Err(InstallerError::LineBreakInPath { path: path.to_path_buf() });
+    }
+    Ok(())
+}
+
 // Instruction-file mode (install.json, cleanup) comes from
 // `system::agent_file_mode`: 0644 by default, 0600 under
 // `restrict_agent_dir_permissions`.
 
-// Independent opt-in toggles mirroring their AgentConfig fields; an enum
-// would force invalid combinations to be representable.
+// One independent toggle per AgentConfig field; every combination is valid.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug)]
 pub struct Installer {
@@ -129,8 +138,8 @@ impl Installer {
                 // replaced it — skip cleanup rather than delete injected paths.
                 if Self::cleanup_file_is_trusted(&file, &cleanup_file)? {
                     use std::io::Read;
-                    let mut contents = String::new();
-                    file.read_to_string(&mut contents)?;
+                    let mut contents = Vec::new();
+                    file.read_to_end(&mut contents)?;
                     Self::execute_cleanup(&contents)?;
                 }
                 drop(file);
@@ -336,6 +345,7 @@ impl Installer {
         dest: &Path,
         behavior: FileExistsBehavior,
     ) -> Result<()> {
+        reject_line_break(dest)?;
         if !dest.is_dir() {
             builder.mkdir(dest)?;
         }
@@ -363,13 +373,25 @@ impl Installer {
         dest: &Path,
         behavior: FileExistsBehavior,
     ) -> Result<()> {
-        // A symlink source cannot be written through a dangling symlink at
-        // `dest`, so for it any entry at `dest` counts as existing.
+        reject_line_break(dest)?;
+        #[cfg(unix)]
         let dest_exists = if fs::symlink_metadata(source).is_ok_and(|m| m.is_symlink()) {
-            fs::symlink_metadata(dest).is_ok()
+            // A symlink cannot be written through a dangling symlink at
+            // `dest`, and cannot replace a directory there.
+            match fs::symlink_metadata(dest) {
+                Ok(meta) if meta.is_dir() && behavior == FileExistsBehavior::Overwrite => {
+                    return Err(InstallerError::DirectoryReplacedBySymlink {
+                        destination: dest.to_path_buf(),
+                    });
+                },
+                Ok(_) => true,
+                Err(_) => false,
+            }
         } else {
             dest.exists()
         };
+        #[cfg(not(unix))]
+        let dest_exists = dest.exists();
         if dest_exists {
             match behavior {
                 FileExistsBehavior::Disallow => {
@@ -497,61 +519,55 @@ impl Installer {
     /// [`Self::destination_escapes_root`]). Legitimate cleanup entries are the
     /// destination paths the agent itself wrote — absolute, relative, or Windows
     /// paths — none of which escape their own root.
-    fn cleanup_line_is_valid(line: &str) -> bool {
-        if line.is_empty() || line.contains('\0') {
+    fn cleanup_line_is_valid(line: &[u8]) -> bool {
+        if line.is_empty() || line.contains(&0) {
             return false;
         }
-        !Self::destination_escapes_root(Path::new(line))
+        !Self::destination_escapes_root(&cleanup_file::path_from_bytes(line))
     }
 
-    fn execute_cleanup(contents: &str) -> Result<()> {
-        let lines: Vec<&str> = contents.lines().collect();
-
-        // Handle incomplete last line: remove if it doesn't end with newline,
-        // indicating the write was interrupted (partial cleanup file from a crash).
-        // cleanup file format.
-        let lines = if !contents.ends_with('\n') && !lines.is_empty() {
-            &lines[..lines.len() - 1]
-        } else {
-            &lines[..]
-        };
+    fn execute_cleanup(contents: &[u8]) -> Result<()> {
+        let mut lines: Vec<&[u8]> = contents.split(|b| *b == b'\n').collect();
+        // The final element is empty when the file ends with a newline, or a
+        // partial line from an interrupted write when it does not. Drop it either way.
+        lines.pop();
 
         debug!("Executing {} cleanup commands", lines.len());
 
         for line in lines.iter().rev() {
-            let line = line.trim();
+            let line = line.strip_suffix(b"\r").unwrap_or(line);
             if line.is_empty() {
                 continue;
             }
 
-            if line.starts_with("semanage\0") {
+            if let Some(object) = line.strip_prefix(cleanup_file::SEMANAGE_PREFIX) {
                 #[cfg(target_os = "linux")]
                 {
-                    let object = line.strip_prefix("semanage\0").unwrap();
-                    // Validate the SELinux object path the same way as a removal
-                    // path (the NUL is the sentinel, already stripped here).
+                    let object_path = cleanup_file::path_from_bytes(object);
                     if !Self::cleanup_line_is_valid(object) {
                         tracing::warn!(
-                            object = %object,
+                            object = %object_path.display(),
                             "Skipping malformed SELinux cleanup entry"
                         );
                         continue;
                     }
-                    debug!("Cleanup: removing SELinux context for {object:?}");
+                    debug!("Cleanup: removing SELinux context for {object_path:?}");
                     // Semanage removal failures are silently ignored
-                    let _ = RemoveContextCommand::new(PathBuf::from(object))
-                        .execute(&mut std::io::sink());
+                    let _ = RemoveContextCommand::new(object_path).execute(&mut std::io::sink());
                 }
+                #[cfg(not(target_os = "linux"))]
+                let _ = object;
             } else {
+                let path = cleanup_file::path_from_bytes(line);
                 // Skip empty/NUL-bearing/root-escaping lines rather than removing
                 // whatever path they name; legitimate entries are the agent's own
                 // destination paths.
                 if !Self::cleanup_line_is_valid(line) {
-                    tracing::warn!(line = %line, "Skipping malformed cleanup entry");
+                    tracing::warn!(line = %path.display(), "Skipping malformed cleanup entry");
                     continue;
                 }
-                debug!("Cleanup: removing {line:?}");
-                RemoveCommand::new(PathBuf::from(line)).execute(&mut std::io::sink())?;
+                debug!("Cleanup: removing {path:?}");
+                RemoveCommand::new(path).execute(&mut std::io::sink())?;
             }
         }
 
@@ -681,6 +697,141 @@ files:
         );
         let spec = AppSpec::parse(&appspec_yaml).unwrap();
         installer.install("test-group", &spec).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn install_non_utf8_file_name() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let archive_dir = TempDir::new().unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        let src_dir = archive_dir.path().join("myapp");
+        fs::create_dir_all(&src_dir).unwrap();
+        let name = OsStr::from_bytes(b"caf\xe9.txt");
+        fs::write(src_dir.join(name), "content").unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Disallow,
+        );
+
+        let appspec_yaml = format!(
+            r"
+version: 0.0
+os: linux
+files:
+  - source: myapp
+    destination: {}
+",
+            dest_dir.path().display()
+        );
+        let spec = AppSpec::parse(&appspec_yaml).unwrap();
+        installer.install("test-group", &spec).unwrap();
+        assert_eq!(fs::read(dest_dir.path().join(name)).unwrap(), b"content");
+
+        let cleanup = fs::read(instructions_dir.path().join("test-group-cleanup")).unwrap();
+        assert!(
+            cleanup.windows(name.len()).any(|w| w == name.as_bytes()),
+            "cleanup file should hold the raw file name"
+        );
+
+        // Redeploying under DISALLOW works because cleanup removed the file.
+        installer.install("test-group", &spec).unwrap();
+        assert_eq!(fs::read(dest_dir.path().join(name)).unwrap(), b"content");
+
+        // A revision without the file removes it.
+        fs::remove_file(src_dir.join(name)).unwrap();
+        fs::write(src_dir.join("other.txt"), "other").unwrap();
+        installer.install("test-group", &spec).unwrap();
+        assert!(!dest_dir.path().join(name).exists(), "dropped file should be removed");
+        assert!(dest_dir.path().join("other.txt").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_non_utf8_directory_name_redeploys() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let archive_dir = TempDir::new().unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        let src_dir = archive_dir.path().join("myapp");
+        let dir_name = OsStr::from_bytes(b"r\xe9sum\xe9");
+        fs::create_dir_all(src_dir.join(dir_name)).unwrap();
+        fs::write(src_dir.join(dir_name).join("a.txt"), "a").unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Disallow,
+        );
+        let appspec_yaml = format!(
+            r"
+version: 0.0
+os: linux
+files:
+  - source: myapp
+    destination: {}
+",
+            dest_dir.path().display()
+        );
+        let spec = AppSpec::parse(&appspec_yaml).unwrap();
+        installer.install("test-group", &spec).unwrap();
+        installer.install("test-group", &spec).unwrap();
+        assert!(dest_dir.path().join(dir_name).join("a.txt").exists());
+
+        fs::remove_dir_all(src_dir.join(dir_name)).unwrap();
+        installer.install("test-group", &spec).unwrap();
+        assert!(!dest_dir.path().join(dir_name).exists(), "dropped directory should be removed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execute_cleanup_removes_non_utf8_path() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let dir = TempDir::new().unwrap();
+        let victim = dir.path().join(OsStr::from_bytes(b"caf\xe9.txt"));
+        fs::write(&victim, "x").unwrap();
+        let mut contents = Vec::new();
+        cleanup_file::write_line(&mut contents, b"", &victim).unwrap();
+        // A trailing partial line is ignored.
+        contents.extend_from_slice(b"/partial");
+        Installer::execute_cleanup(&contents).unwrap();
+        assert!(!victim.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execute_cleanup_keeps_surrounding_whitespace_in_names() {
+        let dir = TempDir::new().unwrap();
+        let spaced = dir.path().join(" a.txt\t");
+        let plain = dir.path().join("a.txt");
+        fs::write(&spaced, "x").unwrap();
+        fs::write(&plain, "keep").unwrap();
+        let mut contents = Vec::new();
+        cleanup_file::write_line(&mut contents, b"", &spaced).unwrap();
+        Installer::execute_cleanup(&contents).unwrap();
+        assert!(!spaced.exists(), "entry should be removed by its exact name");
+        assert!(plain.exists(), "a different file must not be removed");
+    }
+
+    #[test]
+    fn execute_cleanup_accepts_crlf_lines() {
+        let dir = TempDir::new().unwrap();
+        let victim = dir.path().join("a.txt");
+        fs::write(&victim, "x").unwrap();
+        let contents = format!("{}\r\n", victim.display()).into_bytes();
+        Installer::execute_cleanup(&contents).unwrap();
+        assert!(!victim.exists());
     }
 
     #[test]
@@ -889,6 +1040,57 @@ files:
 
     #[cfg(unix)]
     #[test]
+    fn install_refuses_directory_symlink_over_existing_directory_before_copying() {
+        let archive_dir = archive_with_directory_symlink();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+        let current = dest_dir.path().join("current");
+        fs::create_dir(&current).unwrap();
+        fs::write(current.join("app.log"), "log").unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        )
+        .with_preserve_directory_symlinks(true);
+        let result = installer.install("test-group", &whole_revision_spec(dest_dir.path()));
+
+        assert!(
+            matches!(result, Err(InstallerError::DirectoryReplacedBySymlink { .. })),
+            "expected DirectoryReplacedBySymlink, got {result:?}"
+        );
+        assert_eq!(fs::read_dir(dest_dir.path()).unwrap().count(), 1, "nothing else installed");
+        assert_eq!(fs::read_to_string(current.join("app.log")).unwrap(), "log");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_rejects_line_break_in_file_name() {
+        use std::os::unix::ffi::OsStrExt;
+        let archive_dir = TempDir::new().unwrap();
+        fs::write(archive_dir.path().join("ok.txt"), "ok").unwrap();
+        let name = std::ffi::OsStr::from_bytes(b"x\nevil.txt");
+        fs::write(archive_dir.path().join(name), "evil").unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        );
+        let result = installer.install("test-group", &whole_revision_spec(dest_dir.path()));
+
+        assert!(
+            matches!(result, Err(InstallerError::LineBreakInPath { .. })),
+            "expected LineBreakInPath, got {result:?}"
+        );
+        assert_eq!(fs::read_dir(dest_dir.path()).unwrap().count(), 0, "nothing installed");
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn install_preserves_directory_symlink_pointing_outside_revision() {
         let archive_dir = TempDir::new().unwrap();
         let outside = TempDir::new().unwrap();
@@ -1017,7 +1219,7 @@ files:
 
     #[cfg(unix)]
     #[test]
-    fn regular_file_writes_through_dangling_symlink() {
+    fn regular_file_replaces_dangling_symlink() {
         let archive_dir = TempDir::new().unwrap();
         fs::write(archive_dir.path().join("app.txt"), "new").unwrap();
         let instructions_dir = TempDir::new().unwrap();
@@ -1036,7 +1238,55 @@ files:
         .unwrap();
         installer.install("test-group", &spec).unwrap();
 
-        assert_eq!(fs::read_to_string(dest_dir.path().join("app.txt")).unwrap(), "new");
+        let dest = dest_dir.path().join("app.txt");
+        assert!(!fs::symlink_metadata(&dest).unwrap().is_symlink());
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "new");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_symlink_over_directory_fails_before_copying_without_flag() {
+        let archive_dir = TempDir::new().unwrap();
+        fs::write(archive_dir.path().join("a.txt"), "a").unwrap();
+        std::os::unix::fs::symlink("a.txt", archive_dir.path().join("link")).unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+        fs::create_dir(dest_dir.path().join("link")).unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        );
+        let result = installer.install("test-group", &whole_revision_spec(dest_dir.path()));
+
+        assert!(
+            matches!(result, Err(InstallerError::DirectoryReplacedBySymlink { .. })),
+            "expected DirectoryReplacedBySymlink, got {result:?}"
+        );
+        assert!(!dest_dir.path().join("a.txt").exists(), "nothing copied");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_rejects_carriage_return_in_directory_name() {
+        use std::os::unix::ffi::OsStrExt;
+        let archive_dir = TempDir::new().unwrap();
+        let dir = archive_dir.path().join(std::ffi::OsStr::from_bytes(b"d\rx"));
+        fs::create_dir(&dir).unwrap();
+        fs::write(dir.join("a.txt"), "a").unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        );
+        let result = installer.install("test-group", &whole_revision_spec(dest_dir.path()));
+
+        assert!(matches!(result, Err(InstallerError::LineBreakInPath { .. })), "got {result:?}");
+        assert_eq!(fs::read_dir(dest_dir.path()).unwrap().count(), 0);
     }
 
     #[cfg(unix)]
@@ -2082,13 +2332,16 @@ permissions:
             "relative/dir",
             r"c:\inetpub\app",
         ] {
-            assert!(Installer::cleanup_line_is_valid(ok), "{ok} should be a valid cleanup line");
+            assert!(
+                Installer::cleanup_line_is_valid(ok.as_bytes()),
+                "{ok} should be a valid cleanup line"
+            );
         }
         // Malformed / escaping entries are rejected.
-        assert!(!Installer::cleanup_line_is_valid(""), "empty line invalid");
-        assert!(!Installer::cleanup_line_is_valid("/a\0/b"), "embedded NUL invalid");
+        assert!(!Installer::cleanup_line_is_valid(b""), "empty line invalid");
+        assert!(!Installer::cleanup_line_is_valid(b"/a\0/b"), "embedded NUL invalid");
         assert!(
-            !Installer::cleanup_line_is_valid("../../etc/cron.d/x"),
+            !Installer::cleanup_line_is_valid(b"../../etc/cron.d/x"),
             "root-escaping line invalid"
         );
     }
@@ -2107,7 +2360,7 @@ permissions:
 
         // Build cleanup contents: the escaping line uses `..` to climb out.
         let contents = format!("{}\n../../{}\n", victim.display(), "should_not_matter");
-        Installer::execute_cleanup(&contents).unwrap();
+        Installer::execute_cleanup(contents.as_bytes()).unwrap();
 
         assert!(!victim.exists(), "valid cleanup entry should be removed");
         assert!(outside.exists(), "escaping entry must be skipped, unrelated file intact");

@@ -22,7 +22,7 @@ impl MakeDirectoryCommand {
     pub fn execute(&self, cleanup_file: &mut dyn Write) -> Result<()> {
         match fs::create_dir(&self.directory) {
             Ok(()) => {
-                writeln!(cleanup_file, "{}", self.directory.display())?;
+                crate::installer::cleanup_file::write_line(cleanup_file, b"", &self.directory)?;
             },
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && self.directory.is_dir() => {
             },
@@ -37,7 +37,7 @@ impl MakeDirectoryCommand {
     pub fn to_h(&self) -> Value {
         json!({
             "type": "mkdir",
-            "directory": self.directory
+            "directory": self.directory.to_string_lossy()
         })
     }
 }

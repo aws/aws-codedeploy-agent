@@ -89,12 +89,19 @@ impl<S: SeLinuxOps> ChangeContextCommand<S> {
         } else {
             self.object.clone()
         };
+        if object.as_os_str().as_encoded_bytes().iter().any(|b| matches!(b, b'\n' | b'\r')) {
+            return Err(InstallerError::LineBreakInPath { path: object });
+        }
 
         self.selinux_ops.set_context(&args_vec, &object).map_err(InstallerError::Io)?;
 
         self.selinux_ops.restore_context(&object).map_err(InstallerError::Io)?;
 
-        writeln!(cleanup_file, "semanage\0{}", object.display())?;
+        crate::installer::cleanup_file::write_line(
+            cleanup_file,
+            crate::installer::cleanup_file::SEMANAGE_PREFIX,
+            &object,
+        )?;
         Ok(())
     }
 
@@ -109,7 +116,7 @@ impl<S: SeLinuxOps> ChangeContextCommand<S> {
                 "type": self.context.type_(),
                 "range": self.context.range().map(ToString::to_string)
             },
-            "file": self.object
+            "file": self.object.to_string_lossy()
         })
     }
 }

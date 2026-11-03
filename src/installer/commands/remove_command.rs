@@ -45,7 +45,7 @@ impl RemoveCommand {
     pub fn to_h(&self) -> Value {
         json!({
             "type": "remove",
-            "file": self.file_path
+            "file": self.file_path.to_string_lossy()
         })
     }
 }

@@ -42,6 +42,12 @@ pub enum InstallerError {
     InvalidSourceFileName {
         source: String,
     },
+    LineBreakInPath {
+        path: PathBuf,
+    },
+    DirectoryReplacedBySymlink {
+        destination: PathBuf,
+    },
 
     // Permission errors
     SymlinkDestinationRejected {
@@ -157,6 +163,22 @@ impl fmt::Display for InstallerError {
                 write!(
                     f,
                     "The deployment failed because a file source path ({source}) has no final path component (it ends in '..' or is a root path), so no destination file name can be derived. Correct the files section of the AppSpec file, and then try again."
+                )
+            },
+
+            Self::LineBreakInPath { path } => {
+                write!(
+                    f,
+                    "The deployment failed because a path ({}) contains a line break. Rename the file or directory in the application revision, correct the AppSpec file, or check the instance for symbolic links that resolve to this path, and then try again.",
+                    path.display().to_string().escape_debug()
+                )
+            },
+
+            Self::DirectoryReplacedBySymlink { destination } => {
+                write!(
+                    f,
+                    "The deployment failed because the application revision contains a symbolic link, but a directory already exists at its destination ({}). Remove the directory from the instance or update the files section of the AppSpec file, and then try again.",
+                    destination.display()
                 )
             },
 
@@ -340,6 +362,24 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("foo/.."));
         assert!(msg.contains("no final path component"));
+    }
+
+    #[test]
+    fn line_break_in_path_display() {
+        let err = InstallerError::LineBreakInPath { path: PathBuf::from("/dest/a\nb") };
+        let msg = err.to_string();
+        assert!(msg.contains("contains a line break"));
+        assert!(!msg.contains('\n'), "line break must be escaped: {msg}");
+    }
+
+    #[test]
+    fn directory_replaced_by_symlink_display() {
+        let err = InstallerError::DirectoryReplacedBySymlink {
+            destination: PathBuf::from("/dest/current"),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("/dest/current"));
+        assert!(msg.contains("symbolic link"));
     }
 
     #[test]
