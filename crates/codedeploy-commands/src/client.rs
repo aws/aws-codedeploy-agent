@@ -13,7 +13,10 @@ use aws_sigv4::sign::v4;
 use std::time::{Duration, SystemTime};
 
 /// `CodeDeploy` Command Service client.
-#[derive(Debug)]
+///
+/// Cheap to clone: the credentials and the reqwest client are reference-counted,
+/// so clones share one connection pool.
+#[derive(Debug, Clone)]
 pub struct Client {
     endpoint: String,
     region: String,
@@ -26,6 +29,9 @@ pub struct Client {
     http: reqwest::blocking::Client,
     credentials: AwsCredentials,
     agent_version: Option<String>,
+    // Kept so `reset_http_connections` can rebuild `http` identically.
+    http_read_timeout: Duration,
+    proxy_uri: Option<String>,
 }
 
 impl Client {
@@ -50,6 +56,20 @@ impl Client {
     #[must_use]
     pub fn agent_version(&self) -> Option<&str> {
         self.agent_version.as_deref()
+    }
+
+    /// Drop pooled connections by replacing the HTTP client.
+    ///
+    /// Pooled keep-alive connections stay pinned to whichever backend host the
+    /// load balancer first chose. Call this after a 5xx or network error so the
+    /// next request opens a fresh connection and can reach a healthy host.
+    /// Requests already in flight on the old client finish normally.
+    ///
+    /// # Errors
+    /// Returns an error if the HTTP client cannot be rebuilt.
+    pub fn reset_http_connections(&mut self) -> Result<(), Error> {
+        self.http = build_http(self.http_read_timeout, self.proxy_uri.as_deref())?;
+        Ok(())
     }
 
     /// Poll for a host command.
@@ -318,16 +338,7 @@ impl ClientBuilder {
             self.enable_auth_policy,
         );
 
-        let mut http_builder =
-            reqwest::blocking::ClientBuilder::new().timeout(self.http_read_timeout);
-
-        if let Some(proxy) = self.proxy_uri {
-            let proxy = reqwest::Proxy::all(&proxy)
-                .map_err(|e| Error::new(ErrorKind::Build, e.to_string()))?;
-            http_builder = http_builder.proxy(proxy);
-        }
-
-        let http = http_builder.build().map_err(|e| Error::new(ErrorKind::Build, e.to_string()))?;
+        let http = build_http(self.http_read_timeout, self.proxy_uri.as_deref())?;
 
         // Signing name and target prefix both track enable_auth_policy, which
         // also selects the `-secure` endpoint.
@@ -358,8 +369,25 @@ impl ClientBuilder {
             http,
             credentials,
             agent_version: self.agent_version,
+            http_read_timeout: self.http_read_timeout,
+            proxy_uri: self.proxy_uri,
         })
     }
+}
+
+fn build_http(
+    http_read_timeout: Duration,
+    proxy_uri: Option<&str>,
+) -> Result<reqwest::blocking::Client, Error> {
+    let mut http_builder = reqwest::blocking::ClientBuilder::new().timeout(http_read_timeout);
+
+    if let Some(proxy) = proxy_uri {
+        let proxy =
+            reqwest::Proxy::all(proxy).map_err(|e| Error::new(ErrorKind::Build, e.to_string()))?;
+        http_builder = http_builder.proxy(proxy);
+    }
+
+    http_builder.build().map_err(|e| Error::new(ErrorKind::Build, e.to_string()))
 }
 
 impl Default for ClientBuilder {
@@ -384,6 +412,28 @@ mod tests {
 
     fn test_credentials() -> AwsCredentials {
         AwsCredentials::new("test-key", "test-secret", None, None, "test")
+    }
+
+    #[test]
+    fn reset_http_connections_keeps_configuration() {
+        let mut client = Client::builder()
+            .region("us-west-2")
+            .credentials(test_credentials())
+            .http_read_timeout(Duration::from_secs(7))
+            .proxy_uri(Some("http://proxy.example:3128".into()))
+            .agent_version(Some("2.1.3".into()))
+            .build()
+            .unwrap();
+        let endpoint = client.endpoint().to_string();
+
+        client.reset_http_connections().unwrap();
+        client.reset_http_connections().unwrap();
+
+        assert_eq!(client.endpoint(), endpoint);
+        assert_eq!(client.region(), "us-west-2");
+        assert_eq!(client.agent_version(), Some("2.1.3"));
+        assert_eq!(client.http_read_timeout, Duration::from_secs(7));
+        assert_eq!(client.proxy_uri.as_deref(), Some("http://proxy.example:3128"));
     }
 
     #[test]
