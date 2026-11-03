@@ -612,7 +612,12 @@ impl AgentConfig {
     /// Returns an error if PID or state directories cannot be created.
     pub fn ensure_dirs(&self) -> std::io::Result<()> {
         self.ensure_deployment_dir(&self.pid_dir, 0o700)?;
-        self.ensure_deployment_dir(&self.root_dir, 0o711)?;
+        // root_dir is the install root on Windows; see create_root_dir.
+        crate::system::create_root_dir(
+            &self.root_dir,
+            0o711,
+            self.hardening.restrict_agent_dir_permissions,
+        )?;
         self.ensure_deployment_dir(&self.root_dir.join(&self.ongoing_deployment_tracking), 0o700)?;
         // Best-effort: log dir may be under /var/log which requires root.
         // Policy per `restrict_log_dir_permissions` — 0755 default so

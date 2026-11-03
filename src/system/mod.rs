@@ -22,7 +22,7 @@ pub use linux_ops::{LinuxOps, SystemLinuxOps};
 pub use process_ops::kill_process_group;
 pub use secure_files::{
     agent_file_mode, create_deployment_dir, create_dir_secure, create_dir_world_readable,
-    create_file_secure, write_file_secure,
+    create_file_secure, create_root_dir, write_file_secure,
 };
 #[cfg(target_os = "linux")]
 pub use selinux_ops::{SeLinuxOps, SystemSeLinuxOps};
