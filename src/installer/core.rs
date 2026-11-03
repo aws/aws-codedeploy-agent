@@ -699,8 +699,10 @@ files:
         installer.install("test-group", &spec).unwrap();
     }
 
+    // Not on macOS: APFS rejects names that aren't valid UTF-8 (EILSEQ), so
+    // the fixture can't be created there, and no revision can hold one.
     #[test]
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "macos")))]
     fn install_non_utf8_file_name() {
         use std::ffi::OsStr;
         use std::os::unix::ffi::OsStrExt;
@@ -752,7 +754,9 @@ files:
         assert!(dest_dir.path().join("other.txt").exists());
     }
 
-    #[cfg(unix)]
+    // Not on macOS: APFS rejects names that aren't valid UTF-8 (EILSEQ), so
+    // the fixture can't be created there, and no revision can hold one.
+    #[cfg(all(unix, not(target_os = "macos")))]
     #[test]
     fn install_non_utf8_directory_name_redeploys() {
         use std::ffi::OsStr;
@@ -792,7 +796,9 @@ files:
         assert!(!dest_dir.path().join(dir_name).exists(), "dropped directory should be removed");
     }
 
-    #[cfg(unix)]
+    // Not on macOS: APFS rejects names that aren't valid UTF-8 (EILSEQ), so
+    // the fixture can't be created there, and no revision can hold one.
+    #[cfg(all(unix, not(target_os = "macos")))]
     #[test]
     fn execute_cleanup_removes_non_utf8_path() {
         use std::ffi::OsStr;
