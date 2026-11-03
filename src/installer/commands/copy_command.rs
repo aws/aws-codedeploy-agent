@@ -37,7 +37,7 @@ impl CopyCommand {
         if metadata.is_symlink() {
             let target = fs::read_link(&self.source)?;
             #[cfg(unix)]
-            std::os::unix::fs::symlink(&target, &self.destination)?;
+            self.create_symlink(&target)?;
             #[cfg(windows)]
             {
                 // Symlink creation may fail on Windows; fall back to copy
@@ -114,6 +114,60 @@ impl CopyCommand {
         }
 
         Ok(())
+    }
+
+    /// Create `destination` as a symlink to `target`, replacing an existing
+    /// file or symlink there. The link is created under a temporary name and
+    /// renamed over `destination`, so the path is never missing. An existing
+    /// directory is left in place and returned as an error.
+    #[cfg(unix)]
+    fn create_symlink(&self, target: &std::path::Path) -> Result<()> {
+        match fs::symlink_metadata(&self.destination) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                std::os::unix::fs::symlink(target, &self.destination)?;
+                return Ok(());
+            },
+            Err(e) => return Err(e.into()),
+            Ok(meta) if meta.is_dir() => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    format!(
+                        "cannot replace directory {} with a symlink",
+                        self.destination.display()
+                    ),
+                )
+                .into());
+            },
+            Ok(_) => {},
+        }
+
+        let tmp = self.create_temp_symlink(target)?;
+        if let Err(e) = fs::rename(&tmp, &self.destination) {
+            let _ = fs::remove_file(&tmp);
+            return Err(e.into());
+        }
+        Ok(())
+    }
+
+    /// Create a symlink to `target` beside `destination` under an unused
+    /// random name and return its path.
+    #[cfg(unix)]
+    fn create_temp_symlink(&self, target: &std::path::Path) -> Result<PathBuf> {
+        const ATTEMPTS: usize = 8;
+        let mut last_err = None;
+        for _ in 0..ATTEMPTS {
+            let mut suffix = [0u8; 8];
+            getrandom::getrandom(&mut suffix).map_err(std::io::Error::other)?;
+            let tmp = self
+                .destination
+                .with_file_name(format!(".cd-{:016x}.tmp", u64::from_le_bytes(suffix)));
+            match std::os::unix::fs::symlink(target, &tmp) {
+                Ok(()) => return Ok(tmp),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => last_err = Some(e),
+                Err(e) => return Err(e.into()),
+            }
+        }
+        Err(last_err.unwrap_or_else(|| std::io::Error::other("no temporary name")).into())
     }
 
     /// Serialize command to JSON hash for debugging/audit
@@ -256,5 +310,86 @@ mod tests {
 
         fs::remove_file(&src).ok();
         fs::remove_file(&dst).ok();
+    }
+
+    #[cfg(unix)]
+    fn symlink_source(dir: &std::path::Path) -> PathBuf {
+        let source = dir.join("src-link");
+        std::os::unix::fs::symlink("new-target", &source).unwrap();
+        source
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execute_symlink_replaces_existing_symlink() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let dest = dir.path().join("dest");
+        std::os::unix::fs::symlink("old-target", &dest).unwrap();
+
+        let cmd = CopyCommand::new(symlink_source(dir.path()), dest.clone());
+        cmd.execute(&mut Vec::new()).unwrap();
+
+        assert_eq!(fs::read_link(&dest).unwrap(), PathBuf::from("new-target"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execute_symlink_replaces_existing_file() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let dest = dir.path().join("dest");
+        fs::write(&dest, "file").unwrap();
+
+        let cmd = CopyCommand::new(symlink_source(dir.path()), dest.clone());
+        cmd.execute(&mut Vec::new()).unwrap();
+
+        assert_eq!(fs::read_link(&dest).unwrap(), PathBuf::from("new-target"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execute_symlink_does_not_replace_directory() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let dest = dir.path().join("dest");
+        fs::create_dir(&dest).unwrap();
+        fs::write(dest.join("keep.txt"), "keep").unwrap();
+
+        let cmd = CopyCommand::new(symlink_source(dir.path()), dest.clone());
+        let mut cleanup = Vec::new();
+        assert!(cmd.execute(&mut cleanup).is_err());
+
+        assert!(cleanup.is_empty(), "refused directory must not be recorded for cleanup");
+        assert!(dest.join("keep.txt").exists(), "existing directory should be untouched");
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 2, "no temporary link left behind");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execute_symlink_replaces_symlink_to_directory() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let target = dir.path().join("target-dir");
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("keep.txt"), "keep").unwrap();
+        let dest = dir.path().join("dest");
+        std::os::unix::fs::symlink(&target, &dest).unwrap();
+
+        let cmd = CopyCommand::new(symlink_source(dir.path()), dest.clone());
+        cmd.execute(&mut Vec::new()).unwrap();
+
+        assert_eq!(fs::read_link(&dest).unwrap(), std::path::Path::new("new-target"));
+        assert!(target.join("keep.txt").exists(), "old link target should be untouched");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn temp_symlink_name_has_fixed_length() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let long = "a".repeat(250);
+        let dest = dir.path().join(&long);
+        fs::write(&dest, "old").unwrap();
+
+        let cmd = CopyCommand::new(symlink_source(dir.path()), dest.clone());
+        cmd.execute(&mut Vec::new()).unwrap();
+
+        assert_eq!(fs::read_link(&dest).unwrap(), std::path::Path::new("new-target"));
     }
 }

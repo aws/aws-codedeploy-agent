@@ -39,6 +39,11 @@
 # Any reuse failure falls back to a normal download.
 :enable_archive_reuse: true
 
+# Copy a symlink to a directory in the revision as a symlink (default: false).
+# When false, the agent copies the contents of the directory the link points to.
+# Linux and macOS only.
+# :preserve_directory_symlinks: false
+
 # Security
 :use_fips_mode: false
 :enable_auth_policy: false

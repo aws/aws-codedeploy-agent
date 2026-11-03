@@ -21,11 +21,9 @@ impl RemoveCommand {
     pub fn execute(&self, _cleanup_file: &mut dyn Write) -> Result<()> {
         let path = &self.file_path;
 
-        if !path.exists() {
+        let Ok(metadata) = fs::symlink_metadata(path) else {
             return Ok(());
-        }
-
-        let metadata = fs::symlink_metadata(path)?;
+        };
 
         if metadata.is_symlink() {
             fs::remove_file(path)?;
@@ -86,6 +84,32 @@ mod tests {
         assert!(!link.exists());
         assert!(target.exists());
         fs::remove_file(&target).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execute_removes_dangling_symlink() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let link = dir.path().join("dangling");
+        unix_fs::symlink("/nonexistent", &link).unwrap();
+
+        let cmd = RemoveCommand::new(link.clone());
+        cmd.execute(&mut Vec::new()).unwrap();
+
+        assert!(fs::symlink_metadata(&link).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execute_skips_path_under_a_file() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let file = dir.path().join("file");
+        fs::write(&file, "x").unwrap();
+
+        let cmd = RemoveCommand::new(file.join("child"));
+        cmd.execute(&mut Vec::new()).unwrap();
+
+        assert!(file.exists());
     }
 
     #[test]

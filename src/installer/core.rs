@@ -18,8 +18,8 @@ use tracing::{debug, info};
 // `system::agent_file_mode`: 0644 by default, 0600 under
 // `restrict_agent_dir_permissions`.
 
-// Four independent opt-in hardening toggles mirroring their AgentConfig
-// fields; an enum would force invalid combinations to be representable.
+// Independent opt-in toggles mirroring their AgentConfig fields; an enum
+// would force invalid combinations to be representable.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug)]
 pub struct Installer {
@@ -31,6 +31,7 @@ pub struct Installer {
     reject_path_traversal: bool,
     reject_symlink_permission_targets: bool,
     restrict_permissions: bool,
+    preserve_directory_symlinks: bool,
 }
 
 impl Installer {
@@ -75,6 +76,7 @@ impl Installer {
             reject_path_traversal,
             reject_symlink_permission_targets: false,
             restrict_permissions: false,
+            preserve_directory_symlinks: false,
         }
     }
 
@@ -93,6 +95,17 @@ impl Installer {
     #[must_use]
     pub fn with_reject_symlink_permission_targets(mut self, reject: bool) -> Self {
         self.reject_symlink_permission_targets = reject;
+        self
+    }
+
+    /// Copy a symlink to a directory as a symlink instead of walking into it,
+    /// from `preserve_directory_symlinks`. Defaults to `false`. Unix only.
+    #[must_use]
+    pub fn with_preserve_directory_symlinks(mut self, preserve: bool) -> Self {
+        if preserve && !cfg!(unix) {
+            tracing::warn!("preserve_directory_symlinks is not supported on this platform");
+        }
+        self.preserve_directory_symlinks = cfg!(unix) && preserve;
         self
     }
 
@@ -240,10 +253,9 @@ impl Installer {
 
         let behavior = spec.file_exists_behavior().unwrap_or(self.file_exists_behavior);
 
-        // Handle directory copy
-        if source.is_dir() {
+        if self.is_directory(&source) {
             Self::fill_missing_ancestors(builder, Path::new(file_mapping.destination()))?;
-            Self::generate_directory_copy(
+            self.generate_directory_copy(
                 builder,
                 &source,
                 Path::new(file_mapping.destination()),
@@ -285,6 +297,14 @@ impl Installer {
             return Ok(());
         }
 
+        if builder.copying_directory_link(object) {
+            tracing::warn!(
+                object = %object.display(),
+                "Skipping permissions for a directory symlink"
+            );
+            return Ok(());
+        }
+
         // Handle file permissions
         if !permission.types().contains(&crate::application_specification::ObjectType::File) {
             return Ok(());
@@ -298,7 +318,19 @@ impl Installer {
         Ok(())
     }
 
+    /// Whether `path` is walked as a directory. With
+    /// `preserve_directory_symlinks` a symlink is never walked, even when it
+    /// points at a directory.
+    fn is_directory(&self, path: &Path) -> bool {
+        if self.preserve_directory_symlinks {
+            fs::symlink_metadata(path).is_ok_and(|m| m.is_dir())
+        } else {
+            path.is_dir()
+        }
+    }
+
     fn generate_directory_copy(
+        &self,
         builder: &mut CommandBuilder,
         source: &Path,
         dest: &Path,
@@ -315,8 +347,8 @@ impl Installer {
             let entry_path = entry.path();
             let entry_dest = dest.join(entry.file_name());
 
-            if entry_path.is_dir() {
-                Self::generate_directory_copy(builder, &entry_path, &entry_dest, behavior)?;
+            if self.is_directory(&entry_path) {
+                self.generate_directory_copy(builder, &entry_path, &entry_dest, behavior)?;
             } else {
                 Self::generate_normal_copy(builder, &entry_path, &entry_dest, behavior)?;
             }
@@ -331,7 +363,14 @@ impl Installer {
         dest: &Path,
         behavior: FileExistsBehavior,
     ) -> Result<()> {
-        if dest.exists() {
+        // A symlink source cannot be written through a dangling symlink at
+        // `dest`, so for it any entry at `dest` counts as existing.
+        let dest_exists = if fs::symlink_metadata(source).is_ok_and(|m| m.is_symlink()) {
+            fs::symlink_metadata(dest).is_ok()
+        } else {
+            dest.exists()
+        };
+        if dest_exists {
             match behavior {
                 FileExistsBehavior::Disallow => {
                     return Err(InstallerError::FileAlreadyExists {
@@ -781,6 +820,265 @@ files:
             matches!(result, Err(InstallerError::PathTraversal { .. })),
             "escaping source must be rejected even when its target does not exist, got: {result:?}"
         );
+    }
+
+    /// Bundle with `releases/v1/app.txt` and `current -> releases/v1`.
+    #[cfg(unix)]
+    fn archive_with_directory_symlink() -> TempDir {
+        let archive_dir = TempDir::new().unwrap();
+        fs::create_dir_all(archive_dir.path().join("releases/v1")).unwrap();
+        fs::write(archive_dir.path().join("releases/v1/app.txt"), "v1").unwrap();
+        std::os::unix::fs::symlink("releases/v1", archive_dir.path().join("current")).unwrap();
+        archive_dir
+    }
+
+    #[cfg(unix)]
+    fn whole_revision_spec(dest: &Path) -> AppSpec {
+        AppSpec::parse(&format!(
+            "version: 0.0\nos: linux\nfiles:\n  - source: /\n    destination: {}\n",
+            dest.display()
+        ))
+        .unwrap()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_copies_directory_symlink_contents_by_default() {
+        let archive_dir = archive_with_directory_symlink();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        );
+        installer.install("test-group", &whole_revision_spec(dest_dir.path())).unwrap();
+
+        let current = dest_dir.path().join("current");
+        assert!(
+            !fs::symlink_metadata(&current).unwrap().is_symlink(),
+            "current should be a copied directory"
+        );
+        assert_eq!(fs::read_to_string(current.join("app.txt")).unwrap(), "v1");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_preserves_directory_symlink_when_enabled() {
+        let archive_dir = archive_with_directory_symlink();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        )
+        .with_preserve_directory_symlinks(true);
+        installer.install("test-group", &whole_revision_spec(dest_dir.path())).unwrap();
+
+        let current = dest_dir.path().join("current");
+        assert!(
+            fs::symlink_metadata(&current).unwrap().is_symlink(),
+            "current should be a symlink"
+        );
+        assert_eq!(fs::read_link(&current).unwrap(), Path::new("releases/v1"));
+        assert_eq!(fs::read_to_string(current.join("app.txt")).unwrap(), "v1");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_preserves_directory_symlink_pointing_outside_revision() {
+        let archive_dir = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        fs::write(outside.path().join("secret.txt"), "outside").unwrap();
+        std::os::unix::fs::symlink(outside.path(), archive_dir.path().join("shared")).unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        )
+        .with_preserve_directory_symlinks(true);
+        installer.install("test-group", &whole_revision_spec(dest_dir.path())).unwrap();
+
+        let shared = dest_dir.path().join("shared");
+        assert!(fs::symlink_metadata(&shared).unwrap().is_symlink());
+        assert_eq!(fs::read_link(&shared).unwrap(), outside.path());
+        let install_json =
+            fs::read_to_string(instructions_dir.path().join("test-group-install.json")).unwrap();
+        assert!(!install_json.contains("secret.txt"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_preserves_directory_symlink_given_as_source() {
+        let archive_dir = archive_with_directory_symlink();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        )
+        .with_preserve_directory_symlinks(true);
+        let spec = AppSpec::parse(&format!(
+            "version: 0.0\nos: linux\nfiles:\n  - source: current\n    destination: {}\n",
+            dest_dir.path().display()
+        ))
+        .unwrap();
+        installer.install("test-group", &spec).unwrap();
+
+        let current = dest_dir.path().join("current");
+        assert!(fs::symlink_metadata(&current).unwrap().is_symlink());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn redeploy_removes_directory_symlink_and_keeps_its_target() {
+        let archive_dir = archive_with_directory_symlink();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        fs::write(outside.path().join("keep.txt"), "keep").unwrap();
+        std::os::unix::fs::symlink(outside.path(), archive_dir.path().join("shared")).unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Disallow,
+        )
+        .with_preserve_directory_symlinks(true);
+        let spec = whole_revision_spec(dest_dir.path());
+        installer.install("test-group", &spec).unwrap();
+        installer.install("test-group", &spec).unwrap();
+
+        assert!(fs::symlink_metadata(dest_dir.path().join("shared")).unwrap().is_symlink());
+        assert_eq!(fs::read_to_string(outside.path().join("keep.txt")).unwrap(), "keep");
+    }
+
+    /// A symlink in the revision whose destination already holds a symlink
+    /// not created by an earlier deployment.
+    #[cfg(unix)]
+    fn install_symlink_over_existing_link(
+        behavior: FileExistsBehavior,
+        existing_target: &str,
+    ) -> (Result<()>, TempDir) {
+        let archive_dir = TempDir::new().unwrap();
+        fs::write(archive_dir.path().join("v2.txt"), "v2").unwrap();
+        std::os::unix::fs::symlink("v2.txt", archive_dir.path().join("link")).unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+        std::os::unix::fs::symlink(existing_target, dest_dir.path().join("link")).unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            behavior,
+        );
+        let spec = AppSpec::parse(&format!(
+            "version: 0.0\nos: linux\nfiles:\n  - source: link\n    destination: {}\n",
+            dest_dir.path().display()
+        ))
+        .unwrap();
+        (installer.install("test-group", &spec), dest_dir)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn overwrite_replaces_existing_symlink() {
+        let (result, dest_dir) =
+            install_symlink_over_existing_link(FileExistsBehavior::Overwrite, "old.txt");
+        result.unwrap();
+        assert_eq!(fs::read_link(dest_dir.path().join("link")).unwrap(), Path::new("v2.txt"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn overwrite_replaces_dangling_symlink() {
+        let (result, dest_dir) =
+            install_symlink_over_existing_link(FileExistsBehavior::Overwrite, "/nonexistent");
+        result.unwrap();
+        assert_eq!(fs::read_link(dest_dir.path().join("link")).unwrap(), Path::new("v2.txt"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn retain_keeps_dangling_symlink() {
+        let (result, dest_dir) =
+            install_symlink_over_existing_link(FileExistsBehavior::Retain, "/nonexistent");
+        result.unwrap();
+        assert_eq!(fs::read_link(dest_dir.path().join("link")).unwrap(), Path::new("/nonexistent"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn regular_file_writes_through_dangling_symlink() {
+        let archive_dir = TempDir::new().unwrap();
+        fs::write(archive_dir.path().join("app.txt"), "new").unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+        std::os::unix::fs::symlink("/nonexistent", dest_dir.path().join("app.txt")).unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Disallow,
+        );
+        let spec = AppSpec::parse(&format!(
+            "version: 0.0\nos: linux\nfiles:\n  - source: app.txt\n    destination: {}\n",
+            dest_dir.path().display()
+        ))
+        .unwrap();
+        installer.install("test-group", &spec).unwrap();
+
+        assert_eq!(fs::read_to_string(dest_dir.path().join("app.txt")).unwrap(), "new");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_permissions_skip_preserved_directory_symlink() {
+        use std::os::unix::fs::PermissionsExt;
+        let archive_dir = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        fs::set_permissions(outside.path(), fs::Permissions::from_mode(0o755)).unwrap();
+        std::os::unix::fs::symlink(outside.path(), archive_dir.path().join("shared")).unwrap();
+        fs::write(archive_dir.path().join("app.txt"), "app").unwrap();
+        let instructions_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        let installer = Installer::new(
+            archive_dir.path().to_path_buf(),
+            instructions_dir.path().to_path_buf(),
+            FileExistsBehavior::Overwrite,
+        )
+        .with_preserve_directory_symlinks(true);
+        let dest = dest_dir.path().display();
+        let spec = AppSpec::parse(&format!(
+            "version: 0.0\nos: linux\nfiles:\n  - source: /\n    destination: {dest}\n\
+             permissions:\n  - object: {dest}\n    mode: 600\n    type:\n      - file\n  \
+             - object: {dest}/shared\n    mode: 600\n"
+        ))
+        .unwrap();
+        installer.install("test-group", &spec).unwrap();
+
+        let mode = fs::metadata(outside.path()).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o755, "link target mode should be unchanged");
+        let app_mode =
+            fs::metadata(dest_dir.path().join("app.txt")).unwrap().permissions().mode() & 0o777;
+        assert_eq!(app_mode, 0o600, "regular files should still get file permissions");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn disallow_rejects_dangling_symlink() {
+        let (result, _dest_dir) =
+            install_symlink_over_existing_link(FileExistsBehavior::Disallow, "/nonexistent");
+        assert!(matches!(result, Err(InstallerError::FileAlreadyExists { .. })));
     }
 
     #[test]

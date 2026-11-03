@@ -352,6 +352,10 @@ pub struct AgentConfig {
     /// turning this off costs only the optimisation.
     pub enable_archive_reuse: bool,
 
+    /// Copy a symlink to a directory in the revision as a symlink instead of
+    /// copying the directory it points to. Default: `false`. Unix only.
+    pub preserve_directory_symlinks: bool,
+
     /// Capture Amazon S3 HTTP wire logs to `<program_name>.aws_wire.log` in
     /// `log_dir`. Default: `false`.
     ///
@@ -420,6 +424,7 @@ impl Default for AgentConfig {
             disable_imds_v1: false,
             enable_command_port: false,
             enable_archive_reuse: true,
+            preserve_directory_symlinks: false,
             log_aws_wire: false,
             disable_core_dumps: true,
             hardening: HardeningConfig::default(),
@@ -960,6 +965,22 @@ mod tests {
     #[test]
     fn default_enable_archive_reuse_is_true() {
         assert!(AgentConfig::default().enable_archive_reuse);
+    }
+
+    #[test]
+    fn default_preserve_directory_symlinks_is_false() {
+        assert!(!AgentConfig::default().preserve_directory_symlinks);
+    }
+
+    #[test]
+    fn preserve_directory_symlinks_parses_from_yaml() {
+        let yaml = "preserve_directory_symlinks: true\n";
+        let config = AgentConfig::from_yaml(yaml, Path::new("test.yml")).unwrap();
+        assert!(config.preserve_directory_symlinks);
+
+        let yaml = ":preserve_directory_symlinks: true\n";
+        let config = AgentConfig::from_yaml(yaml, Path::new("test.yml")).unwrap();
+        assert!(config.preserve_directory_symlinks);
     }
 
     #[test]
