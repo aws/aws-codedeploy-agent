@@ -77,7 +77,7 @@ impl ChangeModeCommand {
         json!({
             "type": "chmod",
             "mode": self.mode,
-            "file": self.object
+            "file": self.object.to_string_lossy()
         })
     }
 }

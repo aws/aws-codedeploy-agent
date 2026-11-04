@@ -13,8 +13,54 @@ use crate::host_command::CommandDispatcher;
 use crate::lifecycle_event::ScriptError;
 use crate::runtime::deployment_tracker::DeploymentTracker;
 use std::io;
-use std::time::Instant;
-use tracing::{debug, error, info, info_span};
+use std::time::{Duration, Instant};
+use tracing::{debug, error, info, info_span, warn};
+
+/// How long to keep retrying `PutHostCommandComplete` on transient errors.
+///
+/// The service fails a lifecycle event 70 minutes after it was acknowledged
+/// if no completion arrives, and discards any completion sent after that. Retrying is safe before then: the service keeps
+/// the first completion it records and discards later duplicates.
+#[derive(Debug, Clone, Copy)]
+pub struct CompletionRetryPolicy {
+    /// Stop retrying this long after the command was acknowledged.
+    pub deadline_after_ack: Duration,
+    /// Backoff ceiling for the first retry; doubles each attempt.
+    pub initial_backoff: Duration,
+    /// Upper bound on any single backoff.
+    pub max_backoff: Duration,
+}
+
+impl Default for CompletionRetryPolicy {
+    fn default() -> Self {
+        Self {
+            // 5 minutes inside the service's 70-minute timeout.
+            deadline_after_ack: Duration::from_mins(65),
+            initial_backoff: Duration::from_secs(1),
+            max_backoff: Duration::from_secs(30),
+        }
+    }
+}
+
+impl CompletionRetryPolicy {
+    /// Full-jitter exponential backoff for retry number `attempt` (1-based).
+    fn backoff(&self, attempt: u32) -> Duration {
+        let ceiling = self
+            .initial_backoff
+            .saturating_mul(2u32.saturating_pow(attempt.saturating_sub(1)))
+            .min(self.max_backoff);
+        let ceiling_ms = u64::try_from(ceiling.as_millis()).unwrap_or(u64::MAX);
+        if ceiling_ms == 0 {
+            return Duration::ZERO;
+        }
+        let mut buf = [0u8; 8];
+        // getrandom never fails on supported platforms; fall back to the ceiling.
+        if getrandom::getrandom(&mut buf).is_err() {
+            return ceiling;
+        }
+        Duration::from_millis(u64::from_le_bytes(buf) % (ceiling_ms + 1))
+    }
+}
 
 /// Trait abstracting the `CodeDeploy` service client for testability.
 pub trait CommandServiceClient {
@@ -42,6 +88,15 @@ pub trait CommandServiceClient {
         status: &str,
         diagnostics_payload: &str,
     ) -> Result<(), CodeDeployClientError>;
+
+    /// Drop pooled connections so the next call can reach a different backend
+    /// host. Best effort and may be rate-limited; the default does nothing.
+    ///
+    /// # Errors
+    /// Returns error if the connections could not be reset.
+    fn reset_connections(&self) -> Result<(), CodeDeployClientError> {
+        Ok(())
+    }
 }
 
 impl CommandServiceClient for CodeDeployCommandClient {
@@ -69,6 +124,11 @@ impl CommandServiceClient for CodeDeployCommandClient {
     ) -> Result<(), CodeDeployClientError> {
         self.put_host_command_complete(host_command_identifier, status, diagnostics_payload)
     }
+
+    fn reset_connections(&self) -> Result<(), CodeDeployClientError> {
+        // Inherent method; it reports whether the rate limit allowed a reset.
+        CodeDeployCommandClient::reset_connections(self).map(|_| ())
+    }
 }
 
 #[derive(Debug)]
@@ -79,6 +139,7 @@ pub struct CommandProcessor<T: DeploymentTracker, C: CommandServiceClient = Code
     tracker: T,
     host_identifier: String,
     deployment_system: String,
+    completion_retry: CompletionRetryPolicy,
 }
 
 impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
@@ -95,7 +156,15 @@ impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
             tracker,
             host_identifier,
             deployment_system: "CodeDeploy".to_string(),
+            completion_retry: CompletionRetryPolicy::default(),
         }
+    }
+
+    /// Override how completion reports are retried (tests use short durations).
+    #[must_use]
+    pub fn with_completion_retry_policy(mut self, policy: CompletionRetryPolicy) -> Self {
+        self.completion_retry = policy;
+        self
     }
 
     /// Process a single host command: get spec, ack, execute, report.
@@ -127,6 +196,9 @@ impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
         );
 
         let is_noop = self.dispatcher.is_command_noop(&command.command_name, &spec);
+        // Taken before the ack is sent so the deadline can only err early: the
+        // service starts its completion timeout when it records the ack.
+        let report_deadline = Instant::now() + self.completion_retry.deadline_after_ack;
         let status = self.send_acknowledgement(command, is_noop)?;
 
         // Wrong match here skips execution or double-executes.
@@ -139,13 +211,14 @@ impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
                     command,
                     "Succeeded",
                     &diagnostics::success("CompletedNoopCommand"),
+                    report_deadline,
                 );
                 return Ok(());
             },
             _ => return Ok(()),
         }
 
-        self.execute_and_report(command, &spec)
+        self.execute_and_report(command, &spec, report_deadline)
     }
 
     fn get_deployment_spec(&self, command: &HostCommand) -> io::Result<(String, String)> {
@@ -214,7 +287,12 @@ impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
         Ok(status)
     }
 
-    fn execute_and_report(&self, command: &HostCommand, spec: &DeploymentSpec) -> io::Result<()> {
+    fn execute_and_report(
+        &self,
+        command: &HostCommand,
+        spec: &DeploymentSpec,
+        report_deadline: Instant,
+    ) -> io::Result<()> {
         self.tracker
             .start_tracking(&spec.deployment_id, &command.host_command_identifier)
             .map_err(|e| io::Error::other(format!("Failed to start deployment tracking: {e}")))?;
@@ -233,7 +311,12 @@ impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
                     "Command succeeded"
                 );
                 let note = self.completion_note(&command.command_name, spec);
-                self.report_completion(command, "Succeeded", &diagnostics::success(&note));
+                self.report_completion(
+                    command,
+                    "Succeeded",
+                    &diagnostics::success(&note),
+                    report_deadline,
+                );
             },
             Err(e) => {
                 error!(
@@ -247,7 +330,7 @@ impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
                     Some(script_err) => diagnostics::from_script_error(script_err),
                     None => diagnostics::from_error(e),
                 };
-                self.report_completion(command, "Failed", &payload);
+                self.report_completion(command, "Failed", &payload, report_deadline);
             },
         }
 
@@ -286,13 +369,74 @@ impl<T: DeploymentTracker, C: CommandServiceClient> CommandProcessor<T, C> {
         }
     }
 
-    fn report_completion(&self, command: &HostCommand, status: &str, payload: &str) {
-        debug!("Calling PutHostCommandComplete: \"{status}\"");
-        if let Err(e) =
-            self.client
-                .put_host_command_complete(&command.host_command_identifier, status, payload)
-        {
-            error!("Failed to report command completion: {e}");
+    /// Report the command result, retrying transient failures until `deadline`.
+    ///
+    /// A lost completion leaves the lifecycle event `InProgress` until the
+    /// service's 70-minute timeout fails it, so a brief 5xx burst from one
+    /// backend host must not drop the result. Non-retryable errors (4xx) are
+    /// logged and dropped.
+    ///
+    /// Retries deliberately continue through agent shutdown: the worker's drain
+    /// (`kill_agent_max_wait_time_seconds`, default 2h, same as a running hook)
+    /// waits for them, so a stop during a backend outage can take up to the
+    /// deadline. Stopping early would be worse while the result lives only in
+    /// memory: either it is lost (a 70-minute stall), or the tracking file
+    /// survives and crash recovery reports `Failed` for a hook that succeeded.
+    /// Once the result is persisted for replay after restart, this loop should
+    /// honour the cancel token instead.
+    fn report_completion(
+        &self,
+        command: &HostCommand,
+        status: &str,
+        payload: &str,
+        deadline: Instant,
+    ) {
+        let host_command_id = &command.host_command_identifier;
+        let mut attempt: u32 = 0;
+        loop {
+            attempt += 1;
+            debug!(attempt, "Calling PutHostCommandComplete: \"{status}\"");
+            let err = match self.client.put_host_command_complete(host_command_id, status, payload)
+            {
+                Ok(()) => {
+                    if attempt > 1 {
+                        info!(attempt, %host_command_id, "Reported command completion after retrying");
+                    }
+                    return;
+                },
+                Err(e) => e,
+            };
+
+            let now = Instant::now();
+            if !err.is_retryable() || now >= deadline {
+                error!(
+                    attempt,
+                    %host_command_id,
+                    retryable = err.is_retryable(),
+                    "Failed to report command completion: {err}"
+                );
+                return;
+            }
+
+            let wait = self.completion_retry.backoff(attempt).min(deadline - now);
+            warn!(
+                attempt,
+                %host_command_id,
+                wait_ms = u64::try_from(wait.as_millis()).unwrap_or(u64::MAX),
+                "Transient error reporting command completion, retrying: {err}"
+            );
+            // A 5xx response may come from one bad backend host that the pooled
+            // keep-alive connection is pinned to; reconnect so the retry can land
+            // elsewhere. Network errors and timeouts already get a new
+            // connection, and throttling is not host-specific. The client
+            // rate-limits resets so a fleet-wide outage doesn't become a
+            // handshake storm.
+            if err.is_server_error_response()
+                && let Err(e) = self.client.reset_connections()
+            {
+                warn!("Failed to reset connections before retry: {e}");
+            }
+            std::thread::sleep(wait);
         }
     }
 }
@@ -413,7 +557,7 @@ mod tests {
         );
         let mut cmd = test_command();
         cmd.command_name = "UnknownCommand".into();
-        let result = processor.execute_and_report(&cmd, &test_spec());
+        let result = processor.execute_and_report(&cmd, &test_spec(), Instant::now());
         assert!(result.is_err());
     }
 
@@ -437,7 +581,7 @@ mod tests {
         std::fs::create_dir_all(dir.path().join("src")).unwrap();
         std::fs::write(dir.path().join("src/appspec.yml"), "version: 0.0\nos: linux\n").unwrap();
 
-        let result = processor.execute_and_report(&cmd, &spec);
+        let result = processor.execute_and_report(&cmd, &spec, Instant::now());
         assert!(result.is_ok());
     }
 
@@ -450,8 +594,9 @@ mod tests {
             test_tracker(&dir),
             "i-1234".into(),
         );
-        processor.report_completion(&test_command(), "Succeeded", "{}");
-        processor.report_completion(&test_command(), "Failed", "{}");
+        // Deadline already passed: one attempt each, no retry against the real endpoint.
+        processor.report_completion(&test_command(), "Succeeded", "{}", Instant::now());
+        processor.report_completion(&test_command(), "Failed", "{}", Instant::now());
     }
 
     #[test]
@@ -525,7 +670,7 @@ mod tests {
 
         // Use a noop hook command — will succeed without needing real files
         let cmd = test_command(); // AfterInstall with empty mapping = noop
-        let result = processor.execute_and_report(&cmd, &test_spec());
+        let result = processor.execute_and_report(&cmd, &test_spec(), Instant::now());
         // Succeeds (noop hook) or fails (unsupported) — either way tracking is cleaned
         let _ = result;
 
@@ -578,15 +723,34 @@ mod tests {
     // --- Mock-based tests for ack-status branching logic ---
 
     use std::cell::RefCell;
+    use std::collections::VecDeque;
 
     struct MockClient {
         ack_status: AckStatus,
+        /// Every `put_host_command_complete` call, including failed attempts.
         completions: RefCell<Vec<(String, String)>>,
+        /// Errors returned by successive completion calls before they succeed.
+        complete_errors: RefCell<VecDeque<CodeDeployClientError>>,
+        /// When set, every completion call fails with this error kind.
+        always_fail: Option<codedeploy_commands::ErrorKind>,
+        /// Number of `reset_connections` calls.
+        resets: std::cell::Cell<u32>,
     }
 
     impl MockClient {
         fn new(ack_status: AckStatus) -> Self {
-            Self { ack_status, completions: RefCell::new(Vec::new()) }
+            Self {
+                ack_status,
+                completions: RefCell::new(Vec::new()),
+                complete_errors: RefCell::new(VecDeque::new()),
+                always_fail: None,
+                resets: std::cell::Cell::new(0),
+            }
+        }
+
+        fn failing_completions_with(mut self, errors: Vec<CodeDeployClientError>) -> Self {
+            self.complete_errors = RefCell::new(errors.into());
+            self
         }
     }
 
@@ -646,6 +810,23 @@ mod tests {
         ) -> Result<(), crate::aws_clients::codedeploy_command_client::CodeDeployClientError>
         {
             self.completions.borrow_mut().push((status.into(), diagnostics_payload.into()));
+            if let Some(kind) = &self.always_fail {
+                return Err(CodeDeployClientError::Service(
+                    codedeploy_commands::Error::new(kind.clone(), "always failing")
+                        .with_status(503),
+                ));
+            }
+            match self.complete_errors.borrow_mut().pop_front() {
+                Some(e) => Err(e),
+                None => Ok(()),
+            }
+        }
+
+        fn reset_connections(
+            &self,
+        ) -> Result<(), crate::aws_clients::codedeploy_command_client::CodeDeployClientError>
+        {
+            self.resets.set(self.resets.get() + 1);
             Ok(())
         }
     }
@@ -786,6 +967,206 @@ mod tests {
             ),
             "ack-Failed line should match the expected wording"
         );
+    }
+
+    // --- Completion retry on transient errors ---
+
+    /// Millisecond-scale policy so retry tests run fast.
+    fn fast_retry_policy(deadline: Duration) -> CompletionRetryPolicy {
+        CompletionRetryPolicy {
+            deadline_after_ack: deadline,
+            initial_backoff: Duration::from_millis(1),
+            max_backoff: Duration::from_millis(5),
+        }
+    }
+
+    fn http_error(status: u16) -> CodeDeployClientError {
+        CodeDeployClientError::Service(
+            codedeploy_commands::Error::new(codedeploy_commands::ErrorKind::Http, "boom")
+                .with_status(status),
+        )
+    }
+
+    fn kind_error(kind: codedeploy_commands::ErrorKind) -> CodeDeployClientError {
+        CodeDeployClientError::Service(codedeploy_commands::Error::new(kind, "boom"))
+    }
+
+    fn processor_with(
+        dir: &TempDir,
+        client: MockClient,
+        policy: CompletionRetryPolicy,
+    ) -> CommandProcessor<FileBasedDeploymentTracker<SystemFileOperations>, MockClient> {
+        CommandProcessor::new(client, test_dispatcher(dir), test_tracker(dir), "i-1234".into())
+            .with_completion_retry_policy(policy)
+    }
+
+    /// The 10-15 and 10-23 incidents: a burst of 503s / bodyless 500s / resets
+    /// on `PutHostCommandComplete`. The result must still land, unchanged.
+    #[test]
+    fn transient_completion_errors_are_retried_until_success() {
+        let dir = TempDir::new().unwrap();
+        let client = MockClient::new(AckStatus::Failed).failing_completions_with(vec![
+            http_error(503),
+            http_error(500),
+            kind_error(codedeploy_commands::ErrorKind::Network),
+            kind_error(codedeploy_commands::ErrorKind::ServerException),
+        ]);
+        let processor = processor_with(&dir, client, fast_retry_policy(Duration::from_secs(10)));
+        let mut cmd = test_command();
+        cmd.command_name = "UnmappedHook".into(); // noop -> reports Succeeded on Failed ack
+
+        assert!(processor.process(&cmd).is_ok());
+
+        let completions = processor.client.completions.borrow();
+        assert_eq!(completions.len(), 5, "4 transient failures then 1 success");
+        assert!(
+            completions.iter().all(|(status, _)| status == "Succeeded"),
+            "every attempt must resend the real result, never downgrade it"
+        );
+    }
+
+    #[test]
+    fn hook_result_is_retried_after_execution() {
+        let dir = TempDir::new().unwrap();
+        let client = MockClient::new(AckStatus::InProgress)
+            .failing_completions_with(vec![http_error(503), http_error(503)]);
+        let processor = processor_with(&dir, client, fast_retry_policy(Duration::from_secs(10)));
+        let mut cmd = test_command();
+        cmd.command_name = "AfterInstall".into();
+
+        let _ = processor.process(&cmd);
+
+        let completions = processor.client.completions.borrow();
+        assert_eq!(completions.len(), 3, "2 transient failures then 1 success");
+        let first = &completions[0];
+        assert!(completions.iter().all(|c| c == first), "retries resend the same status/payload");
+        drop(completions);
+        assert!(!processor.tracker.is_deployment_in_progress().unwrap());
+    }
+
+    #[test]
+    fn client_errors_are_not_retried() {
+        let dir = TempDir::new().unwrap();
+        let client = MockClient::new(AckStatus::Failed).failing_completions_with(vec![
+            kind_error(codedeploy_commands::ErrorKind::ClientException),
+            http_error(503), // must never be reached
+        ]);
+        let processor = processor_with(&dir, client, fast_retry_policy(Duration::from_secs(10)));
+        let mut cmd = test_command();
+        cmd.command_name = "UnmappedHook".into();
+
+        assert!(processor.process(&cmd).is_ok());
+        assert_eq!(processor.client.completions.borrow().len(), 1);
+    }
+
+    #[test]
+    fn http_4xx_is_not_retried() {
+        let dir = TempDir::new().unwrap();
+        let client = MockClient::new(AckStatus::Failed)
+            .failing_completions_with(vec![http_error(400), http_error(503)]);
+        let processor = processor_with(&dir, client, fast_retry_policy(Duration::from_secs(10)));
+        let mut cmd = test_command();
+        cmd.command_name = "UnmappedHook".into();
+
+        assert!(processor.process(&cmd).is_ok());
+        assert_eq!(processor.client.completions.borrow().len(), 1);
+    }
+
+    /// Retrying stops at the deadline even if the backend never recovers.
+    #[test]
+    fn retries_stop_at_deadline() {
+        let dir = TempDir::new().unwrap();
+        let mut client = MockClient::new(AckStatus::Failed);
+        client.always_fail = Some(codedeploy_commands::ErrorKind::Http);
+        let deadline = Duration::from_millis(200);
+        let processor = processor_with(&dir, client, fast_retry_policy(deadline));
+        let mut cmd = test_command();
+        cmd.command_name = "UnmappedHook".into();
+
+        let start = Instant::now();
+        assert!(processor.process(&cmd).is_ok());
+        let elapsed = start.elapsed();
+
+        let attempts = processor.client.completions.borrow().len();
+        assert!(attempts > 1, "should have retried; got {attempts} attempt(s)");
+        assert!(
+            elapsed < deadline + Duration::from_secs(2),
+            "must give up near the deadline; took {elapsed:?}"
+        );
+    }
+
+    /// Only complete 5xx responses reconnect: there the pooled connection is
+    /// healthy and would carry the retry back to the same backend host.
+    /// Network errors and timeouts already get a new connection from the HTTP
+    /// client, and throttling is not host-specific.
+    #[test]
+    fn only_server_error_responses_reset_connections() {
+        let dir = TempDir::new().unwrap();
+        let client = MockClient::new(AckStatus::Failed).failing_completions_with(vec![
+            http_error(503),
+            kind_error(codedeploy_commands::ErrorKind::Throttled),
+            kind_error(codedeploy_commands::ErrorKind::Network),
+            http_error(500),
+        ]);
+        let processor = processor_with(&dir, client, fast_retry_policy(Duration::from_secs(10)));
+        let mut cmd = test_command();
+        cmd.command_name = "UnmappedHook".into();
+
+        assert!(processor.process(&cmd).is_ok());
+        assert_eq!(processor.client.completions.borrow().len(), 5);
+        assert_eq!(processor.client.resets.get(), 2, "only the 503 and the 500 reconnect");
+    }
+
+    #[test]
+    fn non_retryable_errors_do_not_reset_connections() {
+        let dir = TempDir::new().unwrap();
+        let client =
+            MockClient::new(AckStatus::Failed).failing_completions_with(vec![http_error(400)]);
+        let processor = processor_with(&dir, client, fast_retry_policy(Duration::from_secs(10)));
+        let mut cmd = test_command();
+        cmd.command_name = "UnmappedHook".into();
+
+        assert!(processor.process(&cmd).is_ok());
+        assert_eq!(processor.client.resets.get(), 0);
+    }
+
+    #[tracing_test::traced_test]
+    #[test]
+    fn retry_and_recovery_are_logged() {
+        let dir = TempDir::new().unwrap();
+        let client =
+            MockClient::new(AckStatus::Failed).failing_completions_with(vec![http_error(503)]);
+        let processor = processor_with(&dir, client, fast_retry_policy(Duration::from_secs(10)));
+        let mut cmd = test_command();
+        cmd.command_name = "UnmappedHook".into();
+
+        assert!(processor.process(&cmd).is_ok());
+        assert!(logs_contain("Transient error reporting command completion, retrying"));
+        assert!(logs_contain("Reported command completion after retrying"));
+    }
+
+    #[test]
+    fn backoff_is_bounded_by_ceiling() {
+        let policy = CompletionRetryPolicy {
+            deadline_after_ack: Duration::from_mins(65),
+            initial_backoff: Duration::from_secs(1),
+            max_backoff: Duration::from_secs(30),
+        };
+        for attempt in 1..=20 {
+            let ceiling = Duration::from_secs(1)
+                .saturating_mul(2u32.saturating_pow(attempt - 1))
+                .min(Duration::from_secs(30));
+            for _ in 0..20 {
+                assert!(policy.backoff(attempt) <= ceiling, "attempt {attempt}");
+            }
+        }
+        // Large attempt counts must not overflow.
+        assert!(policy.backoff(u32::MAX) <= Duration::from_secs(30));
+    }
+
+    #[test]
+    fn default_policy_stays_inside_service_timeout() {
+        assert!(CompletionRetryPolicy::default().deadline_after_ack < Duration::from_mins(70));
     }
 
     #[test]

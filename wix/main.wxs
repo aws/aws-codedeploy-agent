@@ -32,6 +32,11 @@
             <Directory Id="CommonAppDataFolder">
                 <Directory Id="AmazonDir" Name="Amazon">
                     <Directory Id="INSTALLDIR" Name="CodeDeploy">
+                        <Component Id="InstallDirAcl" Guid="9C1ED611-CA7F-464D-841F-1B81C51C46A0">
+                            <CreateFolder>
+                                <Permission User="Administrators" GenericAll="yes" />
+                            </CreateFolder>
+                        </Component>
                         <Directory Id="BinDir" Name="bin">
                             <Component Id="AgentBinary" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
                                 <File Id="AgentExe"
@@ -101,6 +106,7 @@
         </Directory>
 
         <Feature Id="MainFeature" Title="CodeDeploy Agent" Level="1">
+            <ComponentRef Id="InstallDirAcl" />
             <ComponentRef Id="AgentBinary" />
             <ComponentRef Id="LogDirComponent" />
             <ComponentRef Id="ConfDirComponent" />

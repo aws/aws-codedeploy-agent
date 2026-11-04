@@ -70,7 +70,8 @@ impl InstallCommand {
         .with_restrict_permissions(self.config.hardening.restrict_agent_dir_permissions)
         .with_reject_symlink_permission_targets(
             self.config.hardening.reject_symlink_permission_targets,
-        );
+        )
+        .with_preserve_directory_symlinks(self.config.preserve_directory_symlinks);
 
         debug!("Installing revision in instance group {}", spec.deployment_group_id);
 

@@ -5,6 +5,7 @@
 //! rollback on the next deployment.
 
 pub mod builder;
+pub mod cleanup_file;
 pub mod commands;
 pub mod core;
 pub mod error;

@@ -9,8 +9,8 @@ use crate::aws_clients::throttle_gate::ThrottleGate;
 use aws_credential_types::Credentials as AwsCredentials;
 use codedeploy_commands::types::{CommandStatus, Envelope, HostCommandInstance};
 use codedeploy_commands::{Client, GetDeploymentSpecificationOutput};
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 /// Agent version for the `x-amz-codedeploy-agent-version` header
@@ -45,6 +45,40 @@ impl CodeDeployClientError {
     #[must_use]
     pub fn is_throttle(&self) -> bool {
         matches!(self, Self::Service(e) if *e.kind() == codedeploy_commands::ErrorKind::Throttled)
+    }
+
+    /// Returns `true` if the service answered with a 5xx response other than
+    /// throttling.
+    ///
+    /// This is the case where reconnecting helps: the connection is healthy,
+    /// so the pool would reuse it and send the retry to the same backend host.
+    /// After a network error or timeout the HTTP client already discards the
+    /// connection and opens a new one.
+    #[must_use]
+    pub fn is_server_error_response(&self) -> bool {
+        matches!(self, Self::Service(e)
+            if *e.kind() != codedeploy_commands::ErrorKind::Throttled
+                && e.status().is_some_and(|s| s >= 500))
+    }
+
+    /// Returns `true` if the request may succeed when sent again: throttling,
+    /// any 5xx, a server exception, a network failure, or IMDS being briefly
+    /// unreachable during a credential refresh.
+    ///
+    /// 4xx client errors and local failures (signing, serialization, a
+    /// poisoned lock) are not retryable.
+    #[must_use]
+    pub fn is_retryable(&self) -> bool {
+        use codedeploy_commands::ErrorKind;
+        match self {
+            Self::Service(e) => match e.kind() {
+                ErrorKind::Throttled | ErrorKind::ServerException | ErrorKind::Network => true,
+                ErrorKind::Http => e.status().is_some_and(|s| s >= 500),
+                _ => false,
+            },
+            Self::ImdsUnavailable(_) => true,
+            _ => false,
+        }
     }
 }
 
@@ -102,9 +136,9 @@ impl AckStatus {
     }
 }
 
-/// Mutable state that gets swapped during credential refresh.
-/// Behind an `RwLock` so HTTP methods can hold a read lock (concurrent)
-/// while `refresh_if_needed` briefly takes a write lock (~once per 25 min).
+/// Mutable state that gets swapped during credential refresh or a connection
+/// reset. HTTP methods copy the client out under a brief read lock and make the
+/// request without holding it, so writers never wait on in-flight requests.
 struct RefreshableInner {
     client: Client,
     credential_expiry: Option<std::time::Instant>,
@@ -131,6 +165,8 @@ pub struct CodeDeployCommandClient {
     proxy_uri: Option<String>,
     /// Process-wide throttle circuit breaker shared across all client instances.
     throttle_gate: Arc<ThrottleGate>,
+    /// When `reset_connections` last dropped the pool (rate limit).
+    last_connection_reset: Mutex<Option<Instant>>,
 }
 
 /// Compute the credential expiry instant for the given mode.
@@ -222,6 +258,7 @@ impl CodeDeployCommandClient {
             http_read_timeout,
             proxy_uri,
             throttle_gate,
+            last_connection_reset: Mutex::new(None),
         })
     }
 
@@ -308,6 +345,58 @@ impl CodeDeployCommandClient {
         Ok(())
     }
 
+    /// Copy of the current inner client, taken under a brief read lock.
+    ///
+    /// Callers make the HTTP request on the copy with the lock released, so a
+    /// slow request (up to `http_read_timeout`) never holds the lock and
+    /// `reset_connections` / credential refresh only wait for the swap. The
+    /// copy is cheap: credentials and the reqwest client are reference-counted.
+    fn current_client(&self) -> Result<Client, CodeDeployClientError> {
+        let state = self
+            .inner
+            .read()
+            .map_err(|e| CodeDeployClientError::LockPoisoned(format!("{e}")))?;
+        Ok(state.client.clone())
+    }
+
+    /// Minimum time between connection resets on one client.
+    const MIN_CONNECTION_RESET_INTERVAL: Duration = Duration::from_mins(1);
+
+    /// Drop pooled connections so the next request reaches the service on a
+    /// fresh connection, and therefore possibly a different backend host.
+    ///
+    /// Rate-limited to once per [`Self::MIN_CONNECTION_RESET_INTERVAL`] across
+    /// every thread using this client: each reset costs the service a TCP+TLS
+    /// handshake, and during a fleet-wide outage every retrying agent would
+    /// otherwise add one per retry. Returns whether a reset happened.
+    ///
+    /// Affects only this client's pool. The poller has its own client, so its
+    /// connection is untouched. Requests already in flight finish on their
+    /// existing connection.
+    ///
+    /// # Errors
+    /// Returns error if the lock is poisoned or the HTTP client cannot be rebuilt.
+    pub fn reset_connections(&self) -> Result<bool, CodeDeployClientError> {
+        {
+            let mut last = self
+                .last_connection_reset
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let now = Instant::now();
+            if last.is_some_and(|t| now.duration_since(t) < Self::MIN_CONNECTION_RESET_INTERVAL) {
+                return Ok(false);
+            }
+            *last = Some(now);
+        }
+        let mut state = self
+            .inner
+            .write()
+            .map_err(|e| CodeDeployClientError::LockPoisoned(format!("{e}")))?;
+        state.client.reset_http_connections().map_err(CodeDeployClientError::Service)?;
+        tracing::info!("Reset CodeDeploy command service connections after a server error");
+        Ok(true)
+    }
+
     /// Maximum retry attempts for throttled requests.
     const MAX_THROTTLE_RETRIES: u32 = 5;
 
@@ -355,11 +444,8 @@ impl CodeDeployCommandClient {
     ) -> Result<Option<HostCommand>, CodeDeployClientError> {
         self.retry_on_throttle(|| {
             self.refresh_if_needed()?;
-            let state = self
-                .inner
-                .read()
-                .map_err(|e| CodeDeployClientError::LockPoisoned(format!("{e}")))?;
-            let result = state.client.poll_host_command(host_identifier)?;
+            let client = self.current_client()?;
+            let result = client.poll_host_command(host_identifier)?;
             Ok(result.map(HostCommand::from))
         })
     }
@@ -378,12 +464,8 @@ impl CodeDeployCommandClient {
             let envelope =
                 Envelope { format: "JSON".to_string(), payload: diagnostics_payload.to_string() };
 
-            let state = self
-                .inner
-                .read()
-                .map_err(|e| CodeDeployClientError::LockPoisoned(format!("{e}")))?;
-            let status_str = state
-                .client
+            let client = self.current_client()?;
+            let status_str = client
                 .put_host_command_acknowledgement(host_command_identifier, Some(&envelope))?;
 
             Ok(AckStatus::from_response(status_str.as_deref()))
@@ -401,13 +483,9 @@ impl CodeDeployCommandClient {
     ) -> Result<DeploymentSpecification, CodeDeployClientError> {
         self.retry_on_throttle(|| {
             self.refresh_if_needed()?;
-            let state = self
-                .inner
-                .read()
-                .map_err(|e| CodeDeployClientError::LockPoisoned(format!("{e}")))?;
-            let output = state
-                .client
-                .get_deployment_specification(deployment_execution_id, host_identifier)?;
+            let client = self.current_client()?;
+            let output =
+                client.get_deployment_specification(deployment_execution_id, host_identifier)?;
 
             Ok(to_deployment_spec(output))
         })
@@ -437,11 +515,8 @@ impl CodeDeployCommandClient {
             let envelope =
                 Envelope { format: "JSON".to_string(), payload: diagnostics_payload.to_string() };
 
-            let state = self
-                .inner
-                .read()
-                .map_err(|e| CodeDeployClientError::LockPoisoned(format!("{e}")))?;
-            state.client.put_host_command_complete(
+            let client = self.current_client()?;
+            client.put_host_command_complete(
                 host_command_identifier,
                 command_status,
                 Some(&envelope),
@@ -1043,6 +1118,137 @@ mod tests {
     fn is_throttle_false_for_non_service_error() {
         let err = CodeDeployClientError::LockPoisoned("test".into());
         assert!(!err.is_throttle());
+    }
+
+    fn service_error(kind: codedeploy_commands::ErrorKind) -> CodeDeployClientError {
+        CodeDeployClientError::Service(codedeploy_commands::Error::new(kind, "test"))
+    }
+
+    #[test]
+    fn reset_connections_succeeds_and_keeps_agent_version() {
+        let client = CodeDeployCommandClient::new(
+            iam_user_credentials(),
+            false,
+            false,
+            None,
+            Duration::from_secs(80),
+            None,
+        )
+        .unwrap();
+        let version = client.agent_version();
+        assert!(client.reset_connections().unwrap());
+        assert_eq!(client.agent_version(), version);
+    }
+
+    /// At most one reset per interval per client, however many threads or
+    /// retries ask for one.
+    #[test]
+    fn reset_connections_is_rate_limited() {
+        let client = CodeDeployCommandClient::new(
+            iam_user_credentials(),
+            false,
+            false,
+            None,
+            Duration::from_secs(80),
+            None,
+        )
+        .unwrap();
+        assert!(client.reset_connections().unwrap(), "first reset happens");
+        assert!(!client.reset_connections().unwrap(), "second within the interval is skipped");
+        assert!(!client.reset_connections().unwrap());
+
+        // Once the interval has passed, the next reset happens again.
+        let past = CodeDeployCommandClient::MIN_CONNECTION_RESET_INTERVAL + Duration::from_secs(1);
+        *client.last_connection_reset.lock().unwrap() =
+            Some(Instant::now().checked_sub(past).expect("monotonic clock older than 61s"));
+        assert!(client.reset_connections().unwrap(), "reset allowed after the interval");
+        assert!(!client.reset_connections().unwrap());
+    }
+
+    #[test]
+    fn is_server_error_response_only_for_5xx_responses() {
+        use codedeploy_commands::{Error, ErrorKind};
+        let with = |kind, status| {
+            CodeDeployClientError::Service(Error::new(kind, "x").with_status(status))
+        };
+        assert!(with(ErrorKind::Http, 503).is_server_error_response());
+        assert!(with(ErrorKind::Http, 500).is_server_error_response());
+        assert!(with(ErrorKind::ServerException, 500).is_server_error_response());
+        // Throttling, even with a 503 status, is not a bad-host signal.
+        assert!(!with(ErrorKind::Throttled, 503).is_server_error_response());
+        assert!(!with(ErrorKind::ClientException, 400).is_server_error_response());
+        // No response: the HTTP client already reconnects.
+        assert!(!service_error(ErrorKind::Network).is_server_error_response());
+        assert!(!CodeDeployClientError::ImdsUnavailable("x".into()).is_server_error_response());
+    }
+
+    /// A request stuck on an unresponsive backend must not hold the client
+    /// lock, or `reset_connections` (and every other caller behind it) would
+    /// wait up to `http_read_timeout`.
+    #[test]
+    fn reset_connections_does_not_wait_for_in_flight_request() {
+        // Accepts connections and never answers.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let read_timeout = Duration::from_secs(5);
+        let client = CodeDeployCommandClient::new(
+            iam_user_credentials(),
+            false,
+            false,
+            Some(endpoint),
+            read_timeout,
+            None,
+        )
+        .unwrap();
+
+        std::thread::scope(|s| {
+            let stuck = s.spawn(|| client.poll_host_command("i-1234"));
+            // Wait until the request is in flight on the server side.
+            let (_conn, _) = listener.accept().unwrap();
+
+            let start = std::time::Instant::now();
+            assert!(client.reset_connections().unwrap(), "reset must actually run");
+            let elapsed = start.elapsed();
+            assert!(
+                elapsed < Duration::from_secs(1),
+                "reset waited {elapsed:?} for the in-flight request"
+            );
+
+            assert!(stuck.join().unwrap().is_err(), "stuck request should time out");
+        });
+    }
+
+    #[test]
+    fn is_retryable_for_transient_service_errors() {
+        use codedeploy_commands::ErrorKind;
+        assert!(service_error(ErrorKind::Throttled).is_retryable());
+        assert!(service_error(ErrorKind::ServerException).is_retryable());
+        assert!(service_error(ErrorKind::Network).is_retryable());
+        assert!(CodeDeployClientError::ImdsUnavailable("timeout".into()).is_retryable());
+    }
+
+    #[test]
+    fn is_retryable_false_for_permanent_errors() {
+        use codedeploy_commands::ErrorKind;
+        assert!(!service_error(ErrorKind::ClientException).is_retryable());
+        assert!(!service_error(ErrorKind::Signing).is_retryable());
+        assert!(!service_error(ErrorKind::Serialization).is_retryable());
+        assert!(!service_error(ErrorKind::Deserialization).is_retryable());
+        assert!(!CodeDeployClientError::LockPoisoned("test".into()).is_retryable());
+    }
+
+    #[test]
+    fn is_retryable_http_error_depends_on_status() {
+        use codedeploy_commands::{Error, ErrorKind};
+        let http = |status| {
+            CodeDeployClientError::Service(Error::new(ErrorKind::Http, "x").with_status(status))
+        };
+        assert!(http(500).is_retryable());
+        assert!(http(503).is_retryable());
+        assert!(!http(400).is_retryable());
+        assert!(!http(404).is_retryable());
+        // `Http` without a status (not from a response) is not retried.
+        assert!(!service_error(ErrorKind::Http).is_retryable());
     }
 
     #[test]

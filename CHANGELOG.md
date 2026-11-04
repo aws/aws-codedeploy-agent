@@ -1,3 +1,22 @@
+## 2.1.3
+
+### Added
+
+* **Optional `preserve_directory_symlinks`** (default `false`, Linux and macOS). A symlink to a directory in the revision is installed as a symlink instead of copying the directory it points to ([#152](https://github.com/aws/aws-codedeploy-agent/issues/152)). The AppSpec `permissions` section is not applied through a preserved link; a warning is logged instead.
+
+### Fixed
+
+* **Lifecycle event results are retried on transient errors.** When reporting a result fails with a 5xx or network error, the agent retries with exponential backoff for up to 65 minutes after the command was acknowledged. Previously only throttling was retried, so a hook that succeeded could fail with "CodeDeploy agent was not able to notify CodeDeploy server the execution result of this lifecycle event". Stopping the agent during retries can take as long as the retry period, bounded by `kill_agent_max_wait_time_seconds`.
+* **Symlinks replace existing files and symlinks ([#143](https://github.com/aws/aws-codedeploy-agent/issues/143)).** Installing a symlink over an existing file or symlink now replaces it. A symlink over an existing directory is refused before any file is copied, and cleanup removes dangling symlinks.
+* **File names that are not valid UTF-8 ([#284](https://github.com/aws/aws-codedeploy-agent/issues/284)).** Such files no longer hang the Install event; they are installed and removed on the next deployment when a revision drops them. A destination path that contains a line break fails the deployment before any files are copied.
+* **Concurrent deployments that create the same missing parent directory ([#429](https://github.com/aws/aws-codedeploy-agent/pull/429))** no longer fail the Install event.
+* **GitHub deployments that use an access token ([#434](https://github.com/aws/aws-codedeploy-agent/issues/434))** no longer fail with HTTP 401. The token is now redacted only in the debug log.
+* **On Windows, agent deployment folders stay readable by standard users** (`deployment-logs`, `ongoing-deployment`, and the per-deployment folders), matching the 0755 folders on Linux and macOS. Standard users cannot modify them.
+
+### Security
+
+* Improved file system permissions on the agent installation folder on Windows Server.
+
 ## 2.1.2
 
 ### Added

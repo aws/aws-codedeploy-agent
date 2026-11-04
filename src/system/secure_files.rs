@@ -84,6 +84,139 @@ fn apply_agent_dacl(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Grant `BUILTIN\Users` read and execute on a directory, inherited by the
+/// files and subdirectories under it, keeping the directory's other ACEs.
+/// Never grants write. A no-op when Users can already read the directory
+/// (for example through an ACE inherited from an agent dir above it), so
+/// re-touching a dir doesn't re-propagate ACLs through its whole subtree.
+///
+/// This is the Windows counterpart of the Unix 0755 parity mode: the MSI
+/// locks the install root to SYSTEM + Administrators, so agent dirs no
+/// longer inherit the `%ProgramData%` Users read ACE and need it explicitly.
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn grant_users_read(path: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::{ERROR_SUCCESS, LocalFree};
+    use windows_sys::Win32::Security::Authorization::{
+        EXPLICIT_ACCESS_W, GRANT_ACCESS, GetEffectiveRightsFromAclW, GetNamedSecurityInfoW,
+        NO_MULTIPLE_TRUSTEE, SE_FILE_OBJECT, SetEntriesInAclW, SetNamedSecurityInfoW,
+        TRUSTEE_IS_SID, TRUSTEE_IS_WELL_KNOWN_GROUP, TRUSTEE_W,
+    };
+    use windows_sys::Win32::Security::{
+        ACL, CreateWellKnownSid, DACL_SECURITY_INFORMATION, SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+        WinBuiltinUsersSid,
+    };
+    use windows_sys::Win32::Storage::FileSystem::{FILE_GENERIC_EXECUTE, FILE_GENERIC_READ};
+
+    const SECURITY_MAX_SID_SIZE: u32 = 68;
+    let read_execute = FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
+
+    let mut sid = [0u8; SECURITY_MAX_SID_SIZE as usize];
+    let mut sid_len = SECURITY_MAX_SID_SIZE;
+    // SAFETY: `sid` is a writable buffer of `sid_len` bytes; a null domain
+    // SID is valid for a BUILTIN well-known SID.
+    if unsafe {
+        CreateWellKnownSid(
+            WinBuiltinUsersSid,
+            std::ptr::null_mut(),
+            sid.as_mut_ptr().cast(),
+            &mut sid_len,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    let trustee = TRUSTEE_W {
+        pMultipleTrustee: std::ptr::null_mut(),
+        MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
+        TrusteeForm: TRUSTEE_IS_SID,
+        TrusteeType: TRUSTEE_IS_WELL_KNOWN_GROUP,
+        ptstrName: sid.as_mut_ptr().cast(),
+    };
+
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let mut dacl: *mut ACL = std::ptr::null_mut();
+    let mut sd: *mut core::ffi::c_void = std::ptr::null_mut();
+    // SAFETY: `wide` is NUL-terminated; the out-pointers are valid. `dacl`
+    // points into `sd`, which is freed below with `LocalFree`.
+    let ret = unsafe {
+        GetNamedSecurityInfoW(
+            wide.as_ptr(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut dacl,
+            std::ptr::null_mut(),
+            &mut sd,
+        )
+    };
+    if ret != ERROR_SUCCESS {
+        return Err(win32_error(ret));
+    }
+
+    let mut current: u32 = 0;
+    // SAFETY: `dacl` comes from `GetNamedSecurityInfoW` and `trustee` holds a
+    // valid SID that outlives the call.
+    let have = unsafe { GetEffectiveRightsFromAclW(dacl, &trustee, &mut current) };
+    let result = if have == ERROR_SUCCESS && current & read_execute == read_execute {
+        Ok(())
+    } else {
+        let entry = EXPLICIT_ACCESS_W {
+            grfAccessPermissions: read_execute,
+            grfAccessMode: GRANT_ACCESS,
+            grfInheritance: SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+            Trustee: trustee,
+        };
+        let mut new_dacl: *mut ACL = std::ptr::null_mut();
+        // SAFETY: `entry` is a valid EXPLICIT_ACCESS_W; `dacl` is the
+        // existing DACL; `new_dacl` is a valid out-pointer.
+        let ret = unsafe { SetEntriesInAclW(1, &entry, dacl, &mut new_dacl) };
+        if ret == ERROR_SUCCESS {
+            // DACL_SECURITY_INFORMATION alone keeps the dir's protection
+            // state: a protected DACL stays protected, an inheriting one
+            // keeps inheriting.
+            // SAFETY: `wide` is NUL-terminated; `new_dacl` is a valid ACL from
+            // `SetEntriesInAclW`.
+            let ret = unsafe {
+                SetNamedSecurityInfoW(
+                    wide.as_ptr(),
+                    SE_FILE_OBJECT,
+                    DACL_SECURITY_INFORMATION,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    new_dacl,
+                    std::ptr::null(),
+                )
+            };
+            // SAFETY: `new_dacl` was allocated by `SetEntriesInAclW`.
+            unsafe { LocalFree(new_dacl.cast()) };
+            if ret == ERROR_SUCCESS {
+                Ok(())
+            } else {
+                Err(win32_error(ret))
+            }
+        } else {
+            Err(win32_error(ret))
+        }
+    };
+
+    // SAFETY: `sd` was allocated by `GetNamedSecurityInfoW` and is freed once.
+    unsafe { LocalFree(sd) };
+    result
+}
+
+/// Convert a `WIN32_ERROR` return code (the security APIs return it rather
+/// than setting last-error) into an `io::Error`.
+#[cfg(windows)]
+fn win32_error(code: u32) -> io::Error {
+    i32::try_from(code).map_or_else(
+        |_| io::Error::other(format!("Win32 error {code}")),
+        io::Error::from_raw_os_error,
+    )
+}
+
 /// Create a file with the agent DACL applied atomically via
 /// `CreateFileW` + `SECURITY_ATTRIBUTES`. Returns the open handle wrapped
 /// in a `std::fs::File`.
@@ -266,9 +399,11 @@ pub fn agent_file_mode(restrict: bool) -> u32 {
 /// force-loosen matters on upgrade: a host that already ran a tightened agent
 /// has these dirs at 0700/0711, and [`create_dir_secure`] only ever tightens.
 ///
-/// On Windows, creates the directory with the default inherited ACL (no
-/// protected DACL), so the same host tooling keeps its access. A pre-existing
-/// protected DACL from an earlier agent version is not reset.
+/// On Windows, creates the directory with its inherited ACL and grants
+/// `BUILTIN\Users` read and execute, inherited by everything under it (see
+/// [`grant_users_read`]). Users never get write. A pre-existing protected
+/// DACL from an earlier agent version stays protected but gains the Users
+/// read ACE.
 ///
 /// # Errors
 /// Returns an error if directory creation or permission setting fails.
@@ -300,9 +435,14 @@ pub fn create_dir_world_readable(path: &Path) -> io::Result<()> {
         }
         Ok(())
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        std::fs::create_dir_all(path)
+        std::fs::create_dir_all(path)?;
+        grant_users_read(path)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        compile_error!("secure_files requires Unix or Windows");
     }
 }
 
@@ -338,6 +478,24 @@ pub fn create_deployment_dir(path: &Path, hardened_mode: u32, restrict: bool) ->
     } else {
         create_dir_world_readable(path)
     }
+}
+
+/// Create the agent `root_dir` with the policy selected by
+/// `restrict_agent_dir_permissions`. Same as [`create_deployment_dir`],
+/// except on Windows under the parity default: there `root_dir` is the MSI
+/// install root (`%PROGRAMDATA%\Amazon\CodeDeploy`), which also holds `bin\`,
+/// `conf.yml` and `conf.onpremises.yml`, so its installer ACL (SYSTEM +
+/// Administrators) is left as is. The agent dirs under it get Users read
+/// from [`create_dir_world_readable`].
+///
+/// # Errors
+/// Returns an error if directory creation or permission setting fails.
+pub fn create_root_dir(path: &Path, hardened_mode: u32, restrict: bool) -> io::Result<()> {
+    #[cfg(windows)]
+    if !restrict {
+        return std::fs::create_dir_all(path);
+    }
+    create_deployment_dir(path, hardened_mode, restrict)
 }
 
 /// Write `content` to `path` atomically, with the file created at exactly
@@ -855,5 +1013,118 @@ mod tests {
         write_file_secure(&path, b"new", 0o600).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"new");
         assert_agent_dacl(&path);
+    }
+
+    /// SID of `BUILTIN\Users`.
+    const USERS_SID: &str = "S-1-5-32-545";
+    /// `FILE_GENERIC_READ | FILE_GENERIC_EXECUTE` (`ReadAndExecute`).
+    const READ_EXECUTE: u32 = 0x0012_00A9;
+    /// `FILE_WRITE_DATA`, `FILE_APPEND_DATA`, `FILE_WRITE_EA`,
+    /// `FILE_WRITE_ATTRIBUTES`, `DELETE`, `WRITE_DAC` and `WRITE_OWNER`.
+    const ANY_WRITE: u32 =
+        0x0002 | 0x0004 | 0x0010 | 0x0100 | 0x0001_0000 | 0x0004_0000 | 0x0008_0000;
+    /// `OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE`.
+    const OI_CI: u8 = 0x01 | 0x02;
+
+    /// Allow ACEs for `BUILTIN\Users` on `path`: `(mask, flags)` pairs.
+    fn users_allow_aces(path: &Path) -> Vec<(u32, u8)> {
+        use windows_acl::acl::{ACL, AceType};
+
+        let acl = ACL::from_file_path(path.to_str().unwrap(), false).unwrap();
+        acl.all()
+            .unwrap()
+            .iter()
+            .filter(|e| e.entry_type == AceType::AccessAllow && e.string_sid == USERS_SID)
+            .map(|e| (e.mask, e.flags))
+            .collect()
+    }
+
+    #[test]
+    fn create_dir_world_readable_grants_users_read_inherited_never_write() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("deployment-logs");
+        create_dir_world_readable(&dir).unwrap();
+
+        let aces = users_allow_aces(&dir);
+        assert!(
+            aces.iter()
+                .any(|&(m, f)| m & READ_EXECUTE == READ_EXECUTE && f & OI_CI == OI_CI),
+            "expected an inheritable Users ReadAndExecute ACE, got {aces:?}"
+        );
+        assert!(
+            aces.iter().all(|&(m, _)| m & ANY_WRITE == 0),
+            "Users must not get write: {aces:?}"
+        );
+
+        // Files and subdirectories created inside inherit the read ACE.
+        let file = dir.join("codedeploy-agent-deployments.log");
+        std::fs::write(&file, b"x").unwrap();
+        let sub = dir.join("d-123");
+        std::fs::create_dir(&sub).unwrap();
+        for p in [&file, &sub] {
+            let aces = users_allow_aces(p);
+            assert!(
+                aces.iter().any(|&(m, _)| m & READ_EXECUTE == READ_EXECUTE),
+                "{} should inherit Users read, got {aces:?}",
+                p.display()
+            );
+            assert!(aces.iter().all(|&(m, _)| m & ANY_WRITE == 0));
+        }
+    }
+
+    #[test]
+    fn create_dir_world_readable_is_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("ongoing-deployment");
+        create_dir_world_readable(&dir).unwrap();
+        let first = users_allow_aces(&dir);
+        create_dir_world_readable(&dir).unwrap();
+        assert_eq!(users_allow_aces(&dir), first, "re-touching must not add ACEs");
+    }
+
+    #[test]
+    fn create_dir_world_readable_adds_read_to_protected_dir() {
+        // A dir a hardened agent left protected gains Users read and stays
+        // protected (no inherited ACEs come back).
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("state");
+        create_dir_secure(&dir, 0o700).unwrap();
+        create_dir_world_readable(&dir).unwrap();
+
+        let aces = users_allow_aces(&dir);
+        assert!(aces.iter().any(|&(m, _)| m & READ_EXECUTE == READ_EXECUTE), "got {aces:?}");
+        assert!(aces.iter().all(|&(m, _)| m & ANY_WRITE == 0));
+    }
+
+    #[test]
+    fn create_root_dir_parity_adds_no_users_ace() {
+        use windows_acl::acl::{ACL, AceType};
+
+        // root_dir is the MSI install root on Windows: its ACL is the
+        // installer's, so the parity default must not add an explicit ACE.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("CodeDeploy");
+        create_root_dir(&root, 0o711, false).unwrap();
+
+        let acl = ACL::from_file_path(root.to_str().unwrap(), false).unwrap();
+        let explicit_users = acl
+            .all()
+            .unwrap()
+            .iter()
+            .filter(|e| {
+                e.entry_type == AceType::AccessAllow
+                    && e.string_sid == USERS_SID
+                    && e.flags & INHERITED_ACE == 0
+            })
+            .count();
+        assert_eq!(explicit_users, 0, "create_root_dir must leave the root ACL alone");
+    }
+
+    #[test]
+    fn create_root_dir_restrict_applies_agent_dacl() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("CodeDeploy");
+        create_root_dir(&root, 0o711, true).unwrap();
+        assert_agent_dacl(&root);
     }
 }

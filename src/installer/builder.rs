@@ -9,6 +9,7 @@ use crate::installer::{InstallerError, Result};
 use nu_path;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::debug;
 
@@ -280,6 +281,21 @@ impl CommandBuilder {
         self.copy_targets.contains_key(&file)
     }
 
+    /// Whether `file` is a copy target whose source is a symlink to a
+    /// directory. Permissions are not applied to such targets.
+    #[must_use]
+    pub fn copying_directory_link(&self, file: &Path) -> bool {
+        let file = Self::expand_path(file);
+        self.copy_targets
+            .get(&file)
+            .is_some_and(|source| Self::is_directory_link(source))
+    }
+
+    fn is_directory_link(source: &Path) -> bool {
+        fs::symlink_metadata(source).is_ok_and(|m| m.is_symlink())
+            && fs::metadata(source).is_ok_and(|m| m.is_dir())
+    }
+
     #[must_use]
     pub fn making_directory(&self, dir: &Path) -> bool {
         debug!("Checking if making directory {}", dir.display());
@@ -294,7 +310,10 @@ impl CommandBuilder {
         let mut matches = Vec::new();
 
         if permission.types().contains(&crate::application_specification::ObjectType::File) {
-            for object in self.copy_targets.keys() {
+            for (object, source) in &self.copy_targets {
+                if Self::is_directory_link(source) {
+                    continue;
+                }
                 if permission.matches_pattern(object) && !permission.matches_except(object) {
                     // The directory-object path validates only the ACL per
                     // matched file, never the pattern/except (that validation

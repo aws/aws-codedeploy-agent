@@ -7,11 +7,13 @@ use std::fmt;
 pub struct Error {
     kind: ErrorKind,
     message: String,
+    /// HTTP status of the response, when the error came from one.
+    status: Option<u16>,
 }
 
 impl Error {
     pub fn new(kind: ErrorKind, message: impl Into<String>) -> Self {
-        Self { kind, message: message.into() }
+        Self { kind, message: message.into(), status: None }
     }
 
     /// The error kind.
@@ -20,8 +22,28 @@ impl Error {
         &self.kind
     }
 
-    /// Parse error from HTTP response body.
+    /// The HTTP status code, if the error came from a service response.
+    ///
+    /// `None` for errors raised before a response was received (network,
+    /// signing, serialization).
+    #[must_use]
+    pub fn status(&self) -> Option<u16> {
+        self.status
+    }
+
+    /// Attach an HTTP status code.
+    #[must_use]
+    pub fn with_status(mut self, status: u16) -> Self {
+        self.status = Some(status);
+        self
+    }
+
+    /// Parse error from HTTP response body, keeping the status code.
     pub(crate) fn from_response(status: u16, body: &[u8]) -> Self {
+        Self { status: Some(status), ..Self::classify_response(status, body) }
+    }
+
+    fn classify_response(status: u16, body: &[u8]) -> Self {
         // Detect throttling (HTTP 429) before parsing the body — the service
         // may return 429 with or without a JSON body.
         if status == 429 {
@@ -285,6 +307,30 @@ mod tests {
         let error = Error::new(ErrorKind::Http, "test");
         assert_eq!(error.kind(), &ErrorKind::Http);
         assert_eq!(error.message, "test");
+        assert_eq!(error.status(), None);
+    }
+
+    #[test]
+    fn from_response_keeps_status_for_service_unavailable() {
+        // A 503 with a ServiceUnavailableException body.
+        let body = r#"{"__type": "com.amazonaws.codedeploy#ServiceUnavailableException"}"#;
+        let error = Error::from_response(503, body.as_bytes());
+        assert_eq!(error.kind(), &ErrorKind::Http);
+        assert_eq!(error.status(), Some(503));
+    }
+
+    #[test]
+    fn from_response_keeps_status_for_bodyless_500() {
+        let error = Error::from_response(500, b"");
+        assert_eq!(error.kind(), &ErrorKind::Http);
+        assert_eq!(error.status(), Some(500));
+    }
+
+    #[test]
+    fn from_response_keeps_status_when_throttled() {
+        let error = Error::from_response(429, b"not json");
+        assert_eq!(error.kind(), &ErrorKind::Throttled);
+        assert_eq!(error.status(), Some(429));
     }
 
     #[test]

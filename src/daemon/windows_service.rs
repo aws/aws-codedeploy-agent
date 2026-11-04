@@ -33,8 +33,10 @@ const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 /// Documented AWS CodeDeploy agent install path on Windows (see
 /// <https://docs.aws.amazon.com/codedeploy/latest/userguide/codedeploy-agent-operations-install-windows.html>).
-/// The MSI creates this directory with an admin-only ACL, so a non-admin
-/// local user cannot replace the binary and escalate to LocalSystem.
+/// The MSI gives this directory an explicit Administrators/SYSTEM-only ACL
+/// that its subfolders inherit (`wix/main.wxs`, enforced by
+/// `tests/msi_install_dir_acl.rs`), so only administrators can change the
+/// installed files.
 ///
 /// Uppercased for case-insensitive comparison against a canonicalized
 /// path, which also resolves symlinks, junctions, and 8.3 short names.
