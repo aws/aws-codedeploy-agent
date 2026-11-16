@@ -549,6 +549,12 @@ fn run(command: &Command, config_file: Option<&Path>) {
                 .clone()
                 .or_else(|| std::env::var("CODEDEPLOY_GITHUB_TOKEN").ok())
                 .filter(|t| !t.is_empty());
+            // deploy-local extracts the bundle, installs files and runs hooks
+            // in this process, so undo the 0o027 umask set above just like the
+            // worker does. Otherwise directories it creates land at 0750 and
+            // hooks inherit umask 0027, unlike a service-driven deployment.
+            #[cfg(unix)]
+            codedeploy_agent::daemon::worker::reset_umask_for_customer_files();
             run_deploy_local(
                 &local_config,
                 location,
