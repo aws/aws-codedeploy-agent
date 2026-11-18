@@ -39,6 +39,11 @@
                         </Component>
                         <Directory Id="BinDir" Name="bin">
                             <Component Id="AgentBinary" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
+                                <!-- Locked here as well as on the root: an
+                                     upgrade keeps an existing folder's ACL. -->
+                                <CreateFolder>
+                                    <Permission User="Administrators" GenericAll="yes" />
+                                </CreateFolder>
                                 <File Id="AgentExe"
                                       Source="target\release\codedeploy-agent.exe"
                                       KeyPath="yes" />
@@ -113,5 +118,19 @@
             <ComponentRef Id="LiveConfig" />
             <ComponentRef Id="DeploymentRootComponent" />
         </Feature>
+
+        <!-- Re-apply the root descriptor so existing children re-derive their
+             inherited ACEs from it. No /T or /reset: explicit ACEs on children,
+             such as the Users read the agent grants, are kept. -->
+        <CustomAction Id="RestampInstallTreeAcl"
+                      Directory="INSTALLDIR"
+                      ExeCommand="&quot;[SystemFolder]icacls.exe&quot; &quot;[INSTALLDIR].&quot; /inheritance:r /grant:r *S-1-5-32-544:(OI)(CI)F *S-1-5-18:(OI)(CI)F"
+                      Execute="deferred"
+                      Impersonate="no"
+                      Return="check" />
+
+        <InstallExecuteSequence>
+            <Custom Action="RestampInstallTreeAcl" After="DuplicateFiles">NOT REMOVE</Custom>
+        </InstallExecuteSequence>
     </Product>
 </Wix>
