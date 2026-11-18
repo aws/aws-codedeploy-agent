@@ -30,7 +30,7 @@ nu-path = "0.110"
 # `rt-multi-thread`: parallel S3 range downloads.
 tokio = { version = "1", features = ["process", "io-util", "time", "rt", "rt-multi-thread", "macros", "sync"] }
 chrono = "0.4"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "rustls-tls-native-roots"] }
 # `vendored`: ship OpenSSL inside the binary so one artifact runs across
 # distros with mismatched system OpenSSL majors.
 openssl = { version = "0.10", features = ["vendored"] }
