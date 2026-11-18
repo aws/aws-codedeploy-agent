@@ -9,6 +9,9 @@
 //!   Service Control Manager context and dispatches to service_main
 //!   when launched by SCM; otherwise runs in console (foreground) mode.
 
+#[cfg(windows)]
+mod loader_hardening;
+
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -1356,6 +1359,8 @@ fn validate_event_ordering(events: &[String]) -> Result<(), String> {
 }
 
 fn main() {
+    #[cfg(windows)]
+    loader_hardening::restrict_dll_search();
     let cli = Cli::parse_from(legacy_local_argv(std::env::args_os()));
     // Resolve config path: CLI flag takes precedence, then env var (set by master
     // for worker subprocess), then default path.

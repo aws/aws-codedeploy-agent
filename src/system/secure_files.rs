@@ -86,9 +86,11 @@ fn apply_agent_dacl(path: &Path) -> io::Result<()> {
 
 /// Grant `BUILTIN\Users` read and execute on a directory, inherited by the
 /// files and subdirectories under it, keeping the directory's other ACEs.
-/// Never grants write. A no-op when Users can already read the directory
-/// (for example through an ACE inherited from an agent dir above it), so
-/// re-touching a dir doesn't re-propagate ACLs through its whole subtree.
+/// Adds only that ACE and removes none, so it never grants write but also
+/// never undoes a wider inherited right; the installer locks the install root.
+/// A no-op when Users can already read the directory (for example through an
+/// ACE inherited from an agent dir above it), so re-touching a dir doesn't
+/// re-propagate ACLs through its whole subtree.
 ///
 /// This is the Windows counterpart of the Unix 0755 parity mode: the MSI
 /// locks the install root to SYSTEM + Administrators, so agent dirs no
@@ -401,9 +403,10 @@ pub fn agent_file_mode(restrict: bool) -> u32 {
 ///
 /// On Windows, creates the directory with its inherited ACL and grants
 /// `BUILTIN\Users` read and execute, inherited by everything under it (see
-/// [`grant_users_read`]). Users never get write. A pre-existing protected
-/// DACL from an earlier agent version stays protected but gains the Users
-/// read ACE.
+/// [`grant_users_read`]); it never grants write, and inherited ACEs are the
+/// installer's to re-derive (`RestampInstallTreeAcl` in `wix/main.wxs`). A
+/// pre-existing protected DACL from an earlier agent version stays protected
+/// but gains the Users read ACE.
 ///
 /// # Errors
 /// Returns an error if directory creation or permission setting fails.

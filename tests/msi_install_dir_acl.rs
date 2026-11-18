@@ -3,18 +3,29 @@
 //! Administrators-only ACL (Windows Installer adds LocalSystem itself) instead
 //! of the permissions it would otherwise inherit from `%ProgramData%`.
 //!
-//! The model is the one the 1.x MSI shipped with: a single Administrators
-//! Permission on the install root, which every subfolder inherits. The MSI is
-//! not built by this crate, so this test reads the WiX source and fails the
-//! build if that ACL is removed, loosened, or extended to other folders.
+//! The model is the one the 1.x MSI shipped with: an Administrators Permission
+//! on the install root, which every subfolder inherits. For an existing tree,
+//! `bin` carries the same Permission, `RestampInstallTreeAcl` re-derives the
+//! inherited ACEs under the root. The MSI is not built by this crate, so this
+//! test reads the WiX source and fails the build if any of that is removed or
+//! loosened.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 /// Directory `Id` of the install root in `wix/main.wxs`.
 const INSTALL_ROOT: &str = "INSTALLDIR";
+/// Directory `Id` of the service binary's folder in `wix/main.wxs`.
+const BIN: &str = "BinDir";
 /// The only grantee allowed in the package (LocalSystem is implicit).
 const ADMINISTRATORS: &str = "Administrators";
+/// Action that re-derives the inherited ACEs under the install root.
+const RESTAMP_ACTION: &str = "RestampInstallTreeAcl";
+/// `BUILTIN\Administrators` and `NT AUTHORITY\SYSTEM`: the only SIDs the
+/// restamp may grant. Spelled as SIDs in the package so the grant does not
+/// depend on the host's language.
+const ADMINISTRATORS_SID: &str = "*S-1-5-32-544";
+const SYSTEM_SID: &str = "*S-1-5-18";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TagKind {
@@ -28,6 +39,9 @@ struct Tag {
     name: String,
     attrs: BTreeMap<String, String>,
     kind: TagKind,
+    /// Text between this tag and the next one, trimmed. Carries a WiX v3
+    /// condition, which is element text rather than an attribute.
+    text: String,
 }
 
 /// Minimal tag scanner for the WiX source: skips comments and processing
@@ -57,8 +71,10 @@ fn scan_tags(xml: &str) -> Vec<Tag> {
                 c == '>' && !in_quote
             })
             .map_or(rest.len(), |(i, _)| i);
-        tags.push(parse_tag(&rest[1..end]));
+        let mut tag = parse_tag(&rest[1..end]);
         rest = &rest[(end + 1).min(rest.len())..];
+        tag.text = rest[..rest.find('<').unwrap_or(rest.len())].trim().to_string();
+        tags.push(tag);
     }
     tags
 }
@@ -85,7 +101,7 @@ fn parse_tag(inner: &str) -> Tag {
         attrs.insert(key, after[open + 1..open + 1 + len].to_string());
         rest = &after[open + 1 + len + 1..];
     }
-    Tag { name: body[..name_end].to_string(), attrs, kind }
+    Tag { name: body[..name_end].to_string(), attrs, kind, text: String::new() }
 }
 
 /// What the ACL checks need from the package.
@@ -98,6 +114,11 @@ struct Package {
     grantees: Vec<String>,
     /// Ids referenced by `ComponentRef`.
     component_refs: BTreeSet<String>,
+    /// Attributes of every `CustomAction`, by `Id`.
+    custom_actions: BTreeMap<String, BTreeMap<String, String>>,
+    /// `Custom` entries of `InstallExecuteSequence`: action Id → (attributes,
+    /// condition text).
+    sequenced: BTreeMap<String, (BTreeMap<String, String>, String)>,
 }
 
 fn attr<'a>(tag: &'a Tag, key: &str) -> Option<&'a str> {
@@ -139,6 +160,16 @@ fn analyze(xml: &str) -> Package {
             "ComponentRef" => {
                 pkg.component_refs.insert(attr(&tag, "Id").unwrap_or_default().to_string());
             },
+            "CustomAction" => {
+                pkg.custom_actions
+                    .insert(attr(&tag, "Id").unwrap_or_default().to_string(), tag.attrs.clone());
+            },
+            "Custom" if nearest("InstallExecuteSequence").is_some() => {
+                pkg.sequenced.insert(
+                    attr(&tag, "Action").unwrap_or_default().to_string(),
+                    (tag.attrs.clone(), tag.text.clone()),
+                );
+            },
             _ => {},
         }
         if tag.kind == TagKind::Open {
@@ -170,7 +201,7 @@ fn locked_folders(pkg: &Package) -> BTreeSet<String> {
 }
 
 #[test]
-fn only_install_root_is_locked_to_administrators() {
+fn only_install_root_and_bin_are_locked_to_administrators() {
     // Arrange
     let pkg = main_wxs();
 
@@ -180,9 +211,9 @@ fn only_install_root_is_locked_to_administrators() {
     // Assert
     assert_eq!(
         locked,
-        BTreeSet::from([INSTALL_ROOT.to_string()]),
-        "expected exactly one installed CreateFolder/Permission User=\"{ADMINISTRATORS}\" \
-         GenericAll=\"yes\", on {INSTALL_ROOT}"
+        BTreeSet::from([INSTALL_ROOT.to_string(), BIN.to_string()]),
+        "expected an installed CreateFolder/Permission User=\"{ADMINISTRATORS}\" \
+         GenericAll=\"yes\" on {INSTALL_ROOT} and on {BIN}, and on no other folder"
     );
 }
 
@@ -195,7 +226,74 @@ fn package_declares_no_other_permissions() {
     let count = pkg.grantees.len();
 
     // Assert
-    assert_eq!(count, 1, "wix/main.wxs must declare exactly one Permission (on {INSTALL_ROOT})");
+    assert_eq!(
+        count, 2,
+        "wix/main.wxs must declare exactly two Permissions (on {INSTALL_ROOT} and {BIN})"
+    );
+}
+
+/// Every principal the restamp command names in an `icacls` grant, by SID
+/// (`*S-…`) or by name: any `principal:perm` argument. Flags start with `/`,
+/// and the executable and target are quoted (`&quot;…`).
+fn restamp_grantees(command: &str) -> BTreeSet<String> {
+    command
+        .split_whitespace()
+        .filter(|token| !token.starts_with('/') && !token.starts_with('&') && token.contains(':'))
+        .map(|token| token.split(':').next().unwrap_or_default().to_string())
+        .collect()
+}
+
+#[test]
+fn install_tree_acl_is_restamped_from_the_root() {
+    // Arrange
+    let pkg = main_wxs();
+
+    // Act
+    let action = pkg.custom_actions.get(RESTAMP_ACTION);
+
+    // Assert
+    let action = action.unwrap_or_else(|| panic!("wix/main.wxs must declare {RESTAMP_ACTION}"));
+    let get = |key: &str| action.get(key).map(String::as_str).unwrap_or_default();
+    assert_eq!(get("Directory"), INSTALL_ROOT, "{RESTAMP_ACTION} must target {INSTALL_ROOT}");
+    // Deferred and not impersonated: the ACL change runs as LocalSystem.
+    assert_eq!(get("Execute"), "deferred", "{RESTAMP_ACTION} must be deferred");
+    assert_eq!(get("Impersonate"), "no", "{RESTAMP_ACTION} must not impersonate");
+    // Fail the install rather than leave the tree on its old ACL.
+    assert_eq!(get("Return"), "check", "{RESTAMP_ACTION} must fail the install on error");
+
+    let command = get("ExeCommand");
+    for expected in ["icacls.exe", "[INSTALLDIR]", "/inheritance:r", "/grant:r"] {
+        assert!(command.contains(expected), "{RESTAMP_ACTION} command must use {expected}");
+    }
+    assert_eq!(
+        restamp_grantees(command),
+        BTreeSet::from([ADMINISTRATORS_SID.to_string(), SYSTEM_SID.to_string()]),
+        "{RESTAMP_ACTION} must grant {ADMINISTRATORS_SID} and {SYSTEM_SID} and nothing else"
+    );
+    // Both overwrite the explicit ACEs the agent grants its own directories.
+    let upper = command.to_ascii_uppercase();
+    for rejected in ["/T", "/RESET"] {
+        assert!(!upper.contains(rejected), "{RESTAMP_ACTION} must not use {rejected}");
+    }
+}
+
+#[test]
+fn restamp_runs_after_the_files_are_installed_and_not_on_uninstall() {
+    // Arrange
+    let pkg = main_wxs();
+
+    // Act
+    let entry = pkg.sequenced.get(RESTAMP_ACTION);
+
+    // Assert
+    let (attrs, condition) = entry
+        .unwrap_or_else(|| panic!("{RESTAMP_ACTION} must be sequenced in InstallExecuteSequence"));
+    assert_eq!(
+        attrs.get("After").map(String::as_str),
+        Some("DuplicateFiles"),
+        "{RESTAMP_ACTION} must run after DuplicateFiles, before the service is registered"
+    );
+    assert_eq!(condition, "NOT REMOVE", "{RESTAMP_ACTION} must be skipped on uninstall");
 }
 
 #[test]
@@ -232,6 +330,35 @@ mod tests {
                      <Permission User="Administrators" GenericAll="yes" />
                      </CreateFolder></Component></Directory><ComponentRef Id="C" />"#;
         assert_eq!(locked_folders(&analyze(xml)), BTreeSet::from(["B".to_string()]));
+    }
+
+    #[test]
+    fn scanner_captures_element_text_as_a_condition() {
+        let xml = r#"<InstallExecuteSequence><Custom Action="A" After="B">NOT REMOVE</Custom>
+                     </InstallExecuteSequence>"#;
+        let pkg = analyze(xml);
+        assert_eq!(pkg.sequenced.get("A").map(|(_, c)| c.as_str()), Some("NOT REMOVE"));
+    }
+
+    #[test]
+    fn custom_outside_the_execute_sequence_is_not_collected() {
+        let xml =
+            r#"<InstallUISequence><Custom Action="A" After="B">1</Custom></InstallUISequence>"#;
+        assert!(analyze(xml).sequenced.is_empty());
+    }
+
+    #[test]
+    fn grantees_include_principals_granted_by_name() {
+        let command = "&quot;icacls.exe&quot; &quot;[INSTALLDIR].&quot; /inheritance:r /grant:r \
+                       *S-1-5-32-544:(OI)(CI)F Users:(OI)(CI)F *S-1-5-18:F";
+        assert_eq!(
+            restamp_grantees(command),
+            BTreeSet::from([
+                "*S-1-5-32-544".to_string(),
+                "Users".to_string(),
+                "*S-1-5-18".to_string()
+            ])
+        );
     }
 
     #[test]
