@@ -23,14 +23,15 @@ use crate::host_command::commands::hook::HookMapping;
 use crate::runtime::FileBasedDeploymentTracker;
 use crate::system::SystemFileOperations;
 
-/// Reset the worker's process umask to the standard `0o022` before customer
-/// bundle extraction.
+/// Reset the process umask to the standard `0o022` before customer bundle
+/// extraction.
 ///
 /// Customer archive entries with no stored Unix mode (e.g. Windows/FAT zips)
 /// take the umask default; `0o022` lands them at 0644 so the service user can
-/// read them. Agent files set explicit modes and are unaffected.
+/// read them. Agent files set explicit modes and are unaffected. Also called
+/// by `deploy-local`, which runs the same install pipeline in-process.
 #[cfg(unix)]
-fn reset_umask_for_customer_files() {
+pub fn reset_umask_for_customer_files() {
     use nix::sys::stat::{Mode, umask};
     umask(Mode::from_bits_truncate(0o022));
 }
