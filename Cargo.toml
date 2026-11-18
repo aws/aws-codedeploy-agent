@@ -46,7 +46,7 @@ tar = "0.4"
 flate2 = "1.1"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 walkdir = "2"
-getrandom = "0.2"
+getrandom = { version = "0.2", features = ["std"] }
 subtle = "2"
 # Strips ANSI escape sequences from script stdout/stderr before writing to
 # `scripts.log` so a malicious hook script can't forge log entries via
