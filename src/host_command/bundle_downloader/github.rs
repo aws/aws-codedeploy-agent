@@ -177,7 +177,7 @@ fn build_https_client(
     env: &dyn crate::system::EnvOps,
     proxy_uri: Option<&str>,
 ) -> io::Result<reqwest::blocking::Client> {
-    let mut builder = reqwest::blocking::ClientBuilder::new();
+    let mut builder = reqwest::blocking::ClientBuilder::new().tls_built_in_native_certs(false);
 
     if let Some(proxy) = proxy_uri {
         let p = reqwest::Proxy::all(proxy)
